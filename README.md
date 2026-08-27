@@ -1,1 +1,5 @@
 # 3DGenesis
+
+This version takes a different approach to the conventional Genesis game. Rather than being an outside observer, you are one of the creatures. You begin as a baby, and grow over time by aging and eating. You will encounter other creatures, some of which are your direct relatives, others are from completely different starting species. Your job is simple: stay alive, mate, kill, and evolve. Attack animations are dependant on the genomes and physical mechanisms on your body. Styandard is ehad butt, but a tail will whip the opponent, and spikes will stab them. Increase damage by growing larger and adding spikes/horns/tails/jaws. After killing a creature, you can choose to inherit one of their features (leg, eye, fin, wings, etc...) or just simply eat them for extra energy. IF you want to generate a hybrid betwee nthe two creatures, simply press M (mate) to become an offspring of the two parents. The previous character you played as becomes an autonomous creature, and you continue as the child. 
+
+Explore the randomly generated maps, upgrade your character, and survive in this completely autonomous and unpredictable ecosystem. 
