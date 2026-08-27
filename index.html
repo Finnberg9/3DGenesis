@@ -163,6 +163,10 @@
     <div class="ctl" title="biological seconds to run the world before you enter it. 0 = you witness the very first generation. Takes effect on reset.">pre-run <b id="prerunv">0</b><input id="prerun" type="range" min="0" max="300" step="10" value="0"></div>
     <div class="ctl" title="how strongly food clusters into thickets and bare ground. Takes effect on reset.">food patchiness <b id="fpv">0.70</b><input id="fp" type="range" min="0" max="1" step="0.05" value="0.7"></div>
     <div class="ctl" title="how far founders are pre-mutated apart. Takes effect on reset.">founder diversity <b id="fdv">0.00</b><input id="fd" type="range" min="0" max="1" step="0.05" value="0"></div>
+    <div class="ctl" title="how tall mountains and ridges rise, and how rough the general terrain is. 1 = default. Takes effect on reset.">height variation <b id="trv">1.00</b><input id="trelief" type="range" min="0.3" max="2.2" step="0.05" value="1"></div>
+    <div class="ctl" title="how deep the open ocean and inland lakes cut below the waterline. 1 = default. Takes effect on reset.">water depth <b id="twv">1.00</b><input id="twater" type="range" min="0.3" max="2.5" step="0.05" value="1"></div>
+    <div class="ctl" title="fraction of eligible plants that render as full trees vs low ground cover. 1 = default. Live.">tree density <b id="ttv">1.00</b><input id="ttree" type="range" min="0.2" max="2.5" step="0.05" value="1"></div>
+    <div class="ctl" title="how large or small climate-driven biome regions (forest, plains, desert, tundra...) are. Higher = more, smaller patches. 1 = default. Takes effect on reset.">region density <b id="trgv">1.00</b><input id="tregion" type="range" min="0.4" max="2.5" step="0.05" value="1"></div>
     <div class="field">start pop <input id="startPop" type="number" min="2" max="2000" value="10">
       start plants <input id="startPlants" type="number" min="0" max="40000" value="500"></div>
     <div class="field">seed <input id="seed" type="number" min="1" max="4294967295" value="2024">
@@ -243,6 +247,11 @@
     return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
   }
   const clamp = (x, lo, hi) => (x < lo ? lo : x > hi ? hi : x);
+  // clamp() lets NaN pass through untouched (NaN < lo and NaN > hi are both
+  // false), which silently poisons anything built on it. numOr guards any
+  // caller-supplied numeric option (slider values, opts fields) before it
+  // ever reaches clamp/arithmetic, falling back to a safe default instead.
+  const numOr = (v, d) => (typeof v === 'number' && isFinite(v)) ? v : d;
   const lerp = (a, b, t) => a + (b - a) * t;
 
   // ------------------------------------------------------------- PART VOCAB
@@ -1048,8 +1057,25 @@
     deep: 0.13, shallow: 0.30, beach: 0.22, marsh: 1.00, plains: 0.95, forest: 0.85,
     taiga: 0.48, savanna: 0.52, desert: 0.10, tundra: 0.20, rock: 0.16, scree: 0.10, snow: 0.07,
   };
+  // How often a plant is a TREE rather than ground cover -- moved here (from
+  // the renderer) so isTree can be decided once, at spawn, in makePlant().
+  // A tree is then a real obstacle (solid trunk) and not food, so the decision
+  // has to be a stable game-logic fact, not a per-frame rendering choice.
+  const TREE_ODDS = {
+    forest: 26, taiga: 22, marsh: 12, savanna: 9, plains: 6, beach: 9,
+    desert: 6, tundra: 4, rock: 3, scree: 2, snow: 2, shallow: 4, deep: 3,
+  };
   const BASE_W = 3200, BASE_H = 2000; // reference world used to define feature scale
-  function makeTerrain(w, h, rng, elevSteps, tileSize) {
+  function makeTerrain(w, h, rng, elevSteps, tileSize, terrainOpts) {
+    // World-shaping sliders (control panel). Each defaults to 1 = exactly the
+    // tuned v9 behaviour above; moving a slider only ever scales a multiplier
+    // applied on top of it, so default play is byte-identical to pre-slider
+    // worlds and every multiplier is clamped here (not just in the HTML min/
+    // max) so a tampered or future caller can never produce NaN/negative terrain.
+    terrainOpts = terrainOpts || {};
+    const reliefMul = clamp(numOr(terrainOpts.reliefMul, 1), 0.2, 3);
+    const waterDepthMul = clamp(numOr(terrainOpts.waterDepthMul, 1), 0.2, 3);
+    const regionDensityMul = clamp(numOr(terrainOpts.regionDensityMul, 1), 0.3, 3);
     // ------------------------------------------------------------------ fBm
     // Octave grid resolution scales WITH world size, so feature size is fixed in
     // world units: a bigger map is more terrain, never stretched terrain.
@@ -1075,27 +1101,28 @@
     function fbm(x, y) { let s = 0; for (let i = 0; i < oct.length; i++) s += sampleOct(oct[i], x, y) * oct[i].amp; return s / ampSum; }
 
     // independent climate fields (own noise, same rng stream => still seeded)
-    const mkOct = (gw0, gh0) => {
-      const gw = Math.max(2, Math.round(gw0 * sx)), gh = Math.max(2, Math.round(gh0 * sy));
+    const mkOct = (gw0, gh0, densityMul) => {
+      const dm = densityMul || 1;
+      const gw = Math.max(2, Math.round(gw0 * sx * dm)), gh = Math.max(2, Math.round(gh0 * sy * dm));
       const g = new Float32Array((gw + 1) * (gh + 1));
       for (let i = 0; i < g.length; i++) g[i] = rng();
       return { gw, gh, g };
     };
-    const mo1 = mkOct(5, 3), mo2 = mkOct(13, 9), to1 = mkOct(4, 3), ro1 = mkOct(9, 6);
+    // Region density only scales the climate fields (moisture/temperature),
+    // which decide forest-vs-plains-vs-desert WITHIN an elevation band -- not
+    // the elevation fBm, which shapes the actual landform and stays untouched
+    // so a denser-region world is not also a noisier, uglier coastline.
+    const mo1 = mkOct(5, 3, regionDensityMul), mo2 = mkOct(13, 9, regionDensityMul),
+          to1 = mkOct(4, 3, regionDensityMul);
     // ridged-multifractal terms: sharp ridgelines and carved valleys, which
     // plain fBm cannot make (it only ever produces rounded blobs)
     const rdgA = mkOct(9, 6), rdgB = mkOct(19, 13), valA = mkOct(7, 5);
     const ridgedAt = (o, x, y) => { const t = 1 - Math.abs(2 * sampleOct(o, x, y) - 1); return t * t; };
     const moisture = (x, y) => clamp(sampleOct(mo1, x, y) * 0.68 + sampleOct(mo2, x, y) * 0.32, 0, 1);
     const tempNoise = (x, y) => sampleOct(to1, x, y);
-    // ridged band of the river field -> thin winding channels
-    const riverAt = (x, y) => {
-      const n = sampleOct(ro1, x, y);
-      const ridge = 1 - Math.abs(2 * n - 1);
-      if (ridge <= 0.90) return 0;
-      const t = (ridge - 0.90) / 0.10;
-      return t * t * (3 - 2 * t);
-    };
+    // (v10: river channels removed entirely -- the ridged-noise carving read
+    // as random winding trenches/holes rather than rivers, especially across
+    // open alpine snowfields where a carved channel makes no physical sense.)
     const fall = (d) => { if (d >= 1) return 0; if (d <= 0) return 1; const t = 1 - d; return t * t * (3 - 2 * t); };
     const TAU = Math.PI * 2, D = Math.hypot(w, h);
 
@@ -1191,7 +1218,7 @@
         const la = rng() * TAU, lr = rng() * 0.62;
         const lx = isle.cx + Math.cos(la) * isle.rx * lr, ly = isle.cy + Math.sin(la) * isle.ry * lr;
         if (Math.hypot(lx - mt.x, ly - mt.y) > D * 0.16) {
-          lakes.push({ x: lx, y: ly, r: D * (0.055 + rng() * 0.030), depth: 0.30 }); break;
+          lakes.push({ x: lx, y: ly, r: D * (0.055 + rng() * 0.030), depth: 0.30 * waterDepthMul }); break;
         }
       }
     }
@@ -1210,7 +1237,12 @@
     // so the open sea stays impassable on foot, but no longer a flat plane.
     function oceanFloor(x, y) {
       const b = fbm(x, y) * 0.58 + ridgedAt(rdgA, x, y) * 0.28 + ridgedAt(rdgB, x, y) * 0.14;
-      return clamp(0.018 + b * 0.170, 0.004, LV.deep - 0.018);
+      const base = clamp(0.018 + b * 0.170, 0.004, LV.deep - 0.018);
+      // water-depth slider scales DEPTH BELOW the deep-water line, anchored at
+      // LV.deep, so shoreline/beach behaviour is untouched and only how deep
+      // the open sea gets actually changes.
+      const scaled = LV.deep - (LV.deep - base) * waterDepthMul;
+      return clamp(scaled, 0.001, LV.deep - 0.01);
     }
     function rawHeight(x, y) {
       const m = islandMask(x, y);
@@ -1221,35 +1253,36 @@
                + ridgedAt(rdgB, x, y) * 0.14
                - ridgedAt(valA, x, y) * 0.11;   // v9.4: was 0.24 -- deep ravines everywhere
       base = base < 0 ? 0 : base > 1 ? 1 : base;
-      let e = 0.300 + base * 0.560;             // land-biased base band
+      // height-variation slider scales relief ABOVE the flat 0.300 base band
+      // (mountains, ridges, general roughness) -- sea level and shoreline
+      // shape are untouched, only how much the land rises does.
+      let e = 0.300 + base * 0.560 * reliefMul;  // land-biased base band
       // lakes
       for (let i = 0; i < lakes.length; i++) { const lk = lakes[i]; e -= lk.depth * fall(Math.hypot(x - lk.x, y - lk.y) / lk.r); }
-      // massif
+      // massif -- fall() alone saturates near mt.up across a WIDE inner radius,
+      // which is what read as a flat mesa/plateau rather than a peak (the
+      // clamp(e,0,1) below then flattens that whole saturated area to the same
+      // height). Raising the falloff to a power > 1 keeps the same footprint
+      // but shrinks the near-maximum area down to a real summit, so the shape
+      // actually tapers to a point instead of topping out flat.
       const mdx = x - mt.x, mdy = y - mt.y;
       const mang = Math.atan2(mdy, mdx);
       let rug = 1 + 0.18 * Math.sin(4 * mang + mt.p0) + 0.12 * Math.sin(7 * mang + mt.p1);
       if (rug < 0.35) rug = 0.35;
-      e += mt.up * fall((Math.hypot(mdx, mdy) / mt.r) * rug) * m;
+      e += mt.up * reliefMul * Math.pow(fall((Math.hypot(mdx, mdy) / mt.r) * rug), 1.7) * m;
       const m2x = x - mt2.x, m2y = y - mt2.y, m2a = Math.atan2(m2y, m2x);
       let rug2 = 1 + 0.20 * Math.sin(5 * m2a + mt2.p0) + 0.12 * Math.sin(3 * m2a + mt2.p1);
       if (rug2 < 0.35) rug2 = 0.35;
-      e += mt2.up * fall((Math.hypot(m2x, m2y) / mt2.r) * rug2) * m;
+      e += mt2.up * reliefMul * Math.pow(fall((Math.hypot(m2x, m2y) / mt2.r) * rug2), 1.5) * m;
       // ridges (distance to a line segment)
       for (let i = 0; i < ridges.length; i++) {
         const rg = ridges[i], px = x - rg.x, py = y - rg.y;
         let u = px * rg.ca + py * rg.sa;
         if (u > rg.len) u = rg.len; else if (u < -rg.len) u = -rg.len;
-        e += rg.up * fall(Math.hypot(px - u * rg.ca, py - u * rg.sa) / rg.wid) * m;
+        e += rg.up * reliefMul * fall(Math.hypot(px - u * rg.ca, py - u * rg.sa) / rg.wid) * m;
       }
       // blend to the local sea floor across the shelf -> beach, shallows, deep
       e = OF + (e - OF) * m;
-      // rivers: carved only down to SHALLOW, never to deep, so they are always
-      // fordable and never cut a population in half.
-      const rv = riverAt(x, y) * (m > 0.55 ? 1 : 0);   // rivers are an inland feature
-      if (rv > 0 && e > LV.deep) {
-        const bed = LV.deep + 0.048;
-        if (e > bed) e = e + (bed - e) * rv;
-      }
       return clamp(e, 0, 1);
     }
 
@@ -1532,6 +1565,27 @@
     }
   }
 
+  // Shared by the per-creature movement step (candidate nx/ny, before commit)
+  // AND a cleanup pass run after separate() (see stepWorld): separate() pushes
+  // creatures apart from EACH OTHER with zero tree awareness, so it can shove
+  // one straight into a trunk that this same function already resolved them
+  // out of a moment earlier. Both call sites go through here so they can never
+  // drift out of sync with each other.
+  function pushOutOfTrees(pGrid, x, y, cr) {
+    if (!pGrid) return null;
+    let hit = null, hitD2 = Infinity, hitMinD = 0;
+    pGrid.around(x, y, (pl) => {
+      if (!pl.trunkR) return;
+      const dx = x - pl.x, dy = y - pl.y, d2 = dx * dx + dy * dy;
+      const minD = cr + pl.trunkR;
+      if (d2 < minD * minD && d2 < hitD2) { hitD2 = d2; hit = pl; hitMinD = minD; }
+    });
+    if (!hit) return null;
+    let dx = x - hit.x, dy = y - hit.y, d = Math.sqrt(hitD2);
+    if (d < 1e-4) { dx = 1; dy = 0; d = 1; }
+    return [hit.x + (dx / d) * hitMinD, hit.y + (dy / d) * hitMinD];
+  }
+
   // ------------------------------------------------------------------ WORLD
   function makeWorld(opts) {
     opts = opts || {};
@@ -1541,7 +1595,9 @@
     // relief resolution is drawn per world: some islands are low and rolling,
     // others are 90-block alpine monsters
     const elevSteps = 16 + Math.round(rng() * 74);
-    const terrain = makeTerrain(w, h, rng, elevSteps, opts.tileSize);
+    const terrain = makeTerrain(w, h, rng, elevSteps, opts.tileSize, {
+      reliefMul: opts.terrainRelief, waterDepthMul: opts.waterDepthMul, regionDensityMul: opts.regionDensity,
+    });
     // Everything density-related is expressed per BASE_W x BASE_H and multiplied
     // by areaScale, so enlarging the map does not silently starve the ecosystem.
     const areaScale = (w * h) / (BASE_W * BASE_H);
@@ -1608,6 +1664,9 @@
         carrionYield: opts.carrionYield != null ? opts.carrionYield : 1, // multiplier on corpse energy
         founderDiversity: opts.founderDiversity != null ? opts.founderDiversity : 0,
         foodPatchiness: opts.foodPatchiness != null ? opts.foodPatchiness : 0.7,
+        // Live: read every rebuild of the plant-instance list (buildPlantInstances),
+        // so unlike the other three terrain sliders this one doesn't need a reset.
+        treeDensity: clamp(numOr(opts.treeDensity, 1), 0.1, 4),
       },
       flags: Object.assign({ brains: true, sexual: true, dayNight: true, seasons: true, toxins: true, climate: true }, opts.flags || {}),
       species: new Map(), nextSpecies: 0,
@@ -1809,14 +1868,30 @@
   function makePlant(world, x, y, biome) {
     const deep = biome === 'deep';
     if (deep) world.deepPlants++;
+    const e = world.params.plantEnergy * (deep ? 2.4 : biome === 'snow' ? 3.2 : biome === 'scree' ? 2.6
+       : biome === 'rock' ? 1.7 : biome === 'shallow' ? 1.25 : 1);
+    // isTree/trunkR are decided ONCE, here, from a position hash -- not
+    // world.rng() (which would shift every later spawn/genome draw) and not
+    // re-rolled per render frame (which would make a tree's edibility and
+    // solidity flicker as the live tree-density slider moves). Rendering,
+    // eating, and movement collision all read this same stored decision, so
+    // a given tree is always the same tree.
+    let hs = ((x * 7919) ^ (y * 104729)) >>> 0; hs = (hs ^ (hs >>> 13)) >>> 0;
+    const roll = (hs >>> 20) % 100, j = (hs % 1000) / 1000;
+    const isTree = roll < (TREE_ODDS[biome] || 6) * (world.params.treeDensity || 1);
+    const eScale = clamp(e / Math.max(1, world.params.plantEnergy), 0.6, 3.2);
     return {
       x, y, deep,
       // Hard-to-reach larders are worth more: the sea floor needs fins, the
       // summit needs wings. Both are rich, both are gated by a body plan.
-      e: world.params.plantEnergy * (deep ? 2.4 : biome === 'snow' ? 3.2 : biome === 'scree' ? 2.6
-         : biome === 'rock' ? 1.7 : biome === 'shallow' ? 1.25 : 1),
+      e,
       alpine: biome === 'snow' || biome === 'scree',
       water: deep || biome === 'shallow' || biome === 'marsh',
+      isTree,
+      // Solid collision radius (world units). 0 = no obstacle. Only trees
+      // block movement; ground cover/grass never does. Bounded so a dense
+      // forest is hard to move through, not impassable.
+      trunkR: isTree ? (2.2 + j * 2.0) * clamp(eScale, 0.7, 1.6) : 0,
     };
   }
 
@@ -2077,7 +2152,7 @@
       let kin = 0, kinX = 0, kinY = 0, near = 0;
       let sepX = 0, sepY = 0, sepN = 0;   // crowd-avoidance (physical, not visual)
       pGrid.around(c.x, c.y, (pl) => {
-        if (pl.gone || eaten.has(pl)) return;
+        if (pl.gone || eaten.has(pl) || pl.isTree) return;  // trees are scenery/obstacles, not food
         if (pl.deep && !p.canSwim) return;   // on the sea floor: divers only
         const dx = wrapDelta(c.x, pl.x, w), dy = wrapDelta(c.y, pl.y, h), d2 = dx * dx + dy * dy;
         if (d2 >= senseSq || d2 >= bestFoodD) return;
@@ -2301,6 +2376,16 @@
           if (c.stuck > 40) { c.stuck = 0; c.wander = rng() * Math.PI * 2; }
         } else if (c.stuck) { c.stuck = 0; }
       }
+      // Tree trunks are solid. Fliers pass over them (same exemption as the
+      // terrain constraints above); everyone else gets pushed to just outside
+      // the trunk radius, sliding along it rather than stopping dead. This is
+      // only the FIRST of two resolves each tick -- see the cleanup pass after
+      // separate() below, which catches creature-creature pushes that would
+      // otherwise shove someone back into a trunk this already resolved.
+      if (!p.canFly) {
+        const pushed = pushOutOfTrees(pGrid, nx, ny, p.bodyRX || p.radius || 3);
+        if (pushed) { nx = pushed[0]; ny = pushed[1]; }
+      }
       c.x = nx; c.y = ny;
       c.energy -= (0.012 * p.mass * (sp / 30) * (sp / 30 + 0.4) + terrain.extraUpkeep(c.x, c.y, p.canFly)) * bdt;
 
@@ -2376,6 +2461,18 @@
     for (const b of newborns) world.creatures.push(b);
     // HARD non-overlap constraint, applied after movement and birth.
     separate(world, 2);
+    // separate() has no tree awareness, so it can push a creature it just
+    // pulled off of another creature straight into a trunk instead. One more
+    // resolve pass here catches that, and also catches newborns placed at/near
+    // a tree by birth(). Cheap: only trunk-bearing plants are ever hit.
+    if (pGrid) {
+      for (let i = 0; i < world.creatures.length; i++) {
+        const c = world.creatures[i];
+        if (!c.alive || c.ph.canFly) continue;
+        const pushed = pushOutOfTrees(pGrid, c.x, c.y, c.ph.bodyRX || c.ph.radius || 3);
+        if (pushed) { c.x = clamp(pushed[0], 1, w - 1); c.y = clamp(pushed[1], 1, h - 1); }
+      }
+    }
 
     world.t += dt;
     world._specAcc += dt;
@@ -3849,15 +3946,9 @@ function treeTrunk(x, y, z, hgt, tr, rot, leanAmt, bark) {
 }
 const BARK = [0.42, 0.31, 0.22], BARK_PALE = [0.58, 0.48, 0.34];
 
-// How often a plant is a TREE rather than ground cover. world.plants is a food
-// supply figure, not a vegetation-density figure: at plant regrowth 200 it
-// saturates near 30k, and rendering every one as a tree buried the island in
-// canopy. Only a biome-dependent minority get trunks; the rest are grass,
-// shrubs and scrub, which is what actually makes open ground read as open.
-const TREE_ODDS = {
-  forest: 26, taiga: 22, marsh: 12, savanna: 9, plains: 6, beach: 9,
-  desert: 6, tundra: 4, rock: 3, scree: 2, snow: 2, shallow: 4, deep: 3,
-};
+// TREE_ODDS moved to the pure-logic core (used by makePlant() to decide
+// pl.isTree once, at spawn) since a tree is now a real, non-edible, solid
+// obstacle and not just a rendering choice.
 
 function buildPlantInstances(camX, camZ, t) {
   plantCount = 0;
@@ -3874,7 +3965,10 @@ function buildPlantInstances(camX, camZ, t) {
     const rot = j * 6.283;
     const eScale = clamp(pl.e / Math.max(1, world.params.plantEnergy), 0.6, 3.2);
     const bi = T.biomeIdx(pl.x, pl.y), name = BNAMES[bi] || 'plains';
-    const isTree = roll < (TREE_ODDS[name] || 6);
+    // Decided once, at spawn, in makePlant() -- see there for why. Rendering
+    // just reads it so what you see always matches what you can/can't eat or
+    // walk through.
+    const isTree = pl.isTree;
     const S = (isTree ? 1.0 + j * 0.9 : 0.5 + j * 0.5) * eScale;
     const leaf = (a, b, c2) => [a + j2 * 0.09, b + j2 * 0.13, c2 + j2 * 0.06];
     const lean = [Math.sin(rot) * 0.12, 1, Math.cos(rot) * 0.12];
@@ -4543,7 +4637,7 @@ function tryEat() {
   const rr = interactRange(p), rr2 = rr * rr;
   let bestP = null, bestPD = Infinity, bestC = null, bestCD = Infinity;
   if (world.pGrid) world.pGrid.around(c.x, c.y, (pl) => {
-    if (pl.eaten) return;
+    if (pl.eaten || pl.isTree) return;  // trees are scenery/obstacles, not food
     const d2 = (pl.x - c.x) ** 2 + (pl.y - c.y) ** 2;
     if (d2 < rr2 && d2 < bestPD) { bestPD = d2; bestP = pl; }
   });
@@ -4680,6 +4774,23 @@ function movePlayer(c, dt) {
       if (!blockedFor(p, lv0, nx, c.y)) ny = c.y;
       else if (!blockedFor(p, lv0, c.x, ny)) nx = c.x;
       else { nx = c.x; ny = c.y; }
+    }
+  }
+  // Same tree-trunk solidity NPC creatures get in stepWorld (core.js) --
+  // without this you could walk straight through a trunk you can plainly see.
+  if (!p.canFly && world.pGrid) {
+    const cr = p.bodyRX || p.radius || 3;
+    let hit = null, hitD2 = Infinity, hitMinD = 0;
+    world.pGrid.around(nx, ny, (pl) => {
+      if (!pl.trunkR) return;
+      const dx = nx - pl.x, dy = ny - pl.y, d2 = dx * dx + dy * dy;
+      const minD = cr + pl.trunkR;
+      if (d2 < minD * minD && d2 < hitD2) { hitD2 = d2; hit = pl; hitMinD = minD; }
+    });
+    if (hit) {
+      let dx = nx - hit.x, dy = ny - hit.y, d = Math.sqrt(hitD2);
+      if (d < 1e-4) { dx = 1; dy = 0; d = 1; }
+      nx = hit.x + (dx / d) * hitMinD; ny = hit.y + (dy / d) * hitMinD;
     }
   }
   c.x = nx; c.y = ny;
@@ -4992,6 +5103,8 @@ function panelOpts() {
     dayLen: num('dayl', 6), yearLen: num('yearl', 70),
     carrionLife: num('clife', 12), carrionYield: num('cy', 1),
     founderDiversity: num('fd', 0), foodPatchiness: num('fp', 0.7), flags: panelFlags(),
+    terrainRelief: num('trelief', 1), waterDepthMul: num('twater', 1),
+    regionDensity: num('tregion', 1), treeDensity: num('ttree', 1),
   };
 }
 function updateStats() {
@@ -5066,6 +5179,10 @@ function bindPanel() {
   live('fd', 'fdv', null, v => v.toFixed(2));
   live('fp', 'fpv', null, v => v.toFixed(2));
   live('prerun', 'prerunv', null);
+  live('trelief', 'trv', null, v => v.toFixed(2));
+  live('twater', 'twv', null, v => v.toFixed(2));
+  live('tregion', 'trgv', null, v => v.toFixed(2));
+  live('ttree', 'ttv', 'treeDensity', v => v.toFixed(2));
   for (const id of ['f_brains', 'f_sex', 'f_day', 'f_season', 'f_tox', 'f_climate']) {
     const el = $(id); if (el) el.addEventListener('change', () => { if (world) world.flags = panelFlags(); });
   }
