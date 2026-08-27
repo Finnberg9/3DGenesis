@@ -32,7 +32,12 @@
   #start h1{margin:0 0 6px;font-size:26px;letter-spacing:.16em;color:var(--cyan);font-weight:700}
   #start p{margin:8px 0;color:var(--dim);font-size:13px;line-height:1.65}
   #start .keys{margin-top:16px;font-size:12px;color:var(--ink);opacity:.85}
-  #start .go{margin-top:20px;color:var(--cyan);font-size:13px;letter-spacing:.1em}
+  #start .go{margin-top:16px;color:var(--cyan);font-size:12px;letter-spacing:.06em}
+  #start .arch{margin-top:18px}
+  #start .alab{color:var(--dim);font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px}
+  #start .arch button{font-family:inherit;font-size:12px;background:#0a201d;color:var(--cyan);
+    border:1px solid var(--line);border-radius:7px;padding:7px 12px;margin:3px;cursor:pointer}
+  #start .arch button:hover{background:#12332e;border-color:#35e0d8}
   #err{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:30;
     background:#04100e;padding:40px;text-align:center;font-size:14px;line-height:1.7}
   #err code{color:var(--warn)}
@@ -63,6 +68,36 @@
   #ptab{position:fixed;right:326px;top:12px;z-index:13;background:rgba(6,18,17,.85);border:1px solid var(--line);
     color:var(--cyan);border-radius:7px;padding:5px 9px;font:600 11px 'IBM Plex Mono',monospace;cursor:pointer}
   #ptab.closed{right:12px}
+  #picker{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);z-index:14;display:none;
+    background:rgba(4,14,13,.94);border:1px solid #3d8f86;border-radius:10px;padding:11px 13px;
+    min-width:290px;backdrop-filter:blur(8px);font-size:12px}
+  #picker .ptitle{color:var(--cyan);font-size:11px;letter-spacing:.10em;text-transform:uppercase;
+    margin-bottom:8px;font-weight:700}
+  #picker .popt,#picker .pskip{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:6px;color:var(--ink)}
+  #picker .popt:nth-child(even){background:rgba(53,224,216,.06)}
+  #picker .popt span{margin-left:auto;color:var(--dim);font-size:11px}
+  #picker .pskip{margin-top:6px;color:var(--dim);font-size:11px}
+  #picker b{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;
+    border:1px solid var(--line);border-radius:4px;color:var(--cyan);font-size:10.5px}
+  #mini{position:fixed;left:14px;top:14px;z-index:12;width:216px;height:135px;
+    border:1px solid var(--line);border-radius:8px;background:rgba(4,14,13,.75);
+    box-shadow:0 4px 18px rgba(0,0,0,.4)}
+  #act{position:fixed;left:50%;top:56%;transform:translateX(-50%);z-index:12;display:none;
+    background:rgba(4,14,13,.86);border:1px solid var(--line);border-radius:8px;padding:6px 11px;
+    font-size:12px;color:var(--ink);text-align:center;pointer-events:none;backdrop-filter:blur(6px)}
+  #act b{color:var(--cyan);text-transform:uppercase;font-size:11px;letter-spacing:.08em}
+  #act .keys{margin-top:4px;font-size:11px;color:var(--dim)}
+  #act .keys span{display:inline-block;border:1px solid var(--line);border-radius:4px;
+    padding:0 4px;margin:0 2px;color:var(--ink)}
+  #act .keys .hit{color:#ff7a6b;border-color:#7a2c26}
+  #act .keys .ok{color:#35e0d8;border-color:#2f7d74}
+  #warn{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:12;display:none;
+    font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+    color:#ff8a76;background:rgba(38,10,8,.72);border:1px solid #7a2c26;border-radius:20px;
+    padding:5px 15px;pointer-events:none;backdrop-filter:blur(6px)}
+  @keyframes warnpulse{0%,100%{box-shadow:0 0 0 0 rgba(255,90,70,.35)}50%{box-shadow:0 0 0 7px rgba(255,90,70,0)}}
+  #warn{animation:warnpulse 1.7s ease-out infinite}
+  @media (prefers-reduced-motion:reduce){#warn{animation:none}}
   #cross{position:fixed;left:50%;top:50%;width:16px;height:16px;margin:-8px 0 0 -8px;z-index:11;pointer-events:none;opacity:.5}
   #cross:before,#cross:after{content:'';position:absolute;background:#cfe9e4}
   #cross:before{left:7px;top:0;width:2px;height:16px}
@@ -87,7 +122,11 @@
 
 <div id="evt" class="panel"></div>
 
+<canvas id="mini" width="216" height="135"></canvas>
+<div id="warn"></div>
 <div id="cross"></div>
+<div id="act"></div>
+<div id="picker"></div>
 <button id="ptab">controls</button>
 <div id="panel">
   <div class="card brief">
@@ -108,13 +147,14 @@
     </div>
     <div class="ctl" title="chance each gene mutates per birth. Live.">mutation rate <b id="mutv">0.60</b><input id="mut" type="range" min="0.1" max="1" step="0.01" value="0.6"></div>
     <div class="ctl" title="how fast biological time runs against wall time. Live.">time scale <b id="tscalev">0.120</b><input id="tscale" type="range" min="0.01" max="1" step="0.01" value="0.12"></div>
-    <div class="ctl" title="plant spawn attempts per biological second. Live.">plant regrowth <b id="plantv">200</b><input id="plant" type="range" min="10" max="900" step="10" value="200"></div>
+    <div class="ctl" title="plant spawn attempts per biological second. Live.">plant regrowth <b id="plantv">40</b><input id="plant" type="range" min="5" max="900" step="5" value="40"></div>
     <div class="ctl" title="energy in one plant before biome multipliers. Live.">plant energy <b id="pev">30</b><input id="pe" type="range" min="5" max="120" step="5" value="30"></div>
     <div class="ctl" title="length of one day/night cycle. Live.">day length <b id="daylv">6</b><input id="dayl" type="range" min="1" max="40" step="1" value="6"></div>
     <div class="ctl" title="length of one year, which drives seasons. Live.">season length <b id="yearlv">70</b><input id="yearl" type="range" min="10" max="300" step="10" value="70"></div>
     <div class="ctl" title="how long a corpse lies there. Live, applies to new corpses.">corpse lifespan <b id="clifev">12</b><input id="clife" type="range" min="2" max="60" step="1" value="12"></div>
     <div class="ctl" title="multiplier on corpse energy. Live, applies to new corpses.">corpse yield <b id="cyv">1.0</b><input id="cy" type="range" min="0.2" max="4" step="0.1" value="1"></div>
     <div class="ctl" title="biological seconds to run the world before you enter it. 0 = you witness the very first generation. Takes effect on reset.">pre-run <b id="prerunv">0</b><input id="prerun" type="range" min="0" max="300" step="10" value="0"></div>
+    <div class="ctl" title="how strongly food clusters into thickets and bare ground. Takes effect on reset.">food patchiness <b id="fpv">0.70</b><input id="fp" type="range" min="0" max="1" step="0.05" value="0.7"></div>
     <div class="ctl" title="how far founders are pre-mutated apart. Takes effect on reset.">founder diversity <b id="fdv">0.00</b><input id="fd" type="range" min="0" max="1" step="0.05" value="0"></div>
     <div class="field">start pop <input id="startPop" type="number" min="2" max="2000" value="10">
       start plants <input id="startPlants" type="number" min="0" max="40000" value="500"></div>
@@ -140,13 +180,23 @@
   <div class="keys">
     <b>WASD</b> move &nbsp;·&nbsp; <b>mouse</b> look &nbsp;·&nbsp; <b>shift</b> sprint (burns energy)<br>
     <b>scroll</b> zoom out to third person &nbsp;·&nbsp; <b>C</b> toggle view<br>
-    <b>left click</b> / <b>F</b> attack &nbsp;·&nbsp; <b>right click</b> / <b>E</b> eat<br>
+    <b>left click</b> / <b>F</b> attack &nbsp;·&nbsp; <b>M</b> mate &nbsp;·&nbsp; <b>E</b> eat<br>
+    inner ring = your attack reach (<span style="color:#f04c38">red</span> target,
+    <span style="color:#35e0d8">cyan</span> mate)<br>
+    outer ring = predators nearby, at their real bearing<br>
     <b>space</b> jump &nbsp;·&nbsp; <b>space + W</b> or <b>shift</b> sprint<br>
     <b>drag</b> to look without capturing the mouse<br>
     <b>Tab</b> controls panel<br>
     <b>V</b> detach camera &nbsp;·&nbsp; <b>[</b> <b>]</b> sim speed &nbsp;·&nbsp; <b>Esc</b> release mouse
   </div>
-  <div class="go">click to begin</div>
+  <div class="arch">
+    <div class="alab">choose what you are born as</div>
+    <button data-arch="random">random</button><button data-arch="grazer">grazer</button
+    ><button data-arch="runner">runner</button><button data-arch="brute">brute</button
+    ><button data-arch="hunter">hunter</button><button data-arch="swimmer">swimmer</button
+    ><button data-arch="flier">flier</button>
+  </div>
+  <div class="go">or click anywhere to begin as a random founder</div>
 </div></div>
 
 <div id="err"><div>
@@ -974,6 +1024,18 @@
   const BIOMES = ['deep', 'shallow', 'beach', 'marsh', 'plains', 'forest', 'taiga', 'savanna', 'desert', 'tundra', 'rock', 'scree', 'snow'];
   const B = {}; BIOMES.forEach((n, i) => B[n] = i);
   // plant density per biome (relative), and whether it is submerged
+  // Bilinear sample of a 64x64 wrapped lattice at `cell` world units per step.
+  function fertSample(g, cell, x, y) {
+    const fx = x / cell, fy = y / cell;
+    const i0 = Math.floor(fx), j0 = Math.floor(fy);
+    const tx = fx - i0, ty = fy - j0;
+    const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+    const ia = i0 & 63, ib = (i0 + 1) & 63, ja = (j0 & 63) * 64, jb = ((j0 + 1) & 63) * 64;
+    const a = g[ja + ia], b = g[ja + ib], c = g[jb + ia], d = g[jb + ib];
+    const top = a + (b - a) * sx;
+    return top + ((c + (d - c) * sx) - top) * sy;
+  }
+  const FERT_FLOOR = 0.55;   // fertAt() below this is barren ground, permanently
   const BIOME_FERT = {
     deep: 0.13, shallow: 0.30, beach: 0.22, marsh: 1.00, plains: 0.95, forest: 0.85,
     taiga: 0.48, savanna: 0.52, desert: 0.10, tundra: 0.20, rock: 0.16, scree: 0.10, snow: 0.07,
@@ -1104,14 +1166,14 @@
     const mt = {
       x: clamp(isle.cx + Math.cos(ma) * isle.rx * mr, w * 0.15, w * 0.85),
       y: clamp(isle.cy + Math.sin(ma) * isle.ry * mr, h * 0.15, h * 0.85),
-      r: D * 0.115, up: 0.60, p0: rng() * TAU, p1: rng() * TAU,
+      r: D * 0.132, up: 0.86, p0: rng() * TAU, p1: rng() * TAU,   // v9.4: taller, broader massif
     };
     // a second, smaller peak so the skyline is not one lonely cone
     const ma2 = ma + 1.6 + rng() * 2.0, mr2 = 0.30 + rng() * 0.28;
     const mt2 = {
       x: clamp(isle.cx + Math.cos(ma2) * isle.rx * mr2, w * 0.15, w * 0.85),
       y: clamp(isle.cy + Math.sin(ma2) * isle.ry * mr2, h * 0.15, h * 0.85),
-      r: D * 0.070, up: 0.36, p0: rng() * TAU, p1: rng() * TAU,
+      r: D * 0.082, up: 0.56, p0: rng() * TAU, p1: rng() * TAU,   // v9.4: a real second peak
     };
 
     // inland lakes (small, with a divable centre) kept clear of the massif
@@ -1121,7 +1183,7 @@
         const la = rng() * TAU, lr = rng() * 0.62;
         const lx = isle.cx + Math.cos(la) * isle.rx * lr, ly = isle.cy + Math.sin(la) * isle.ry * lr;
         if (Math.hypot(lx - mt.x, ly - mt.y) > D * 0.16) {
-          lakes.push({ x: lx, y: ly, r: D * (0.055 + rng() * 0.030), depth: 0.44 }); break;
+          lakes.push({ x: lx, y: ly, r: D * (0.055 + rng() * 0.030), depth: 0.30 }); break;
         }
       }
     }
@@ -1149,7 +1211,7 @@
       let base = fbm(x, y) * 0.60
                + ridgedAt(rdgA, x, y) * 0.26
                + ridgedAt(rdgB, x, y) * 0.14
-               - ridgedAt(valA, x, y) * 0.24;
+               - ridgedAt(valA, x, y) * 0.11;   // v9.4: was 0.24 -- deep ravines everywhere
       base = base < 0 ? 0 : base > 1 ? 1 : base;
       let e = 0.300 + base * 0.560;             // land-biased base band
       // lakes
@@ -1497,6 +1559,30 @@
       // sea-floor larder can never soak up the whole regrowth budget
       maxDeepPlants: Math.max(60, Math.round(CAPS.PLANTS * areaScale * 0.16)),
       deepPlants: 0,
+      // v9.4: two-octave value-noise fertility field, drawn once from the world
+      // rng so it is fixed per seed like the terrain. Returns a multiplier on
+      // biome fertility: near 0 over barren stretches, above 1 in thickets.
+      // params.foodPatchiness scales how extreme that contrast is (0 = the
+      // pre-v9.4 uniform behaviour exactly).
+      fertLat: null,
+      // Called once per plant spawn ATTEMPT, which at high regrowth is tens of
+      // thousands of times a second, so it allocates nothing and defines no
+      // closures per call. (The first version built two arrow functions every
+      // call and cost ~40% of a long run.)
+      fertAt(x, y) {
+        const L = this.fertLat;
+        if (!L) return 1;
+        const amt = this.params.foodPatchiness;
+        if (!(amt > 0)) return 1;
+        const n = fertSample(L.a, L.cellA, x, y) * 0.65 + fertSample(L.b, L.cellB, x, y) * 0.35;
+        // Interpolated value noise clusters hard around 0.5 (sd ~0.15), so a
+        // power curve barely separates anything. Remapping the useful band
+        // 0.30..0.70 across the full range is what actually produces bare
+        // ground at one end and thickets at the other.
+        let v = (n - 0.30) / 0.40;
+        v = v < 0 ? 0 : v > 1 ? 1 : v;
+        return 1 + (v * 2.2 - 1) * (amt > 1 ? 1 : amt);
+      },
       creatures: [], plants: [], grid: makeGrid(w, h, 150),
       pGrid: makeGrid(w, h, 110), carGrid: makeGrid(w, h, 110),
       params: {
@@ -1513,6 +1599,7 @@
         carrionLife: opts.carrionLife != null ? opts.carrionLife : 12,   // bt-units a corpse persists
         carrionYield: opts.carrionYield != null ? opts.carrionYield : 1, // multiplier on corpse energy
         founderDiversity: opts.founderDiversity != null ? opts.founderDiversity : 0,
+        foodPatchiness: opts.foodPatchiness != null ? opts.foodPatchiness : 0.7,
       },
       flags: Object.assign({ brains: true, sexual: true, dayNight: true, seasons: true, toxins: true, climate: true }, opts.flags || {}),
       species: new Map(), nextSpecies: 0,
@@ -1544,6 +1631,14 @@
       deathLog: [], // recent {cause, age, gen, species, t}
       _scratchOut: new Float64Array(OUT), _scratchIn: new Float64Array(IN),
     };
+    // fertility lattices: two scales, so patches have both broad regions and
+    // local texture. 64x64 wrapped, sampled in world units.
+    {
+      const A = new Float32Array(64 * 64), B = new Float32Array(64 * 64);
+      for (let i = 0; i < A.length; i++) A[i] = rng();
+      for (let i = 0; i < B.length; i++) B[i] = rng();
+      world.fertLat = { a: A, b: B, cellA: Math.max(240, w / 26), cellB: Math.max(90, w / 84) };
+    }
     // Seed the flora to a real starting density (attempt-capped): the biome
     // acceptance test rejects most candidates, so a fixed attempt count would
     // start the world in a famine.
@@ -1685,7 +1780,17 @@
     // biome gating -> resource heterogeneity (lush marsh, barren scree)
     const biome = world.terrain.biomeAt(x, y);
     if (biome === 'deep' && world.deepPlants >= world.maxDeepPlants) return;
-    const accept = BIOME_FERT[biome] || 0.05;
+    // v9.4: biome fertility says WHICH ground can grow food; the patch field
+    // says WHERE on that ground it actually does. Without it, acceptance is
+    // uniform inside a biome and the map fills with an even carpet of plants
+    // instead of meadows, thickets and bare stretches.
+    const f = world.fertAt(x, y);
+    // A probability alone cannot make bare ground: given enough spawn attempts
+    // even a 0.05 acceptance eventually fills every tile. Below the threshold
+    // nothing takes root at all, which is what actually produces open stretches
+    // between the thickets.
+    if (f < FERT_FLOOR) return;
+    const accept = (BIOME_FERT[biome] || 0.05) * f;
     if (world.rng() > accept) return;
     world.plants.push(makePlant(world, x, y, biome));
   }
@@ -2326,7 +2431,7 @@
       x: c.x, y: c.y,
       e: (20 + c.ph.mass * 14) * (P.carrionYield != null ? P.carrionYield : 1),
       decay: life, life,
-      ph: c.ph, hue: c.ph.hue, id: c.id,
+      ph: c.ph, genome: c.genome, hue: c.ph.hue, id: c.id,
       ang: Math.atan2(c.vy || 0, c.vx || 1),
       cause: c.deathCause || 'unknown',
     });
@@ -2446,7 +2551,6 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
   else root.GenesisCore = API;
 })(typeof window !== 'undefined' ? window : globalThis);
-
 </script>
 <script>
 /* ===================================================================
@@ -2467,7 +2571,7 @@ const WORLD_W = 12800, WORLD_H = 8000, TILE = 48;
 const HEIGHT_SCALE = 420;    // sim elevation (0..1, unitless) -> world Y units
                              // chosen so one climbable elevation level is ~1/3 of eye
                              // height; taller relief makes ground level unreadable
-const GRID_STEP = 13;        // terrain mesh sample spacing, world units.
+const GRID_STEP = 16;        // terrain mesh sample spacing, world units.
                              // At 20 the facets were larger than the animals
                              // standing on them and read as smooth blobs.
 const FAR = 5200;            // far plane, also the fog horizon
@@ -2476,7 +2580,7 @@ const FOG_DENSITY = 1 / 2600;
 const LOD_FULL = 900;        // draw every body cell inside this radius
 const LOD_TORSO = 2600;      // torso cells only out to here
 const MAX_INST = 90000;      // hard ceiling on per-frame creature cell instances
-const MAX_PLANT_INST = 22000;
+const MAX_PLANT_INST = 34000;
 const TREE_LOD = 1400;   // full tree geometry inside this range
 const INST_FLOATS = 12;      // pos3 dir3 scale3 col3 -- one format for every primitive
 const BODY_SCALE = 0.55;      // visual size multiplier on body cells (collision radius is unchanged)
@@ -3207,6 +3311,16 @@ function pushC(px, py, pz, dx, dy, dz, rad, len, col) {
 const BONE = [0.93, 0.90, 0.80];
 const DARK_MAW = [0.20, 0.05, 0.07];
 
+// Radius along the spine as a fraction of body half-height. Two gaussian bulges
+// (chest and haunch) over a rounded base give a silhouette that reads as an
+// animal rather than as a capsule.
+function bodyProfile(u) {
+  const chest = Math.exp(-Math.pow((u - 0.72) / 0.21, 2));
+  const haunch = Math.exp(-Math.pow((u - 0.30) / 0.23, 2));
+  const base = 0.30 + 0.28 * Math.sin(Math.PI * clamp(u * 1.04, 0, 1));
+  return clamp(base + chest * 0.32 + haunch * 0.24, 0.12, 1.05);
+}
+
 function tallyParts(ph) {
   const t = { CORE: 0, MOUTH: 0, GUT: 0, TAIL: 0, EYE: 0, LEG: 0, FIN: 0, WING: 0, SPIKE: 0, HORN: 0, GLAND: 0 };
   const parts = ph.parts || [];
@@ -3258,36 +3372,83 @@ function drawCreature(c, t, camDist) {
   const gaitHz = 3.0 + c._spSm * 0.05;
   c._phase = (c._phase || (c.id % 6.283)) + gaitHz * frameDt;
   const phase0 = c._phase;
-  const bob = Math.sin(phase0 * 2 + c.id) * R * 0.07 * gaitAmt;
+  let bob = Math.sin(phase0 * 2 + c.id) * R * 0.07 * gaitAmt;
+
+  // ---- attack / flinch / mating pose --------------------------------------
+  // One shared strike curve drives every move; each move reads different parts
+  // of it, so a gore drives the head, a sweep drives the tail, a slam drives
+  // the whole body upward and down.
+  const an = creatureAnim(c);
+  let lungeX = 0, headThrust = 0, headDip = 0, tailSwing = 0, rear = 0,
+      armSwing = 0, flinch = 0, nuzzle = 0;
+  if (an) {
+    const sgn = an.s;
+    switch (an.kind) {
+      case 'gore':     lungeX = sgn * R * 1.05; headDip = -sgn * 0.55; headThrust = sgn * R * 0.5; break;
+      case 'headbutt': lungeX = sgn * R * 0.85; headDip = -sgn * 0.40; headThrust = sgn * R * 0.35; break;
+      case 'bite':     lungeX = sgn * R * 0.70; headThrust = sgn * R * 0.85; break;
+      case 'sweep':    tailSwing = sgn * 1.5; lungeX = sgn * R * 0.18; break;
+      case 'slam':     rear = Math.max(0, -sgn) * R * 0.9 + Math.max(0, sgn) * -R * 0.35;
+                       lungeX = sgn * R * 0.35; break;
+      case 'claw':     armSwing = sgn; lungeX = sgn * R * 0.42; headThrust = sgn * R * 0.15; break;
+      case 'flinch':   lungeX = -Math.sin(an.k * Math.PI) * R * 0.55;
+                       flinch = Math.sin(an.k * Math.PI); break;
+      case 'mate':     nuzzle = Math.sin(an.k * Math.PI); headDip = -nuzzle * 0.5;
+                       lungeX = nuzzle * R * 0.30; break;
+    }
+    bob += rear;
+  }
   const bodyY = groundY + stand + bob;
 
   // body-local (x fwd, y up, z lateral) -> world
-  const wx = (lx, lz) => c.x + lx * cy - lz * sy;
-  const wz = (lx, lz) => c.y + lx * sy + lz * cy;
+  const wx = (lx, lz) => c.x + (lx + lungeX) * cy - lz * sy;
+  const wz = (lx, lz) => c.y + (lx + lungeX) * sy + lz * cy;
   const dirW = (lx, ly, lz) => [lx * cy - lz * sy, ly, lx * sy + lz * cy];
 
-  const base = creatureBase(c);
+  let base = creatureBase(c);
+  if (flinch > 0.01) {
+    base = [Math.min(1, base[0] + flinch * 0.55), base[1] * (1 - flinch * 0.45), base[2] * (1 - flinch * 0.45)];
+  }
   const belly = [Math.min(1, base[0] * 0.55 + 0.30), Math.min(1, base[1] * 0.55 + 0.30), Math.min(1, base[2] * 0.55 + 0.28)];
   const limbCol = [base[0] * 0.82, base[1] * 0.80, base[2] * 0.78];
   const n = tallyParts(p);
   const far = camDist > 900;
 
-  // ---- torso: a spine of blended ellipsoids, longer when elongated ---------
-  const segN = far ? 2 : 4;
+  // ---- torso -------------------------------------------------------------
+  // Four long ellipsoids butted end to end read as exactly that: circles stuck
+  // together, because each one keeps its own silhouette. The fix is many small
+  // near-spherical segments spaced far closer than their own radius, so the
+  // union has no seam, with the radius following an anatomical profile instead
+  // of a single taper: shoulder, chest, waist, haunch, tail base.
+  const segN = far ? 4 : 13;
+  const spineLo = -BX * 1.02, spineHi = BX * 1.02;
   for (let i = 0; i < segN; i++) {
-    const u = segN === 1 ? 0.5 : i / (segN - 1);
-    const lx = (u - 0.5) * BX * 1.5;
-    const taper = 0.62 + 0.38 * Math.sin(Math.PI * (0.18 + u * 0.72));
-    pushS(wx(lx, 0), bodyY + Math.sin(u * Math.PI) * BY * 0.10, wz(lx, 0),
-          ...dirW(0, 1, 0), BX * 0.52 * taper, BY * 0.92 * taper, BY * 1.02 * taper, base);
+    const u = i / (segN - 1);                       // 0 = tail end, 1 = shoulders
+    const lx = spineLo + (spineHi - spineLo) * u;
+    const prof = bodyProfile(u);
+    // spine arches slightly, and drops toward the tail
+    const arch = Math.sin(u * Math.PI) * BY * 0.13 - (1 - u) * BY * 0.07;
+    const rr = BY * prof;
+    pushS(wx(lx, 0), bodyY + arch, wz(lx, 0), ...dirW(0, 1, 0),
+          rr * 0.92, rr * 0.95, rr * 1.04, base);
   }
   if (!far) {
-    // pale underside so the silhouette has a top and a bottom
-    for (let i = 0; i < 3; i++) {
-      const u = i / 2, lx = (u - 0.5) * BX * 1.25;
-      const tp = 0.55 + 0.35 * Math.sin(Math.PI * (0.2 + u * 0.7));
-      pushS(wx(lx, 0), bodyY - BY * 0.42, wz(lx, 0), ...dirW(0, 1, 0),
-            BX * 0.42 * tp, BY * 0.36 * tp, BY * 0.80 * tp, belly);
+    // pale underside, following the same profile so it never breaks the outline
+    for (let i = 0; i < 9; i++) {
+      const u = i / 8;
+      const lx = spineLo * 0.86 + (spineHi * 0.86 - spineLo * 0.86) * u;
+      const rr = BY * bodyProfile(u) * 0.78;
+      pushS(wx(lx, 0), bodyY - BY * 0.40 + Math.sin(u * Math.PI) * BY * 0.05, wz(lx, 0),
+            ...dirW(0, 1, 0), rr * 0.80, rr * 0.52, rr * 0.92, belly);
+    }
+    // a darker dorsal band gives the back a direction and breaks the flat fill
+    const dorsal = [base[0] * 0.66, base[1] * 0.66, base[2] * 0.70];
+    for (let i = 0; i < 8; i++) {
+      const u = 0.06 + (i / 7) * 0.88;
+      const lx = spineLo * 0.9 + (spineHi * 0.9 - spineLo * 0.9) * u;
+      const rr = BY * bodyProfile(u);
+      pushS(wx(lx, 0), bodyY + Math.sin(u * Math.PI) * BY * 0.13 + rr * 0.62, wz(lx, 0),
+            ...dirW(0, 1, 0), rr * 0.52, rr * 0.30, rr * 0.44, dorsal);
     }
   }
 
@@ -3307,10 +3468,22 @@ function drawCreature(c, t, camDist) {
       pushS(wx(nx, 0), ny, wz(nx, 0), ...dirW(0, 1, 0), rr, rr, rr, base);
     }
   }
-  const headX = far ? BX * 0.8 : hx, headY = far ? bodyY + BY * 0.25 : hy;
+  const headX = (far ? BX * 0.8 : hx) + headThrust;
+  const headY = (far ? bodyY + BY * 0.25 : hy) + headDip * R * 0.7;
   pushS(wx(headX, 0), headY, wz(headX, 0), ...dirW(1, 0, 0),
         headR * 1.25, headR * 0.94, headR * 0.94, base);
   if (far) return;
+
+  if (nuzzle > 0.02) {
+    // a soft bloom while two animals pair, so it is legible at a distance
+    for (let q = 0; q < 5; q++) {
+      const a2 = (q / 5) * 6.283 + t * 2.2;
+      const rr2 = R * (0.9 + nuzzle * 1.5);
+      pushS(wx(Math.cos(a2) * rr2, Math.sin(a2) * rr2), bodyY + BY * 0.9 + nuzzle * R * 1.2,
+            wz(Math.cos(a2) * rr2, Math.sin(a2) * rr2), 0, 1, 0,
+            R * 0.16, R * 0.16, R * 0.16, [1, 0.62, 0.72]);
+    }
+  }
 
   // ---- jaw, teeth ----------------------------------------------------------
   if (n.MOUTH) {
@@ -3378,12 +3551,33 @@ function drawCreature(c, t, camDist) {
     const hipY = bodyY - BY * 0.30;
     const phase = phase0 + c.id * 0.7 + pi * 1.9 + (side > 0 ? Math.PI : 0);
     const stride = R * (0.05 + 0.80 * gaitAmt);
-    const swing = Math.sin(phase) * stride;
-    const lift = Math.max(0, Math.sin(phase)) * R * 0.35 * gaitAmt;
-    const footX = hipX + swing, footZ = hipZ * 1.05;
-    const footY = groundAt(wx(footX, footZ), wz(footX, footZ)) + R * 0.16 * S + lift;
-    const kneeX = (hipX + footX) * 0.5 + R * 0.22, kneeZ = hipZ * 1.02;
-    const kneeY = (hipY + footY) * 0.5 + R * 0.10;
+    const frontPair = (pi === 0);
+    let swing = Math.sin(phase) * stride;
+    let lift = Math.max(0, Math.sin(phase)) * R * 0.35 * gaitAmt;
+    if (armSwing !== 0 && frontPair) {          // the swiping limb leaves the ground
+      swing += armSwing * R * 1.5;
+      lift = Math.max(lift, Math.abs(armSwing) * R * 1.1);
+    }
+    let footX = hipX + swing, footZ = hipZ * 1.05;
+    let footY = groundAt(wx(footX, footZ), wz(footX, footZ)) + R * 0.16 * S + lift;
+    // A leg can only be as long as it is. Without this the foot keeps solving
+    // to the terrain while the hip rises, so a jump (or a flier's hover, or a
+    // steep slope under one foot) stretched the limb into a stilt.
+    const air = (c === player.c && !player.spectator)
+      ? clamp(player.jumpY / Math.max(1, R * 1.5), 0, 1) : 0;
+    const legReach = Math.max(R * 0.45, (stand + BY * 0.30) * 1.04) * (1 - 0.38 * air);
+    {
+      const dx = footX - hipX, dy = footY - hipY, dz = footZ - hipZ;
+      const L = Math.hypot(dx, dy, dz);
+      if (L > legReach && L > 1e-6) {
+        const k2 = legReach / L;
+        footX = hipX + dx * k2; footY = hipY + dy * k2; footZ = hipZ + dz * k2;
+      }
+    }
+    // knee bows forward, and tucks up harder the further off the ground you are
+    const kneeX = (hipX + footX) * 0.5 + R * (0.22 + 0.30 * air);
+    const kneeZ = (hipZ + footZ) * 0.5;
+    const kneeY = (hipY + footY) * 0.5 + R * (0.10 + 0.25 * air);
     const seg = (ax, ay, az, bx3, by3, bz3, r0) => {
       const dx = bx3 - ax, dy = by3 - ay, dz = bz3 - az;
       const L = Math.hypot(dx, dy, dz) || 1;
@@ -3402,7 +3596,8 @@ function drawCreature(c, t, camDist) {
     let tx = -BX * 0.80, ty = bodyY + BY * 0.16, tz = 0, ang = Math.PI;
     for (let i = 1; i <= TS; i++) {
       const u = i / TS;
-      const wave = Math.sin(phase0 * (0.6 + 0.5 * gaitAmt) - i * 0.75 + c.id) * (0.16 + u * 0.20);
+      const wave = Math.sin(phase0 * (0.6 + 0.5 * gaitAmt) - i * 0.75 + c.id) * (0.16 + u * 0.20)
+                 + tailSwing * u * 0.55;
       ang += wave * 0.5;
       const segLen = BX * 0.30 * (1 - u * 0.35);
       const nx2 = tx + Math.cos(ang) * segLen, nz = tz + Math.sin(ang) * segLen * 1.3;
@@ -3418,37 +3613,211 @@ function drawCreature(c, t, camDist) {
   // ---- wings and fins ------------------------------------------------------
   const aqua = p.aquaticForm;
   const wings = aqua ? 0 : clamp(n.WING || 0, 0, 6);
+  // Wings you cannot fly on and fins you cannot swim with are drawn as the
+  // stubs they functionally are. The core needs wingEff > 0.32 * mass before
+  // speedAir exists at all, and finEff >= 0.8 before deep water opens up, so a
+  // single small wing on a heavy body really is a non-functional structure.
+  // Showing it full-size read as a bug; showing it as a nub reads as evolution
+  // partway to something.
+  const flightReady = p.canFly ? 1 : clamp((p.wingEff || 0) / Math.max(0.001, 0.32 * p.mass), 0, 1);
+  const wingDev = p.canFly ? 1 : 0.20 + 0.30 * flightReady;
+  const swimReady = p.canSwim ? 1 : clamp((p.finEff || 0) / 0.8, 0, 1);
+  const finDev = p.canSwim ? 1 : 0.22 + 0.32 * swimReady;
+  const wingSkin = [base[0] * 0.66 + 0.20, base[1] * 0.70 + 0.20, base[2] * 0.78 + 0.20];
+  const wingBone = [0.86, 0.82, 0.72];
   for (let k = 0; k < wings; k++) {
     const side = (k % 2) ? 1 : -1, tier = (k >> 1);
-    const flap = Math.sin(t * 3.4 + c.id + tier) * 0.55;
-    const span = BX * (1.5 - tier * 0.2);
-    for (let i = 1; i <= 3; i++) {
-      const u = i / 3;
-      const lz = side * (BY * 0.6 + span * u);
-      const ly = bodyY + BY * 0.5 + flap * span * u * 0.55;
-      const lx = -BX * 0.1 - u * BX * 0.25;
-      pushS(wx(lx, lz), ly, wz(lx, lz), ...dirW(0, 1, 0),
-            BX * 0.52 * (1 - u * 0.35), R * 0.07, span * 0.42, [base[0] * 0.72 + 0.16, base[1] * 0.78 + 0.16, base[2] * 0.86 + 0.16]);
-    }
+    const flap = Math.sin(t * 3.4 + c.id + tier) * 0.55 * (0.25 + 0.75 * wingDev);
+    const span = BX * (1.6 - tier * 0.22) * wingDev;
+    membrane(wx, wz, dirW, -BX * 0.06 - tier * BX * 0.3, bodyY + BY * 0.46, side * BY * 0.62,
+             -0.18, 0.34 + flap * 0.6, side * 0.92,
+             span, span * 0.85, 5, wingSkin, wingBone, t * 3.4 + c.id + tier, 0.42);
   }
+  // A fin was one cone poking sideways, which is why it looked like a plastic
+  // arrow. A real fin is a webbed membrane: stiff rays fanning from a base with
+  // thin skin stretched between them, rippling out of phase along the fan.
   const fins = clamp((n.FIN || 0) + (aqua ? (n.WING || 0) : 0), 0, 6);
+  const finCol = [0.34, 0.62, 0.82], rayCol = [0.62, 0.80, 0.92];
   for (let k = 0; k < fins; k++) {
     const side = (k % 2) ? 1 : -1, tier = (k >> 1);
-    const wob = Math.sin(t * 2.1 + c.id + tier) * 0.4;
-    const lz = side * (BY * 0.75 + R * 0.5);
-    const lx = BX * 0.12 - tier * BX * 0.4;
-    pushC(wx(lx, lz), bodyY + wob * R * 0.2, wz(lx, lz),
-          ...dirW(-0.35, 0.15, side * 0.92), R * 0.42, R * 1.5, [0.42, 0.68, 0.86]);
+    const bx2 = BX * 0.22 - tier * BX * 0.46;
+    const bz = side * BY * 0.78;
+    const by2 = bodyY - BY * 0.08;
+    membrane(wx, wz, dirW, bx2, by2, bz,
+             -0.30, 0.10, side * 0.95,          // outward and slightly back
+             R * 1.7 * finDev, R * 0.95 * finDev,
+             5, finCol, rayCol, t * 2.4 + c.id + tier, 0.30);
   }
   if (aqua && p.elong > 1.4) {
-    pushC(wx(BX * 0.1, 0), bodyY + BY * 0.8, wz(BX * 0.1, 0),
-          ...dirW(-0.25, 0.97, 0), R * 0.36, R * 1.4, [0.34, 0.60, 0.82]);
+    membrane(wx, wz, dirW, BX * 0.05, bodyY + BY * 0.55, 0,
+             -0.22, 0.97, 0, R * 1.5, R * 0.9, 4, finCol, rayCol, t * 1.7 + c.id, 0.16);
+  }
+}
+
+// Fan of stiff rays with skin between them. `ax,ay,az` is the outward axis in
+// body-local space; the fan opens fore-and-aft around it. Thin on its normal so
+// it reads as a sheet from every angle instead of as a bundle of tubes.
+function membrane(wx, wz, dirW, ox, oy, oz, ax, ay, az, len, span, rays, skin, rayC, phase, ripple) {
+  if (len <= 0.01) return;
+  const al = Math.hypot(ax, ay, az) || 1;
+  ax /= al; ay /= al; az /= al;
+  for (let j = 0; j < rays; j++) {
+    const tj = rays === 1 ? 0 : j / (rays - 1) - 0.5;     // -0.5 .. 0.5 across the fan
+    // fan opens along body-forward, so rays splay fore and aft of the axis
+    const fx = ax + tj * 1.15, fy = ay + tj * 0.18, fz = az;
+    const fl = Math.hypot(fx, fy, fz) || 1;
+    const dx = fx / fl, dy = fy / fl, dz = fz / fl;
+    const rl = len * (1 - Math.abs(tj) * 0.42);
+    const wob = Math.sin(phase - j * 0.8) * ripple;
+    const segs = 3;
+    for (let i = 1; i <= segs; i++) {
+      const u = i / segs;
+      const bend = wob * u * u;                            // tip flexes most
+      const px = ox + dx * rl * u, py = oy + dy * rl * u + bend * rl * 0.35, pz = oz + dz * rl * u;
+      const w = span * (1 - Math.abs(tj) * 0.30) / rays * 1.35;
+      const thin = Math.max(0.35, rl * 0.045);
+      const isEdge = (j === 0 || j === rays - 1);
+      pushS(wx(px, pz), py, wz(px, pz), ...dirW(dx, dy, dz),
+            w, rl / segs * 0.62, thin * (isEdge ? 1.9 : 1),
+            isEdge ? rayC : skin);
+    }
+  }
+}
+
+
+// Other creatures breed constantly but there was nothing to see, so the
+// ecosystem read as static. New ids appearing are births; a brief rising bloom
+// marks each one, which is also how you find a fertile herd worth approaching.
+const births = [];
+const knownIds = new Set();
+let birthsPrimed = false;
+const BIRTH_MS = 2200, BIRTH_MAX = 60;
+function trackBirths() {
+  if (!world) return;
+  const list = world.creatures;
+  if (!birthsPrimed) {
+    knownIds.clear();
+    for (const c of list) knownIds.add(c.id);
+    birthsPrimed = true;
+    return;
+  }
+  const now = performance.now();
+  const seen = new Set();
+  for (const c of list) {
+    seen.add(c.id);
+    if (!knownIds.has(c.id)) {
+      if (births.length < BIRTH_MAX && c.age < 2) births.push({ x: c.x, y: c.y, r: c.ph.radius, t0: now });
+    }
+  }
+  knownIds.clear();
+  for (const id of seen) knownIds.add(id);
+}
+function drawBirths(t) {
+  if (!births.length) return;
+  const now = performance.now();
+  for (let i = births.length - 1; i >= 0; i--) {
+    const bq = births[i];
+    const k = (now - bq.t0) / BIRTH_MS;
+    if (k >= 1) { births.splice(i, 1); continue; }
+    const gy = groundAt(bq.x, bq.y);
+    const N = 7;
+    for (let j = 0; j < N; j++) {
+      const a = (j / N) * Math.PI * 2 + k * 2.2;
+      const rad = (6 + bq.r * 1.6) * (0.4 + k * 1.5);
+      const s2 = Math.max(0.5, (1.8 + bq.r * 0.25) * (1 - k));
+      pushS(bq.x + Math.cos(a) * rad, gy + 3 + k * 26, bq.y + Math.sin(a) * rad,
+            0, 1, 0, s2, s2, s2, [0.55 + 0.4 * (1 - k), 0.95, 0.85]);
+    }
+  }
+}
+
+
+// A second, wider ring is the awareness band: it shows every nearby animal that
+// could actually hurt you, as a wedge at its true bearing, brightening as it
+// closes. The inner ring stays the attack range, so "can I reach it" and "is
+// something hunting me" are two different readings instead of one guess.
+const THREAT_R = 950;
+function drawThreatRing(t) {
+  const c = player.c;
+  if (!c || !c.alive || player.spectator) return;
+  const p = c.ph;
+  const band = interactRange(p) * 2.5;
+  let worst = 0, count = 0;
+  const list = world.creatures;
+  for (let i = 0; i < list.length; i++) {
+    const o = list[i];
+    if (o === c || !o.alive || !o.ph) continue;
+    const dx = o.x - c.x, dz = o.y - c.y;
+    const d = Math.hypot(dx, dz);
+    if (d > THREAT_R) continue;
+    // dangerous means it eats meat and can actually get through your defence
+    const hostile = (o.ph.carnivory > 0.3 || o.ph.scavenger > 0.5);
+    const lethal = o.ph.attack > p.defense * 0.55;
+    if (!hostile || !lethal) continue;
+    const near = 1 - d / THREAT_R;                 // 0 far, 1 on top of you
+    const sev = clamp(o.ph.attack / Math.max(1, p.defense) * 0.35 + near * 0.8, 0, 1);
+    if (sev > worst) worst = sev;
+    count++;
+    const bear = Math.atan2(dz, dx);
+    // a wedge of markers at that bearing, wider and hotter the closer it is
+    const wedge = 0.16 + 0.20 * near;
+    const pulse = 0.55 + 0.45 * Math.sin(t * (3 + near * 6) + i);
+    const col = [0.55 + 0.45 * sev, 0.30 * (1 - sev * 0.7), 0.22 * (1 - sev * 0.6)];
+    for (let q = -2; q <= 2; q++) {
+      const a = bear + (q / 2) * wedge;
+      const rx = c.x + Math.cos(a) * band, rz = c.y + Math.sin(a) * band;
+      const sz = (1.6 + 2.6 * near) * (q === 0 ? 1.5 : 1) * pulse;
+      pushS(rx, groundAt(rx, rz) + 1.6, rz, 0, 1, 0, sz, 0.6, sz, col);
+    }
+  }
+  if (count) {
+    // a faint closed band so the wedges have something to sit on
+    const N = 56, dim = 0.10 + 0.22 * worst;
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      const rx = c.x + Math.cos(a) * band, rz = c.y + Math.sin(a) * band;
+      pushS(rx, groundAt(rx, rz) + 1.0, rz, 0, 1, 0, 0.9, 0.28, 0.9,
+            [0.42 + dim, 0.22, 0.20]);
+    }
+  }
+  player.threatLevel = worst;
+  player.threatCount = count;
+}
+
+// A flat ring of markers on the ground at exactly the distance your attacks and
+// interactions reach, so range is shown rather than guessed. It turns red when
+// something hostile is targeted and cyan when the target could be a mate.
+function drawReachRing(t) {
+  const c = player.c;
+  if (!c || !c.alive || player.spectator) return;
+  const p = c.ph;
+  const rad = interactRange(p);
+  const tgt = player.target;
+  const mate = tgt && canMate(c, tgt);
+  const col = tgt ? (mate ? [0.20, 0.88, 0.82] : [0.95, 0.30, 0.22]) : [0.62, 0.72, 0.70];
+  const N = 40;
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2 + t * 0.25;
+    const x = c.x + Math.cos(a) * rad, z = c.y + Math.sin(a) * rad;
+    const y = groundAt(x, z) + 1.2;
+    const s2 = 1.5 + (tgt ? 0.6 * (0.5 + 0.5 * Math.sin(t * 4 + i)) : 0);
+    pushS(x, y, z, 0, 1, 0, s2, 0.45, s2, col);
+  }
+  if (tgt) {
+    // a marker over whatever you are about to act on
+    const ty = groundAt(tgt.x, tgt.y) + (tgt.ph.standH || tgt.ph.radius) * BODY_SCALE * 2.4
+             + 6 + Math.sin(t * 3) * 1.5;
+    pushC(tgt.x, ty, tgt.y, 0, -1, 0, 2.2, 6.0, col);
   }
 }
 
 function buildCreatureInstances(camX, camZ, t) {
   instCount = 0; spikeCount = 0;
   bodyBatches.length = 0;
+  player.target = pickTarget();
+  drawReachRing(t);
+  drawThreatRing(t);
+  drawBirths(t);
   for (const c of world.creatures) {
     if (!c.alive || !c.ph) continue;
     if (c === player.c && isFirstPerson()) continue;
@@ -3473,6 +3842,32 @@ function pushP(px, py, pz, dx, dy, dz, sx, sy, sz, col) {
   plantCount++;
 }
 const UP = [0, 1, 0];
+// A flare of buttress roots where the trunk meets the ground, so a tree grows
+// out of the terrain instead of being stuck into it.
+function treeRoots(x, y, z, tr, S, rot, bark) {
+  const n = 5;
+  for (let k = 0; k < n; k++) {
+    const a = rot + (k / n) * 6.283;
+    const rr = tr * (1.5 + ((k * 7) % 3) * 0.28);
+    pushP(x + Math.cos(a) * rr * 0.55, y + tr * 0.35, z + Math.sin(a) * rr * 0.55,
+          Math.cos(a) * 0.86, 0.5, Math.sin(a) * 0.86,
+          tr * 0.42, rr * 0.6, tr * 0.42, bark);
+  }
+  pushP(x, y + tr * 0.5, z, 0, 1, 0, tr * 1.35, tr * 0.7, tr * 1.35, bark);
+}
+// Trunk in tapering stacked segments with a slight lean and curve, rather than
+// one uniform cylinder.
+function treeTrunk(x, y, z, hgt, tr, rot, leanAmt, bark) {
+  const segs = 4;
+  const lx = Math.sin(rot) * leanAmt, lz = Math.cos(rot) * leanAmt;
+  for (let i = 0; i < segs; i++) {
+    const u0 = i / segs, u1 = (i + 1) / segs;
+    const um = (u0 + u1) / 2;
+    const cx = x + lx * hgt * um * um, cz = z + lz * hgt * um * um;
+    const w = tr * (1.18 - um * 0.62);
+    pushP(cx, y + hgt * um, cz, lx * 1.6, 1, lz * 1.6, w, hgt / segs * 0.62, w, bark);
+  }
+}
 const BARK = [0.42, 0.31, 0.22], BARK_PALE = [0.58, 0.48, 0.34];
 
 // How often a plant is a TREE rather than ground cover. world.plants is a food
@@ -3490,7 +3885,7 @@ function buildPlantInstances(camX, camZ, t) {
   const T = terrain;
   const NEARR = TREE_LOD * TREE_LOD, FARR = 3000 * 3000;
   for (const pl of world.plants) {
-    if (plantCount + 16 >= MAX_PLANT_INST) break;
+    if (plantCount + 40 >= MAX_PLANT_INST) break;
     const dx = pl.x - camX, dz = pl.y - camZ;
     const d2 = dx * dx + dz * dz;
     if (d2 > FARR) continue;
@@ -3545,9 +3940,14 @@ function buildPlantInstances(camX, camZ, t) {
     }
 
     // ---- real trees ---------------------------------------------------------
+    // A trunk used to be a single brown stick. Every tree now gets a flared
+    // root base, a trunk that tapers and leans, forking branches, and fruit on
+    // the ones that carry it -- which is also the food a tall creature is
+    // reaching for.
     if (name === 'taiga' || name === 'tundra' || (name === 'forest' && j2 > 0.62)) {
-      const hgt = (52 + j * 34) * S, tr = 2.2 * S;                 // conifer
-      pushP(pl.x, y + hgt * 0.4, pl.y, ...lean, tr, hgt * 0.4, tr, BARK);
+      const hgt = (52 + j * 34) * S, tr = 2.6 * S;                 // conifer
+      treeRoots(pl.x, y, pl.y, tr, S, rot, BARK);
+      treeTrunk(pl.x, y, pl.y, hgt * 0.92, tr, rot, 0.05, BARK);
       const tiers = 4 + ((hs >>> 6) % 3);
       for (let k = 0; k < tiers; k++) {
         const u = k / tiers;
@@ -3580,16 +3980,17 @@ function buildPlantInstances(camX, camZ, t) {
               Math.cos(a), 0.25, Math.sin(a), 0.5 * S, 2.4 * S, [0.86, 0.84, 0.70]);
       }
     } else if (name === 'savanna') {
-      const hgt = 40 * S, tr = 2.6 * S;                             // acacia
-      pushP(pl.x, y + hgt * 0.5, pl.y, ...lean, tr, hgt * 0.5, tr, BARK_PALE);
+      const hgt = 40 * S, tr = 3.0 * S;                             // acacia
+      treeRoots(pl.x, y, pl.y, tr, S, rot, BARK_PALE);
+      treeTrunk(pl.x, y, pl.y, hgt, tr, rot, 0.16, BARK_PALE);
       for (let k = 0; k < 3; k++) {
         const a = rot + k * 2.094, rr = 16 * S;
         pushP(pl.x + Math.cos(a) * rr * 0.32, y + hgt + 2 * S, pl.y + Math.sin(a) * rr * 0.32,
               0, 1, 0, rr * 0.72, 3.4 * S, rr * 0.72, leaf(0.22, 0.42, 0.16));
       }
     } else if (name === 'marsh' || name === 'shallow') {
-      const hgt = 30 * S, tr = 2.0 * S;                             // mangrove
-      pushP(pl.x, y + hgt * 0.5, pl.y, ...lean, tr, hgt * 0.5, tr, BARK);
+      const hgt = 30 * S, tr = 2.4 * S;                             // mangrove
+      treeTrunk(pl.x, y, pl.y, hgt, tr, rot, 0.12, BARK);
       for (let k = 0; k < 4; k++) {
         const a = rot + k * 1.57;
         pushP(pl.x + Math.cos(a) * 5 * S, y + hgt * 0.95, pl.y + Math.sin(a) * 5 * S,
@@ -3598,15 +3999,43 @@ function buildPlantInstances(camX, camZ, t) {
               Math.cos(a) * 0.7, 1, Math.sin(a) * 0.7, 1.2 * S, hgt * 0.2, 1.2 * S, BARK);
       }
     } else {
-      const hgt = (30 + j * 26) * S, tr = 2.4 * S;                  // broadleaf
-      pushP(pl.x, y + hgt * 0.5, pl.y, ...lean, tr, hgt * 0.5, tr, BARK);
-      const lobes = 3 + ((hs >>> 4) % 2);
+      const hgt = (30 + j * 26) * S, tr = 2.9 * S;                  // broadleaf
+      treeRoots(pl.x, y, pl.y, tr, S, rot, BARK);
+      treeTrunk(pl.x, y, pl.y, hgt, tr, rot, 0.10, BARK);
       const cr = (10 + j2 * 6) * S;
-      for (let k = 0; k < lobes; k++) {
-        const a = rot + k * (6.283 / lobes);
-        pushP(pl.x + Math.cos(a) * cr * 0.42, y + hgt + cr * (0.10 + 0.16 * (k % 2)), pl.y + Math.sin(a) * cr * 0.42,
-              0, 1, 0, cr * 0.80, cr * 0.66, cr * 0.80, leaf(0.13, 0.40, 0.15));
+      const boughs = 3 + ((hs >>> 4) % 2);
+      const bearsFruit = ((hs >>> 17) % 100) < 55;
+      const fruitCol = ((hs >>> 23) & 1) ? [0.80, 0.16, 0.14] : [0.90, 0.55, 0.10];
+      const topX = pl.x + Math.sin(rot) * hgt * 0.10, topZ = pl.y + Math.cos(rot) * hgt * 0.10;
+      for (let k = 0; k < boughs; k++) {
+        const a = rot + k * (6.283 / boughs) + j2 * 0.6;
+        const reach = cr * 0.85, rise = hgt * 0.26;
+        const ex = topX + Math.cos(a) * reach, ez = topZ + Math.sin(a) * reach;
+        const ey = y + hgt * 0.86 + rise;
+        // the bough itself, tapering out from the crown
+        for (let i = 1; i <= 3; i++) {
+          const u = i / 3;
+          const bxp = topX + (ex - topX) * u, bzp = topZ + (ez - topZ) * u;
+          const byp = y + hgt * 0.86 + rise * u * u;
+          pushP(bxp, byp, bzp, Math.cos(a) * 0.75, 0.66, Math.sin(a) * 0.75,
+                tr * 0.42 * (1 - u * 0.5), reach / 3 * 0.6, tr * 0.42 * (1 - u * 0.5), BARK);
+        }
+        // leaf mass clustered at the end of each bough, not one lollipop
+        for (let m = 0; m < 3; m++) {
+          const ja = a + (m - 1) * 0.7, jr = cr * (0.30 + 0.16 * m);
+          pushP(ex + Math.cos(ja) * jr * 0.5, ey + cr * (0.10 + 0.13 * (m % 2)), ez + Math.sin(ja) * jr * 0.5,
+                0, 1, 0, cr * 0.56, cr * 0.44, cr * 0.56, leaf(0.13, 0.40, 0.15));
+        }
+        if (bearsFruit) {
+          for (let m = 0; m < 2; m++) {
+            const fa = a + (m ? 0.9 : -0.7);
+            pushP(ex + Math.cos(fa) * cr * 0.34, ey - cr * 0.14, ez + Math.sin(fa) * cr * 0.34,
+                  0, 1, 0, 1.5 * S, 1.6 * S, 1.5 * S, fruitCol);
+          }
+        }
       }
+      // crown filling the gap between the boughs
+      pushP(topX, y + hgt * 0.94, topZ, 0, 1, 0, cr * 0.62, cr * 0.50, cr * 0.62, leaf(0.11, 0.36, 0.14));
     }
   }
   if (plantCount) dev.queue.writeBuffer(plantVB, 0, plantData, 0, plantCount * INST_FLOATS);
@@ -3683,6 +4112,129 @@ function spawnNewborn(src) {
   return baby;
 }
 
+
+// ------------------------------------------------------- founder archetypes
+// Rather than a full genome editor, each archetype is a search: mutate the seed
+// herbivore many times and keep whichever genome scores highest for that way of
+// living. The result is a real evolved genome the simulation can work with, not
+// a hand-authored special case, and "random" is the same search with no scoring.
+const ARCHETYPES = {
+  random:  null,
+  grazer:  (h) => h.digest * 5 + h.storage * 0.02 + h.defense * 0.06,
+  runner:  (h) => h.speedLand * 0.09 + (h.sLegs || 0) * 2.0 + h.sense * 0.005,
+  brute:   (h) => h.attack * 0.16 + h.defense * 0.14 + (h.sHorn || 0) * 2.0 + h.mass * 0.20,
+  hunter:  (h) => h.carnivory * 10 + h.attack * 0.12 + h.sense * 0.007 + h.speedLand * 0.03,
+  swimmer: (h) => (h.finEff || 0) * 4 + h.speedWater * 0.06 + (h.canSwim ? 10 : 0),
+  flier:   (h) => (h.wingEff || 0) * 4 + (h.canFly ? 14 : 0) + h.sense * 0.005,
+};
+// Every archetype is scored against the ADULT phenotype, and every one is held
+// to the same size band. Without it the search just maximised mass, because
+// nearly every stat scales with it, and you were born a 70-mass monster
+// regardless of which button you pressed.
+const ARCH_MASS_LO = 3, ARCH_MASS_HI = 13;
+function massPenalty(h) {
+  if (h.mass < ARCH_MASS_LO) return (ARCH_MASS_LO - h.mass) * 6;
+  if (h.mass > ARCH_MASS_HI) return (h.mass - ARCH_MASS_HI) * 6;
+  return 0;
+}
+// Diet is a single gene on the MOUTH node and mutation almost never flips it,
+// so a hunter is given the mouth it needs rather than waiting for luck.
+function setDiet(genome, mode) {
+  for (const e of C.collectNodes(genome.body, 0, [])) {
+    if (e.node.type === 'MOUTH') { e.node.mode = mode; return true; }
+  }
+  return false;
+}
+function makeArchetypeGenome(kind) {
+  const rng = world.rng;
+  const score = ARCHETYPES[kind];
+  const draw = () => {
+    let g = C.seedHerbivore(world, rng);
+    const rounds = 2 + ((rng() * 6) | 0);
+    for (let m = 0; m < rounds; m++) g = C.mutate(world, g, rng, 0.5);
+    if (kind === 'hunter') setDiet(g, 'carn');
+    return g;
+  };
+  if (!score) {
+    // even a random founder should be a viable size
+    let g = null;
+    for (let i = 0; i < 40; i++) {
+      g = draw();
+      try { if (massPenalty(C.develop(g)) === 0) return g; } catch (e) { /* keep trying */ }
+    }
+    return g;
+  }
+  // The size band is a hard filter, not a penalty term: a flier's wing score
+  // will always outbid any penalty you can reasonably add, and you end up born
+  // as a 29-mass glider. Candidates outside the band are simply not eligible.
+  let best = null, bestS = -Infinity;
+  let fallback = null, fallbackPen = Infinity;
+  for (let i = 0; i < 220; i++) {
+    const g = draw();
+    let ph; try { ph = C.develop(g); } catch (e) { continue; }
+    const pen = massPenalty(ph);
+    if (pen > 0) {
+      if (pen < fallbackPen) { fallbackPen = pen; fallback = g; }
+      continue;
+    }
+    const sc = score(ph);
+    if (sc > bestS) { bestS = sc; best = g; }
+  }
+  return best || fallback || draw();
+}
+// Swap the body you are about to play for one of the chosen kind, born the same
+// way as any other newborn.
+function becomeArchetype(kind) {
+  if (!world) return;
+  const old = player.c;
+  const g = makeArchetypeGenome(kind);
+  if (!g) return;
+  let x, y;
+  if (old) { x = old.x; y = old.y; }
+  else { const isl = terrain.island; x = isl ? isl.cx : WORLD_W / 2; y = isl ? isl.cy : WORLD_H / 2; }
+  if (terrain.isDeep(x, y)) { const sp2 = terrain.nearestShallow(x, y, false); if (sp2) { x = sp2[0]; y = sp2[1]; } }
+  const me = C.makeCreature(g, x, y, 400);
+  world.creatures.push(me);
+
+  // You are not dropped in as a lone mutant. Choosing an archetype founds a
+  // small deme of your own kind around you: without it your genome sat 11+
+  // genetic units from everything on the island, every mating attempt was
+  // refused as "different species", and the whole reproduction half of the game
+  // was unreachable from the start screen.
+  const rng = world.rng;
+  const KIN = 6;
+  for (let i = 0; i < KIN; i++) {
+    let kg = C.cloneGenome(g);
+    // a little drift so the deme is a population, not six identical copies,
+    // but well inside the species threshold
+    kg = C.mutate(world, kg, rng, 0.10);
+    const a2 = rng() * Math.PI * 2, r2 = 60 + rng() * 220;
+    let kx = clamp(x + Math.cos(a2) * r2, 1, WORLD_W - 1);
+    let ky = clamp(y + Math.sin(a2) * r2, 1, WORLD_H - 1);
+    if (terrain.isDeep(kx, ky)) { const sp3 = terrain.nearestShallow(kx, ky, false); if (sp3) { kx = sp3[0]; ky = sp3[1]; } }
+    const kin = C.makeCreature(kg, kx, ky, 400);
+    // grown, so there is something you can actually breed with once you mature
+    for (const q of kin.cellState) q.grow = 1;
+    kin._growthAvg = 1;
+    kin.ph = C.develop(kg, kin.cellState);
+    kin.energy = kin.ph.storage;
+    kin.age = C.maturity(kin.ph) + 2;
+    world.creatures.push(kin);
+  }
+
+  // the founder you replaced keeps living; you simply are not it any more
+  player.c = me;
+  player.absorbed = 0;
+  player.camX = me.x; player.camZ = me.y;
+  player.camY = groundAt(me.x, me.y) + 20;
+  player.dist = THIRD_DEFAULT;
+  const ph = me.ph;
+  toast('Born a ' + kind + ' with ' + KIN + ' of your own kind nearby. ' +
+        (ph.carnivory > 0.5 ? 'Carnivore' : ph.scavenger > 0.5 ? 'Scavenger' : 'Herbivore') +
+        ', adult mass ' + C.develop(me.genome).mass.toFixed(1) + '.', 4600);
+  updateHUD(); updateStats();
+}
+
 function takeNewbornBody(src) {
   // With no pre-run every founder IS a newborn, so stepping into one keeps the
   // population exactly what the panel asked for. Only when the world has been
@@ -3720,6 +4272,223 @@ function respawn() {
   const cause = dead && dead.deathCause ? dead.deathCause : 'unknown';
   toast(`You died of ${cause}. Reborn as a newborn of your nearest kin (distance ${bestD.toFixed(2)}).`, 5600);
 }
+
+
+// =====================================================================
+// INTERACTION: reach ring, target, mate or fight, trait theft
+// Everything a creature can do to another creature runs through one target:
+// whatever is nearest inside your reach and in front of you. The ring on the
+// ground is that reach, drawn so it is never a guess.
+// =====================================================================
+// A newborn's own reach stat is about 10 units in a 12800-unit world, so using
+// it raw meant you had to be standing inside another animal before anything
+// could happen. This is the interaction range for every action, and it is what
+// the ring on the ground draws.
+function interactRange(p) {
+  return p.radius + p.reach * 1.6 + 34;
+}
+function pickTarget() {
+  const c = player.c;
+  if (!c || !c.alive) return null;
+  const p = c.ph;
+  const fx = Math.cos(player.yaw), fz = Math.sin(player.yaw);
+  const rr = interactRange(p);
+  let best = null, bestD = Infinity;
+  const list = world.creatures;
+  for (let i = 0; i < list.length; i++) {
+    const o = list[i];
+    if (o === c || !o.alive || !o.ph) continue;
+    const dx = o.x - c.x, dz = o.y - c.y;
+    const d = Math.hypot(dx, dz);
+    if (d > rr + o.ph.radius) continue;
+    if (d > 1e-6 && (dx * fx + dz * fz) / d < 0.0) continue;   // anything in the forward half
+    if (d < bestD) { bestD = d; best = o; }
+  }
+  return best;
+}
+
+// You may mate with anything close enough genetically that the core would let
+// them breed with each other, and only when you are both grown and fed.
+// Returns null when mating is possible, otherwise the specific reason. Naming
+// the blocker matters: "not a viable mate" told the player nothing about which
+// of six conditions had failed.
+function mateBlock(a, bb) {
+  if (!a || !bb || !a.alive || !bb.alive) return 'no partner';
+  if (!world.flags.sexual) return 'sexual reproduction is switched off';
+  const sigOf = (x) => x._sig || (x._sig = C.signature(x.genome, x.ph));
+  const gd = C.geneticDistance(sigOf(a), sigOf(bb));
+  if (gd > 9) return 'different species (genetic distance ' + gd.toFixed(1) + ', limit 9)';
+  if (a.age <= C.maturity(a.ph)) return 'you are too young (' + a.age.toFixed(0) + '/' + C.maturity(a.ph).toFixed(0) + ')';
+  if (bb.age <= C.maturity(bb.ph)) return 'it is too young';
+  if ((a._growthAvg || 0) < 0.75) return 'you are still growing (' + ((a._growthAvg || 0) * 100).toFixed(0) + '%)';
+  if ((bb._growthAvg || 0) < 0.75) return 'it is still growing';
+  if (a.energy < C.reproThreshold(a.ph)) return 'you need more energy (' + a.energy.toFixed(0) + '/' + C.reproThreshold(a.ph).toFixed(0) + ')';
+  if (bb.energy < C.reproThreshold(bb.ph)) return 'it is too hungry';
+  if (a.reproCD > 0) return 'you are still recovering';
+  if (bb.reproCD > 0) return 'it is still recovering';
+  return null;
+}
+function canMate(a, bb) { return mateBlock(a, bb) === null; }
+
+// Mating hands the player forward a generation: the offspring is a real
+// crossover of both parents, and the body you were steering is released to its
+// own brain rather than deleted.
+function tryMate() {
+  const c = player.c, mate = player.target;
+  if (!c || !c.alive) return;
+  if (!mate) { toast('Nothing in reach to mate with.', 1200); return; }
+  const why = mateBlock(c, mate);
+  if (why) { toast('Cannot mate: ' + why + '.', 3200); return; }
+  startAnim(c, 'mate', 0.9); startAnim(mate, 'mate', 0.9);
+  const rng = world.rng;
+  const g = C.mutate(world, C.crossover(c.genome, mate.genome, rng), rng, world.params.mutationRate);
+  const invest = (c.energy + mate.energy) * 0.30;
+  c.energy -= c.energy * 0.28; mate.energy -= mate.energy * 0.28;
+  c.reproCD = 14; mate.reproCD = 14;
+  const ang = rng() * Math.PI * 2, off = c.ph.radius + mate.ph.radius + 12;
+  let bx = clamp(c.x + Math.cos(ang) * off, 1, WORLD_W - 1);
+  let by = clamp(c.y + Math.sin(ang) * off, 1, WORLD_H - 1);
+  if (terrain.isDeep(bx, by)) { const sp2 = terrain.nearestShallow(bx, by, false); if (sp2) { bx = sp2[0]; by = sp2[1]; } }
+  const baby = C.makeCreature(g, bx, by, invest);
+  baby.speciesId = c.speciesId;
+  baby.lineage = Math.max(c.lineage, mate.lineage) + 1;
+  world.creatures.push(baby);
+  c.offspringCount = (c.offspringCount || 0) + 1;
+  mate.offspringCount = (mate.offspringCount || 0) + 1;
+  // the body you were is now on its own
+  player.c = baby;
+  player.generation++;
+  player.dist = Math.max(player.dist, THIRD_DEFAULT);
+  toast('You mated. You are now your own offspring, generation ' + player.generation +
+        '. Your old body walks on by itself.', 5200);
+}
+
+// ---- trait theft ----------------------------------------------------------
+function graftNode(node) {
+  const c = player.c;
+  if (!c || !node) return null;
+  const g = C.cloneGenome(c.genome);
+  const mine = {};
+  for (const e of C.collectNodes(g.body, 0, [])) mine[e.node.type] = (mine[e.node.type] || 0) + 1;
+  if (C.SINGLETON.has(node.type) && mine[node.type]) return null;
+  let graft;
+  try { graft = JSON.parse(JSON.stringify(node)); } catch (e) { return null; }
+  if (C.countNodes(g.body) + C.countNodes(graft) > C.CAPS.GENOME_NODES) return null;
+  const parents = C.collectNodes(g.body, 0, [])
+    .filter(e => (e.depth == null ? 0 : e.depth) < C.CAPS.TREE_DEPTH - 1)
+    .map(e => e.node);
+  const parent = parents.length ? parents[(Math.random() * parents.length) | 0] : g.body;
+  if (!parent.children) parent.children = [];
+  parent.children.push(graft);
+  const avg = clamp(c._growthAvg != null ? c._growthAvg : 0.5, 0.08, 1);
+  c.genome = g;
+  c.cellNodes = C.collectNodes(g.body, 0, []).map(e => e.node);
+  c.cellState = c.cellNodes.map(() => ({ grow: avg, alive: true }));
+  c.ph = C.develop(g, c.cellState);
+  c._sig = null;
+  player.absorbed = (player.absorbed || 0) + 1;
+  return node.type;
+}
+
+// Offer the parts worth taking and let the player choose, rather than rolling
+// one at random. Nothing is applied until a key is pressed.
+function offerTraits(genome, label) {
+  if (!genome || !player.c) return false;
+  const mine = {};
+  for (const e of C.collectNodes(player.c.genome.body, 0, [])) mine[e.node.type] = (mine[e.node.type] || 0) + 1;
+  const seen = new Set();
+  const opts = [];
+  for (const e of C.collectNodes(genome.body, 0, [])) {
+    const nd = e.node;
+    if (nd.type === 'CORE') continue;
+    if (C.SINGLETON.has(nd.type) && mine[nd.type]) continue;
+    const key = nd.type + '|' + Math.round((nd.size || 1) * 10) + '|' + (nd.repeat || 1);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    opts.push(nd);
+    if (opts.length >= 4) break;
+  }
+  if (!opts.length) { toast('Nothing on it you can use.', 2000); return false; }
+  player.picker = { opts, label, t0: performance.now() };
+  renderPicker();
+  return true;
+}
+function renderPicker() {
+  const el = $('picker');
+  if (!el) return;
+  const pk = player.picker;
+  if (!pk) { el.style.display = 'none'; return; }
+  const DESC = {
+    MOUTH: 'jaws', GUT: 'gut', TAIL: 'tail', EYE: 'eye', LEG: 'leg', FIN: 'fin',
+    WING: 'wing', SPIKE: 'spike', HORN: 'horn', GLAND: 'toxin gland',
+  };
+  el.innerHTML = '<div class="ptitle">' + pk.label + ' &mdash; take one trait</div>' +
+    pk.opts.map((n, i) =>
+      '<div class="popt"><b>' + (i + 1) + '</b> ' + (DESC[n.type] || n.type.toLowerCase()) +
+      '<span>size ' + (n.size || 1).toFixed(2) + (n.repeat > 1 ? ' &times;' + n.repeat : '') + '</span></div>').join('') +
+    '<div class="pskip"><b>0</b> take nothing</div>';
+  el.style.display = 'block';
+}
+function choosePicked(i) {
+  const pk = player.picker;
+  if (!pk) return;
+  if (i === 0) { player.picker = null; renderPicker(); toast('Took nothing.', 1200); return; }
+  const nd = pk.opts[i - 1];
+  player.picker = null; renderPicker();
+  if (!nd) return;
+  const got = graftNode(nd);
+  toast(got ? 'Absorbed a ' + got.toLowerCase() + '. Your body has changed.' : 'That part would not fit your body plan.', 3200);
+}
+
+
+// =====================================================================
+// MOVESET FROM ANATOMY
+// You can only do what your body can do. A hatchling with no weapons has
+// exactly one option and it is a headbutt; horns unlock a gore, a real tail
+// unlocks a sweep, a carnivore jaw unlocks a lunging bite. The move you get is
+// read off the genome, never chosen from a menu.
+// =====================================================================
+const MOVE_DEF = {
+  gore:     { label: 'gore',      dmg: 1.40, reach: 1.15, dur: 0.55 },
+  bite:     { label: 'bite',      dmg: 1.30, reach: 0.95, dur: 0.45 },
+  sweep:    { label: 'tail sweep',dmg: 1.15, reach: 1.35, dur: 0.70 },
+  slam:     { label: 'body slam', dmg: 1.20, reach: 0.90, dur: 0.65 },
+  claw:     { label: 'claw',      dmg: 1.00, reach: 1.00, dur: 0.50 },
+  headbutt: { label: 'headbutt',  dmg: 0.65, reach: 0.80, dur: 0.50 },
+};
+function movesFor(p, n) {
+  const out = [];
+  if ((n.HORN || 0) > 0) out.push('gore');
+  if (p.sMouthCarn > 0.05) out.push('bite');
+  if ((n.TAIL || 0) > 0 && (p.sTail || 0) > 0.35) out.push('sweep');
+  if ((n.SPIKE || 0) > 0) out.push('slam');
+  if ((n.LEG || 0) >= 2 && p.mass > 1.2) out.push('claw');
+  if (!out.length) out.push('headbutt');       // a baby has nothing else
+  return out;
+}
+function bestMove(p, n) {
+  const list = movesFor(p, n);
+  let best = list[0];
+  for (const m of list) if (MOVE_DEF[m].dmg > MOVE_DEF[best].dmg) best = m;
+  return best;
+}
+// Windup pulls back, the strike snaps forward, then it recovers. Those three
+// windows are what make a hit readable rather than a number changing.
+function strikeCurve(k) {
+  if (k < 0.32) return -0.40 * (k / 0.32);
+  if (k < 0.56) { const u = (k - 0.32) / 0.24; return -0.40 + 1.40 * u * u; }
+  const u = (k - 0.56) / 0.44;
+  return 1.0 * (1 - u) * (1 - u);
+}
+function creatureAnim(c) {
+  const a = c._anim;
+  if (!a) return null;
+  const k = (performance.now() - a.t0) / (a.dur * 1000);
+  if (k >= 1) { c._anim = null; return null; }
+  const s2 = strikeCurve(k);
+  return { kind: a.kind, k, s: s2 };
+}
+function startAnim(c, kind, dur) { c._anim = { kind, t0: performance.now(), dur: dur || 0.5 }; }
 
 // ------------------------------------------------------------ hunt & absorb
 // Killing something is not just food. You take one node out of the prey's
@@ -3773,7 +4542,7 @@ function tryEat() {
   const c = player.c;
   if (!c || !c.alive) return;
   const p = c.ph;
-  const rr = p.radius + p.reach + 14, rr2 = rr * rr;
+  const rr = interactRange(p), rr2 = rr * rr;
   let bestP = null, bestPD = Infinity, bestC = null, bestCD = Infinity;
   if (world.pGrid) world.pGrid.around(c.x, c.y, (pl) => {
     if (pl.eaten) return;
@@ -3790,7 +4559,8 @@ function tryEat() {
     const gain = bestC.e * (p.carrionDigest || 0.9);
     bestC.dead = true;
     c.energy = Math.min(p.storage, c.energy + gain);
-    toast('Ate carrion. +' + gain.toFixed(0) + ' energy.', 1800);
+    if (!offerTraits(bestC.genome, 'You fed on the corpse (+' + gain.toFixed(0) + ')'))
+      toast('Ate carrion. +' + gain.toFixed(0) + ' energy.', 1800);
     return;
   }
   if (bestP) {
@@ -3810,9 +4580,15 @@ function tryAttack() {
   const c = player.c;
   if (!c || !c.alive || (player.atkCD || 0) > 0) return;
   const p = c.ph;
-  player.atkCD = 0.55;
+  const nn = tallyParts(p);
+  const mv = bestMove(p, nn), MD = MOVE_DEF[mv];
+  player.atkCD = MD.dur + 0.10;
+  startAnim(c, mv, MD.dur);
   const fx = Math.cos(player.yaw), fz = Math.sin(player.yaw);
-  const rr = p.radius + p.reach + 16;
+  // interactRange(), the SAME function the reach ring draws. This previously
+  // used a narrower ad-hoc radius, so the ring promised a range the attack did
+  // not honour and swings missed things that were visibly inside the circle.
+  const rr = interactRange(p) * MD.reach;
   // Direct scan rather than world.grid: the grid is only rebuilt inside a step,
   // so anything that moved since the last one is in the wrong bucket and a swing
   // would silently miss. An attack is a rare, player-driven event, so the linear
@@ -3828,15 +4604,25 @@ function tryAttack() {
     if (d > 1e-6 && (dx * fx + dz * fz) / d < 0.25) continue;   // must be in front of you
     if (d < bestD) { bestD = d; best = o; }
   }
-  if (!best) { toast('Nothing in reach.', 900); return; }
-  // same exchange the core runs between two creatures
-  let dmg = p.attack - best.ph.defense * 0.6;
-  if (dmg <= 0) dmg = 1;
+  if (!best) { toast(MD.label + ' hits nothing.', 900); return; }
+  // The core's exchange floors at 1 damage, which between two creatures resolves
+  // over many ticks and is fine. For a player clicking once per swing it meant
+  // 84 clicks to kill something. The floor is now a fraction of the target's own
+  // reserve, scaled by how badly you are outmatched -- so an even fight ends in
+  // a handful of hits and a hopeless one is still hopeless.
+  let dmg = (p.attack - best.ph.defense * 0.6) * MD.dmg;
+  const ratio = clamp(p.mass / Math.max(0.01, best.ph.mass), 0.12, 3);
+  const floor = Math.max(1, best.ph.storage * 0.05 * ratio * MD.dmg);
+  if (dmg < floor) dmg = floor;
+  // the thing you hit flinches
+  startAnim(best, 'flinch', 0.35);
   best.energy -= dmg;
   c.energy -= (best.ph.counter || 0) * 0.5;
   if (c.energy < 0) c.energy = 0;
   if (best.energy > 0) {
-    toast(`Hit for ${dmg.toFixed(0)}. It has ${Math.max(0, best.energy).toFixed(0)} left.`, 1200);
+    const hits = Math.ceil(best.energy / Math.max(0.01, dmg));
+    toast(MD.label.toUpperCase() + ' for ' + dmg.toFixed(0) + '. ' +
+          Math.max(0, best.energy).toFixed(0) + ' left (~' + hits + ' more).', 1200);
     return;
   }
   best.alive = false; best.deathCause = 'predation';
@@ -3846,8 +4632,7 @@ function tryAttack() {
     c.energy -= best.ph.toxin * 22;
     if (c.energy < 0) c.energy = 0;
   }
-  const took = absorbPartFrom(best);
-  toast(took ? `Killed it. Absorbed a ${took}.` : 'Killed it. Nothing worth taking.', 3200);
+  if (!offerTraits(best.genome, 'You killed it')) toast('Killed it.', 2000);
 }
 
 function blockedFor(p, lv0, bx, by) {
@@ -3875,7 +4660,16 @@ function movePlayer(c, dt) {
   const sprint = !!keys['shift'] || (!!keys[' '] && !!keys['w']);
   if (sprint) sp *= (1 + C.GAIT_BOOST);
   c.vx = (fx / len) * sp; c.vy = (fz / len) * sp;
-  let nx = clamp(c.x + c.vx * dt, 1, WORLD_W - 1), ny = clamp(c.y + c.vy * dt, 1, WORLD_H - 1);
+  // The core deliberately keeps physical movement on real time so you can
+  // fast-forward generations without everything teleporting. For the body you
+  // are steering that reads as being stuck in glue at high speed, so YOUR
+  // travel scales with the clock while the rest of the world keeps the core's
+  // behaviour. Clamped so a huge time scale cannot fling you across the map in
+  // one frame and skip terrain checks.
+  const ts = world.params.timeScale != null ? world.params.timeScale : 0.12;
+  const moveScale = clamp(ts / 0.12, 1, 8);
+  const mdt = dt * moveScale;
+  let nx = clamp(c.x + c.vx * mdt, 1, WORLD_W - 1), ny = clamp(c.y + c.vy * mdt, 1, WORLD_H - 1);
   // While airborne you may clear one extra level of terrain, which is what
   // makes a jump actually useful instead of decorative.
   if (!p.canFly && player.jumpY <= 0.5) {
@@ -4077,7 +4871,9 @@ function updateHUD() {
     const p = c.ph;
     const diet = p.carnivory > 0.5 ? 'carnivore' : p.scavenger > 0.5 ? 'scavenger' : 'herbivore';
     const tags = [];
-    if (p.canFly) tags.push('flier'); if (p.canSwim) tags.push('swimmer'); if (p.apex) tags.push('apex');
+    if (p.canFly) tags.push('flier'); else if ((p.wingEff || 0) > 0.05) tags.push('vestigial wings');
+    if (p.canSwim) tags.push('swimmer'); else if ((p.finEff || 0) > 0.05) tags.push('vestigial fins');
+    if (p.apex) tags.push('apex');
     $('v-name').textContent = `${diet.toUpperCase()} · sp${c.speciesId} · gen ${player.generation}`;
     $('v-e').style.width = clamp(c.energy / Math.max(1, p.storage) * 100, 0, 100) + '%';
     $('v-g').style.width = clamp((c._growthAvg || 0) * 100, 0, 100) + '%';
@@ -4091,6 +4887,36 @@ function updateHUD() {
   } else {
     $('v-name').textContent = player.spectator ? 'DETACHED CAMERA' : '—';
     $('v-stats').textContent = '';
+  }
+  const warn = $('warn');
+  if (warn) {
+    const lvl = player.threatLevel || 0, cnt = player.threatCount || 0;
+    if (cnt > 0) {
+      warn.textContent = cnt === 1 ? 'a predator is nearby' : cnt + ' predators nearby';
+      warn.style.opacity = String(0.35 + lvl * 0.65);
+      warn.style.display = 'block';
+    } else warn.style.display = 'none';
+  }
+  const act = $('act');
+  if (act) {
+    const tgt = player.target, me = player.c;
+    if (tgt && me && me.alive) {
+      const why = mateBlock(me, tgt);
+      const d = tgt.ph, mp = me.ph;
+      const diet = d.carnivory > 0.5 ? 'carnivore' : d.scavenger > 0.5 ? 'scavenger' : 'herbivore';
+      // how many swings this fight would take, so you can judge it before starting
+      let dmg = mp.attack - d.defense * 0.6;
+      const ratio = clamp(mp.mass / Math.max(0.01, d.mass), 0.12, 3);
+      dmg = Math.max(dmg, Math.max(1, d.storage * 0.05 * ratio));
+      const hits = Math.ceil(Math.max(0, tgt.energy) / Math.max(0.01, dmg));
+      act.innerHTML = '<b>' + diet + '</b> mass ' + d.mass.toFixed(1) +
+        ' &middot; def ' + d.defense.toFixed(0) + ' &middot; ~' + hits + ' hits to kill' +
+        '<div class="keys"><span class="hit">F</span> ' + MOVE_DEF[bestMove(mp, tallyParts(mp))].label + ' ' +
+        (why ? '<span style="opacity:.55">M mate: ' + why + '</span>'
+             : '<span class="ok">M</span> mate') +
+        ' <span>E</span> eat</div>';
+      act.style.display = 'block';
+    } else act.style.display = 'none';
   }
   const s = world.stats || {};
   const lt = world.light || 0;
@@ -4120,11 +4946,11 @@ function panelOpts() {
   return {
     startPop: clamp(num('startPop', 10) | 0, 2, 2000),
     startPlants: clamp(num('startPlants', 500) | 0, 0, 40000),
-    mutationRate: num('mut', 0.6), plantRate: num('plant', 200),
+    mutationRate: num('mut', 0.6), plantRate: num('plant', 40),
     timeScale: num('tscale', 0.12), plantEnergy: num('pe', 30),
     dayLen: num('dayl', 6), yearLen: num('yearl', 70),
     carrionLife: num('clife', 12), carrionYield: num('cy', 1),
-    founderDiversity: num('fd', 0), flags: panelFlags(),
+    founderDiversity: num('fd', 0), foodPatchiness: num('fp', 0.7), flags: panelFlags(),
   };
 }
 function updateStats() {
@@ -4157,7 +4983,7 @@ async function rebuildWorld() {
   terrH = null;
   world = C.makeWorld(Object.assign({ w: WORLD_W, h: WORLD_H, tileSize: TILE, seed }, panelOpts()));
   terrain = world.terrain;
-  buildTerrain(); buildWater();
+  buildTerrain(); buildWater(); buildMinimap();
   await warmUp(panelWarmup());
   const dl = world.params.dayLen || 6;
   world.bt = Math.ceil((world.bt || 0) / dl) * dl + dl * 0.25;
@@ -4166,6 +4992,7 @@ async function rebuildWorld() {
   player.c = takeNewbornBody(adult);
   player.generation = 0; player.deaths = 0; player.absorbed = 0;
   player.dist = THIRD_DEFAULT;
+  births.length = 0; birthsPrimed = false;
   if (player.c) {
     player.camX = player.c.x; player.camZ = player.c.y;
     player.camY = groundAt(player.c.x, player.c.y) + 20;
@@ -4196,10 +5023,17 @@ function bindPanel() {
   live('clife', 'clifev', 'carrionLife');
   live('cy', 'cyv', 'carrionYield', v => v.toFixed(1));
   live('fd', 'fdv', null, v => v.toFixed(2));
+  live('fp', 'fpv', null, v => v.toFixed(2));
   live('prerun', 'prerunv', null);
   for (const id of ['f_brains', 'f_sex', 'f_day', 'f_season', 'f_tox', 'f_climate']) {
     const el = $(id); if (el) el.addEventListener('change', () => { if (world) world.flags = panelFlags(); });
   }
+  // hand focus straight back to the game after using a control
+  const pan0 = $('panel');
+  if (pan0) pan0.addEventListener('mouseup', () => {
+    const a = document.activeElement;
+    if (a && a !== document.body && a.blur) a.blur();
+  });
   const rst = $('reset'); if (rst) rst.addEventListener('click', () => { rebuildWorld(); });
   const tab = $('ptab'), pan = $('panel');
   const setOpen = (open) => {
@@ -4213,11 +5047,71 @@ function bindPanel() {
   if (pan) pan.addEventListener('keydown', e => e.stopPropagation());
 }
 
+
+// ------------------------------------------------------------------ minimap
+// The island is 12800 x 8000 units and the fog horizon is 5200, so without an
+// overview there is no way to know where anything is. Terrain is rasterised
+// once per world; only the markers are redrawn.
+let miniCtx = null, miniBase = null;
+function buildMinimap() {
+  const el = $('mini');
+  if (!el) return;
+  miniCtx = el.getContext('2d');
+  const MW = el.width, MH = el.height;
+  miniBase = document.createElement('canvas');
+  miniBase.width = MW; miniBase.height = MH;
+  const g = miniBase.getContext('2d');
+  const img = g.createImageData(MW, MH);
+  const LVw = terrain.LV.water, LVd = terrain.LV.deep;
+  for (let j = 0; j < MH; j++) for (let i = 0; i < MW; i++) {
+    const wxp = (i + 0.5) / MW * WORLD_W, wzp = (j + 0.5) / MH * WORLD_H;
+    const hgt = terrain.height(wxp, wzp);
+    const col = PAL[BNAMES[terrain.biomeIdx(wxp, wzp)]] || PAL.plains;
+    // water darkens with depth so the coastline and the drop-off both read
+    const k = hgt < LVw ? 0.30 + 0.55 * clamp((hgt - LVd) / Math.max(1e-4, LVw - LVd), 0, 1) : 1;
+    const o = (j * MW + i) * 4;
+    img.data[o] = col[0] * k; img.data[o + 1] = col[1] * k; img.data[o + 2] = col[2] * k; img.data[o + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+}
+function drawMinimap() {
+  if (!miniCtx || !miniBase || !world) return;
+  const MW = miniCtx.canvas.width, MH = miniCtx.canvas.height;
+  miniCtx.clearRect(0, 0, MW, MH);
+  miniCtx.drawImage(miniBase, 0, 0);
+  const sx = MW / WORLD_W, sz = MH / WORLD_H;
+  const me = player.c;
+  miniCtx.fillStyle = 'rgba(255,64,48,0.92)';
+  for (const c of world.creatures) {
+    if (!c.alive || c === me) continue;
+    miniCtx.fillRect(c.x * sx - 1, c.y * sz - 1, 2.2, 2.2);
+  }
+  miniCtx.fillStyle = 'rgba(160,140,110,0.75)';
+  for (const cz of world.carrion) miniCtx.fillRect(cz.x * sx - 1, cz.y * sz - 1, 1.6, 1.6);
+  if (me && me.alive) {
+    const px = me.x * sx, py = me.y * sz;
+    miniCtx.strokeStyle = 'rgba(120,200,255,0.85)';
+    miniCtx.lineWidth = 1.4;
+    miniCtx.beginPath(); miniCtx.moveTo(px, py);
+    miniCtx.lineTo(px + Math.cos(player.yaw) * 11, py + Math.sin(player.yaw) * 11);
+    miniCtx.stroke();
+    miniCtx.beginPath(); miniCtx.arc(px, py, 5, 0, 7); miniCtx.stroke();
+    miniCtx.fillStyle = '#3fa6ff';
+    miniCtx.beginPath(); miniCtx.arc(px, py, 2.8, 0, 7); miniCtx.fill();
+  }
+}
+
 // ================================================================= input
 function bindInput() {
   addEventListener('keydown', (e) => {
-    const tag = (e.target && e.target.tagName) || '';
-    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+    // Only a field you are actually TYPING into may swallow keys. Previously any
+    // focused control did, so after touching one slider every action key was
+    // silently dead until you clicked the canvas again.
+    const el = e.target;
+    const tag = (el && el.tagName) || '';
+    const typing = (tag === 'TEXTAREA') ||
+      (tag === 'INPUT' && !/^(range|checkbox|radio|button|submit)$/i.test(el.type || 'text'));
+    if (typing) return;
     const k = e.key.toLowerCase();
     keys[k] = true;
     if (k === 'v') {
@@ -4225,7 +5119,10 @@ function bindInput() {
       if (player.spectator) { player.camY = Math.max(player.camY, groundAt(player.camX, player.camZ) + 260); }
       toast(player.spectator ? 'Camera detached. V to return to your body.' : 'Back in your body.', 2600);
     }
+    if (player.picker && k >= '0' && k <= '4') { choosePicked(+k); e.preventDefault(); return; }
+    if (k === 'escape' && player.picker) { player.picker = null; renderPicker(); return; }
     if (k === 'f') tryAttack();
+    if (k === 'm') tryMate();
     if (k === 'e') tryEat();
     if (k === ' ' && !player.spectator) tryJump();
     if (e.key === 'Tab') { e.preventDefault(); const t = $('ptab'); if (t) t.click(); }
@@ -4247,12 +5144,24 @@ function bindInput() {
   // when you just want to pan around and look at things without capturing the
   // cursor (which is also the only way to look while using the control panel).
   let dragging = false, lastMX = 0, lastMY = 0;
+  let downX = 0, downY = 0, moved = 0;
   canvas.addEventListener('mousedown', (e) => {
+    downX = e.clientX; downY = e.clientY; moved = 0;
     if (pointerLocked) return;
     dragging = true; lastMX = e.clientX; lastMY = e.clientY;
     canvas.style.cursor = 'grabbing';
   });
-  addEventListener('mouseup', () => { dragging = false; canvas.style.cursor = 'crosshair'; });
+  // A click that did not turn into a drag is an action, locked or not. Requiring
+  // pointer lock meant left click did nothing at all until you had captured the
+  // cursor, which is not discoverable.
+  addEventListener('mouseup', (e) => {
+    const wasDrag = moved > 6;
+    dragging = false; canvas.style.cursor = 'crosshair';
+    if (wasDrag || pointerLocked) return;
+    if (e.target !== canvas) return;
+    if (e.button === 0) tryAttack();
+    else if (e.button === 2) { if (player.target) tryMate(); else tryEat(); }
+  });
   addEventListener('mousemove', (e) => {
     if (pointerLocked) {
       player.yaw += e.movementX * 0.0022;
@@ -4260,6 +5169,7 @@ function bindInput() {
       return;
     }
     if (!dragging) return;
+    moved += Math.abs(e.clientX - lastMX) + Math.abs(e.clientY - lastMY);
     player.yaw += (e.clientX - lastMX) * 0.005;
     player.pitch = clamp(player.pitch - (e.clientY - lastMY) * 0.005, -1.35, 1.35);
     lastMX = e.clientX; lastMY = e.clientY;
@@ -4267,10 +5177,16 @@ function bindInput() {
   canvas.addEventListener('mousedown', (e) => {
     if (!pointerLocked) return;
     if (e.button === 0) tryAttack();
-    else if (e.button === 2) tryEat();
+    else if (e.button === 2) { if (player.target) tryMate(); else tryEat(); }
   });
   canvas.addEventListener('contextmenu', (e) => { if (pointerLocked) e.preventDefault(); });
-  $('start').addEventListener('click', () => { started = true; $('start').style.display = 'none'; canvas.requestPointerLock && canvas.requestPointerLock(); });
+  const startEl = $('start');
+  const beginPlay = () => { started = true; startEl.style.display = 'none'; canvas.requestPointerLock && canvas.requestPointerLock(); };
+  startEl.addEventListener('click', (e) => {
+    const btn = e.target && e.target.closest ? e.target.closest('[data-arch]') : null;
+    if (btn) { e.stopPropagation(); becomeArchetype(btn.getAttribute('data-arch')); beginPlay(); return; }
+    beginPlay();
+  });
   addEventListener('wheel', (e) => {
     if (player.spectator) return;
     e.preventDefault();
@@ -4292,9 +5208,11 @@ function tick(dt, skipRender) {
   frameDt = dt;
   simT += dt;
   stepSim(dt);
+  trackBirths();
   updateCamera(dt);
   if (skipRender) return null;
   const r = renderFrame(simT);
+  drawMinimap();
   hudAcc += dt;
   if (hudAcc > 0.25) { hudAcc = 0; updateHUD(); updateStats(); }
   return r;
@@ -4359,6 +5277,7 @@ async function init() {
   makeBindGroups();
   const info = buildTerrain();
   buildWater();
+  buildMinimap();
 
   await warmUp(panelWarmup());
   // land on midday so the first thing the player sees is a lit landscape
@@ -4403,7 +5322,23 @@ window.__G3D = {
   look(yaw, pitch) { player.yaw = yaw; if (pitch != null) player.pitch = pitch; },
   press(k, on) { keys[String(k).toLowerCase()] = !!on; },
   rebuild: () => rebuildWorld(),
+  get instData() { return instData; },
+  get instCount() { return instCount; },
   attack: () => tryAttack(),
+  mateBlock: (a, b2) => mateBlock(a, b2),
+  becomeArchetype: (k) => becomeArchetype(k),
+  bestMove: (ph, n) => bestMove(ph, n),
+  movesFor: (ph, n) => movesFor(ph, n),
+  strikeCurve: (k) => strikeCurve(k),
+  tally: (ph) => tallyParts(ph),
+  get threatLevel() { return player.threatLevel || 0; },
+  get threatCount() { return player.threatCount || 0; },
+  mate: () => tryMate(),
+  get target() { return player.target; },
+  get births() { return births; },
+  get picker() { return player.picker; },
+  pick: (i) => choosePicked(i),
+  offer: (g, l) => offerTraits(g, l),
   eat: () => tryEat(),
   jump: () => tryJump(),
   absorbFrom: (prey) => absorbPartFrom(prey),
