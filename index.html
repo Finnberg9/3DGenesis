@@ -79,9 +79,16 @@
   #picker .pskip{margin-top:6px;color:var(--dim);font-size:11px}
   #picker b{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;
     border:1px solid var(--line);border-radius:4px;color:var(--cyan);font-size:10.5px}
+  /* The backing store is 2x the resting size, so hovering shows real detail
+     rather than an upscaled blur. */
   #mini{position:fixed;left:14px;top:14px;z-index:12;width:216px;height:135px;
     border:1px solid var(--line);border-radius:8px;background:rgba(4,14,13,.75);
-    box-shadow:0 4px 18px rgba(0,0,0,.4)}
+    box-shadow:0 4px 18px rgba(0,0,0,.4);
+    transition:width .16s ease,height .16s ease,border-color .16s ease,box-shadow .16s ease;
+    cursor:crosshair}
+  #mini:hover{width:432px;height:270px;border-color:var(--cyan);
+    box-shadow:0 8px 30px rgba(0,0,0,.55)}
+  @media (prefers-reduced-motion:reduce){#mini{transition:none}}
   #act{position:fixed;left:50%;top:56%;transform:translateX(-50%);z-index:12;display:none;
     background:rgba(4,14,13,.86);border:1px solid var(--line);border-radius:8px;padding:6px 11px;
     font-size:12px;color:var(--ink);text-align:center;pointer-events:none;backdrop-filter:blur(6px)}
@@ -122,7 +129,7 @@
 
 <div id="evt" class="panel"></div>
 
-<canvas id="mini" width="216" height="135"></canvas>
+<canvas id="mini" width="432" height="270"></canvas>
 <div id="warn"></div>
 <div id="cross"></div>
 <div id="act"></div>
@@ -185,6 +192,7 @@
     <span style="color:#35e0d8">cyan</span> mate)<br>
     outer ring = predators nearby, at their real bearing<br>
     <b>space</b> jump &nbsp;·&nbsp; <b>space + W</b> or <b>shift</b> sprint<br>
+    fliers: <b>space</b> climb, <b>ctrl</b> dive &nbsp;·&nbsp; hover the minimap to enlarge it<br>
     <b>drag</b> to look without capturing the mouse<br>
     <b>Tab</b> controls panel<br>
     <b>V</b> detach camera &nbsp;·&nbsp; <b>[</b> <b>]</b> sim speed &nbsp;·&nbsp; <b>Esc</b> release mouse
@@ -2602,7 +2610,7 @@ const PAIRED = new Set(['LEG', 'FIN', 'WING', 'EYE', 'HORN']);
 const TORSO = new Set(['CORE', 'GUT', 'MOUTH']);
 
 // =====================================================================
-// FUSED BODY MESHES
+// FUSED SKIN
 // The genome's cells are treated as a metaball field and polygonised with
 // naive surface nets, so cells merge into one continuous skin with concave
 // joints instead of reading as a ball-and-stick model. Spikes and horns are
@@ -2612,8 +2620,8 @@ const TORSO = new Set(['CORE', 'GUT', 'MOUTH']);
 // survive the fusion.
 // =====================================================================
 const MESH_ISO = 0.5;
-const MESH_REACH = 1.95;   // kernel support radius = cell radius * this
-const MESH_RES = 30;       // grid cells across the longest body axis
+const MESH_REACH = 1.55;   // kernel support radius = ball radius * this
+const MESH_RES = 28;       // grid cells across the longest body axis; 36 cost ~20k tris a creature
 const MESH_CACHE_MAX = 96;
 const MESH_BUILD_PER_FRAME = 2;
 const MESH_LOD = 1500;     // fused mesh inside this range, cheap proxy beyond
@@ -2637,43 +2645,16 @@ function wyvill(d2, R2) {
   return t * t * t;
 }
 
-// One cell can contribute several kernels: paired types mirror across the body
-// axis, and spikes/horns taper outward into a point.
-function kernelsFor(parts) {
-  const K = [];
-  let cx = 0, cy = 0;
-  for (const p of parts) { cx += p.x; cy += p.y; }
-  cx /= parts.length; cy /= parts.length;
-  for (const p of parts) {
-    if (!FUSED.has(p.type)) continue;
-    const r = Math.max(0.6, p.r || 4);
-    const sides = PAIRED.has(p.type) ? [-1, 1] : [0];
-    for (const s of sides) {
-      const z = s * r * 0.9;
-      if (p.type === 'SPIKE' || p.type === 'HORN') {
-        let ang = Math.atan2(p.y - cy, p.x - cx);
-        if (!isFinite(ang)) ang = -Math.PI / 2;
-        const N = 7, L = r * (p.type === 'HORN' ? 2.6 : 2.1);
-        for (let i = 0; i < N; i++) {
-          const t = i / (N - 1);
-          K.push({ x: p.x + Math.cos(ang) * L * t, y: -(p.y + Math.sin(ang) * L * t), z,
-                   r: r * (1 - t * 0.78), type: p.type, w: 1, cw: CWEIGHT[p.type] || 1 });
-        }
-      } else if (p.type === 'EYE') {
-        K.push({ x: p.x, y: -p.y, z, r: r * 0.85, type: p.type, w: 1.25, cw: CWEIGHT.EYE });
-      } else {
-        K.push({ x: p.x, y: -p.y, z, r, type: p.type, w: 1, cw: CWEIGHT[p.type] || 1 });
-      }
-    }
-  }
-  return K;
-}
-
-function buildBodyMesh(parts) {
-  const K = kernelsFor(parts);
-  if (!K.length) return null;
+// Build one continuous skin over a list of balls. The balls come from the
+// ANATOMY rig (spine, neck, head), not from the genome's raw scattered cells:
+// feeding the raw cells in produced a lumpy mass with no readable form, while
+// feeding it an already-anatomical skeleton produces an animal whose surface
+// happens to have no seams. Everything is in normalised body units (divided by
+// the creature's radius) so one mesh serves every size of the same body plan.
+function buildSkinMesh(skel) {
+  if (!skel || !skel.length) return null;
   let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
-  for (const k of K) {
+  for (const k of skel) {
     const R = k.r * MESH_REACH;
     if (k.x - R < minX) minX = k.x - R; if (k.x + R > maxX) maxX = k.x + R;
     if (k.y - R < minY) minY = k.y - R; if (k.y + R > maxY) maxY = k.y + R;
@@ -2682,21 +2663,20 @@ function buildBodyMesh(parts) {
   const span = Math.max(maxX - minX, maxY - minY, maxZ - minZ);
   if (!(span > 0)) return null;
   const step = span / MESH_RES;
-  const nx = Math.min(72, Math.ceil((maxX - minX) / step) + 3);
-  const ny = Math.min(72, Math.ceil((maxY - minY) / step) + 3);
-  const nz = Math.min(72, Math.ceil((maxZ - minZ) / step) + 3);
+  const nx = Math.min(96, Math.ceil((maxX - minX) / step) + 3);
+  const ny = Math.min(96, Math.ceil((maxY - minY) / step) + 3);
+  const nz = Math.min(96, Math.ceil((maxZ - minZ) / step) + 3);
   const ox = minX - step, oy = minY - step, oz = minZ - step;
   const F = new Float32Array(nx * ny * nz);
-  const BEST = new Float32Array(nx * ny * nz);
-  const OWNER = new Int32Array(nx * ny * nz).fill(-1);
   const at = (i, j, k) => (k * ny + j) * nx + i;
 
-  // splat each kernel only over the cells inside its own support
-  for (let ki = 0; ki < K.length; ki++) {
-    const kn = K[ki], R = kn.r * MESH_REACH, R2 = R * R;
+  // splat each ball only over the cells inside its own support
+  for (let ki = 0; ki < skel.length; ki++) {
+    const kn = skel[ki], R = kn.r * MESH_REACH, R2 = R * R;
     const i0 = Math.max(0, Math.floor((kn.x - R - ox) / step)), i1 = Math.min(nx - 1, Math.ceil((kn.x + R - ox) / step));
     const j0 = Math.max(0, Math.floor((kn.y - R - oy) / step)), j1 = Math.min(ny - 1, Math.ceil((kn.y + R - oy) / step));
     const k0 = Math.max(0, Math.floor((kn.z - R - oz) / step)), k1 = Math.min(nz - 1, Math.ceil((kn.z + R - oz) / step));
+    const w = kn.w || 1;
     for (let k = k0; k <= k1; k++) {
       const pz = oz + k * step, dz = pz - kn.z, dz2 = dz * dz;
       for (let j = j0; j <= j1; j++) {
@@ -2705,11 +2685,7 @@ function buildBodyMesh(parts) {
           const px = ox + i * step, dx = px - kn.x;
           const d2 = dyz2 + dx * dx;
           if (d2 >= R2) continue;
-          const v = wyvill(d2, R2) * kn.w;
-          const idx = at(i, j, k);
-          F[idx] += v;
-          const cwv = v * kn.cw;
-          if (cwv > BEST[idx]) { BEST[idx] = cwv; OWNER[idx] = ki; }
+          F[at(i, j, k)] += wyvill(d2, R2) * w;
         }
       }
     }
@@ -2720,21 +2696,20 @@ function buildBodyMesh(parts) {
   const EDG = [[0,1],[2,3],[4,5],[6,7],[0,2],[1,3],[4,6],[5,7],[0,4],[1,5],[2,6],[3,7]];
   const vid = new Int32Array((nx - 1) * (ny - 1) * (nz - 1)).fill(-1);
   const cid = (i, j, k) => (k * (ny - 1) + j) * (nx - 1) + i;
-  const pos = [], nrm = [], col = [];
+  const pos = [], nrm = [];
   const cv = new Float32Array(8);
-
+  const g3 = [0, 0, 0];
   const grad = (i, j, k, out) => {
     const ip = Math.min(nx - 1, i + 1), im = Math.max(0, i - 1);
     const jp = Math.min(ny - 1, j + 1), jm = Math.max(0, j - 1);
     const kp = Math.min(nz - 1, k + 1), km = Math.max(0, k - 1);
-    let gx = F[at(ip, j, k)] - F[at(im, j, k)];
-    let gy = F[at(i, jp, k)] - F[at(i, jm, k)];
-    let gz = F[at(i, j, kp)] - F[at(i, j, km)];
+    const gx = F[at(ip, j, k)] - F[at(im, j, k)];
+    const gy = F[at(i, jp, k)] - F[at(i, jm, k)];
+    const gz = F[at(i, j, kp)] - F[at(i, j, km)];
     const l = Math.hypot(gx, gy, gz);
     if (l < 1e-9) { out[0] = 0; out[1] = 1; out[2] = 0; }
     else { out[0] = -gx / l; out[1] = -gy / l; out[2] = -gz / l; }   // field falls off outward
   };
-  const g3 = [0, 0, 0];
 
   for (let k = 0; k < nz - 1; k++) for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
     let neg = 0;
@@ -2757,22 +2732,12 @@ function buildBodyMesh(parts) {
       n++;
     }
     if (!n) continue;
-    const vx = ox + (i + sx / n) * step, vy = oy + (j + sy / n) * step, vz = oz + (k + sz / n) * step;
     vid[cid(i, j, k)] = pos.length / 3;
-    pos.push(vx, vy, vz);
+    pos.push(ox + (i + sx / n) * step, oy + (j + sy / n) * step, oz + (k + sz / n) * step);
     grad(i, j, k, g3); nrm.push(g3[0], g3[1], g3[2]);
-    // colour from the cell that dominates the field in this cube
-    let own = -1, bw = -1;
-    for (let c = 0; c < 8; c++) {
-      const idx = at(i + CORN[c][0], j + CORN[c][1], k + CORN[c][2]);
-      if (BEST[idx] > bw) { bw = BEST[idx]; own = OWNER[idx]; }
-    }
-    col.push(own >= 0 ? TISSUE[K[own].type] || 0 : 0);
   }
   if (!pos.length) return null;
 
-  // quads: one per grid edge that crosses the surface, joining the four cubes
-  // that share that edge
   const idxArr = [];
   const quad = (a, b, c, d, flip) => {
     if (a < 0 || b < 0 || c < 0 || d < 0) return;
@@ -2781,73 +2746,63 @@ function buildBodyMesh(parts) {
   };
   for (let k = 1; k < nz - 1; k++) for (let j = 1; j < ny - 1; j++) for (let i = 1; i < nx - 1; i++) {
     const v0 = F[at(i, j, k)] < MESH_ISO;
-    if (F[at(i + 1, j, k)] < MESH_ISO !== v0) {
+    if (F[at(i + 1, j, k)] < MESH_ISO !== v0)
       quad(vid[cid(i, j - 1, k - 1)], vid[cid(i, j, k - 1)], vid[cid(i, j, k)], vid[cid(i, j - 1, k)], v0);
-    }
-    if (F[at(i, j + 1, k)] < MESH_ISO !== v0) {
+    if (F[at(i, j + 1, k)] < MESH_ISO !== v0)
       quad(vid[cid(i - 1, j, k - 1)], vid[cid(i, j, k - 1)], vid[cid(i, j, k)], vid[cid(i - 1, j, k)], !v0);
-    }
-    if (F[at(i, j, k + 1)] < MESH_ISO !== v0) {
+    if (F[at(i, j, k + 1)] < MESH_ISO !== v0)
       quad(vid[cid(i - 1, j - 1, k)], vid[cid(i, j - 1, k)], vid[cid(i, j, k)], vid[cid(i - 1, j, k)], v0);
-    }
   }
   if (!idxArr.length) return null;
 
-  let ext = 0;
-  for (let i = 0; i < pos.length; i += 3) {
-    const d = Math.hypot(pos[i], pos[i + 1], pos[i + 2]);
-    if (d > ext) ext = d;
-  }
-  // interleave pos3 nrm3 tissue1 -> 28-byte vertices
+  // interleave pos3 nrm3 tissue1 -> 28-byte vertices. Tissue is always skin
+  // here; hard parts are still drawn as their own geometry on top.
   const nv = pos.length / 3;
   const inter = new Float32Array(nv * 7);
   for (let i = 0; i < nv; i++) {
     inter[i * 7] = pos[i * 3]; inter[i * 7 + 1] = pos[i * 3 + 1]; inter[i * 7 + 2] = pos[i * 3 + 2];
     inter[i * 7 + 3] = nrm[i * 3]; inter[i * 7 + 4] = nrm[i * 3 + 1]; inter[i * 7 + 5] = nrm[i * 3 + 2];
-    inter[i * 7 + 6] = col[i];
+    inter[i * 7 + 6] = 0;
   }
-  return { vertData: inter, idx: new Uint32Array(idxArr), ext, verts: nv, tris: idxArr.length / 3 };
+  return { vertData: inter, idx: new Uint32Array(idxArr), verts: nv, tris: idxArr.length / 3 };
 }
 
 // ---- cache -----------------------------------------------------------------
-// Key on the body plan's shape, quantised relative to its own size, so a
-// creature and its offspring (and its own successive growth stages) reuse one
-// mesh instead of forcing a rebuild for every imperceptible size change.
-function meshKey(parts) {
-  let ext = 1;
-  for (const p of parts) { const d = Math.hypot(p.x, p.y) + (p.r || 4); if (d > ext) ext = d; }
-  const q = ext / 22;
+// Keyed on the quantised normalised skeleton, so every creature sharing a body
+// plan shares one skin regardless of its absolute size, and a creature reuses
+// its own skin across most of its growth.
+function skinKey(skel) {
   let s = '';
-  for (const p of parts) {
-    if (!FUSED.has(p.type)) continue;
-    s += p.type[0] + Math.round(p.x / q) + ',' + Math.round(p.y / q) + ',' + Math.round((p.r || 4) / q) + ';';
+  for (const k of skel) {
+    s += (k.x * 12 | 0) + ',' + (k.y * 12 | 0) + ',' + (k.z * 12 | 0) + ',' + (k.r * 14 | 0) + ';';
   }
-  return s || 'empty';
+  return s;
 }
-
-function getBodyMesh(parts) {
-  const key = meshKey(parts);
+function getSkinMesh(skel) {
+  const key = skinKey(skel);
   const hit = meshCache.get(key);
-  if (hit) { meshCache.delete(key); meshCache.set(key, hit); return hit === 'pending' ? null : hit; }
-  if (meshQueue.length < 24) { meshCache.set(key, 'pending'); meshQueue.push({ key, parts }); }
+  if (hit) { meshCache.delete(key); meshCache.set(key, hit); return hit === 'pending' ? null : (hit.empty ? null : hit); }
+  if (meshQueue.length < 16) {
+    meshCache.set(key, 'pending');
+    // the skeleton is reused between frames, so store a copy
+    meshQueue.push({ key, skel: skel.map(k => ({ x: k.x, y: k.y, z: k.z, r: k.r, w: k.w })) });
+  }
   return null;
 }
-
 function pumpMeshQueue() {
   let built = 0;
   while (meshQueue.length && built < MESH_BUILD_PER_FRAME) {
     const job = meshQueue.shift();
     built++;
     let m = null;
-    try { m = buildBodyMesh(job.parts); } catch (e) { m = null; }
+    try { m = buildSkinMesh(job.skel); } catch (e) { m = null; }
     if (!m) { meshCache.set(job.key, { empty: true }); continue; }
     const vb = dev.createBuffer({ size: m.vertData.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
     dev.queue.writeBuffer(vb, 0, m.vertData);
     const ib = dev.createBuffer({ size: m.idx.byteLength, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST });
     dev.queue.writeBuffer(ib, 0, m.idx);
-    meshCache.set(job.key, { vb, ib, count: m.idx.length, ext: m.ext, tris: m.tris });
+    meshCache.set(job.key, { vb, ib, count: m.idx.length, tris: m.tris });
   }
-  // evict least-recently-used meshes, releasing their GPU buffers
   while (meshCache.size > MESH_CACHE_MAX) {
     const k = meshCache.keys().next().value;
     const v = meshCache.get(k);
@@ -3221,13 +3176,13 @@ function buildPipelines() {
     multisample: MS,
   });
 
-  const sph = makeSphere(10, 7);
+  const sph = makeSphere(16, 11);
   sphCount = sph.idx.length;
   sphVB = dev.createBuffer({ size: sph.v.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
   dev.queue.writeBuffer(sphVB, 0, sph.v);
   sphIB = dev.createBuffer({ size: sph.idx.byteLength, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST });
   dev.queue.writeBuffer(sphIB, 0, sph.idx);
-  const cn = makeCone(10);
+  const cn = makeCone(14);
   coneCount = cn.idx.length;
   coneVB = dev.createBuffer({ size: cn.v.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
   dev.queue.writeBuffer(coneVB, 0, cn.v);
@@ -3360,7 +3315,13 @@ function drawCreature(c, t, camDist) {
   let groundY = surf;
   const inWater = h < LVw;
   if (inWater && p.canSwim) groundY = Math.max(groundY, LVw * HEIGHT_SCALE - p.radius * 0.8 * S);
-  if (p.canFly) groundY += (26 + Math.sin(t * 1.6 + c.id) * 7) * S;
+  if (p.canFly) {
+    groundY += (c === player.c && !player.spectator)
+      // R is declared below, so use its expression directly: referencing R here
+      // is a temporal-dead-zone crash that only fires when a flier is on screen
+      ? player.fly + Math.sin(t * 2.2) * p.radius * S * 0.10   // your own altitude
+      : (26 + Math.sin(t * 1.6 + c.id) * 7) * S;           // others just hover
+  }
   if (c === player.c && player.jumpY > 0) groundY += player.jumpY;
 
   const R = p.radius * S;
@@ -3414,76 +3375,80 @@ function drawCreature(c, t, camDist) {
   const n = tallyParts(p);
   const far = camDist > 900;
 
-  // ---- torso -------------------------------------------------------------
-  // Four long ellipsoids butted end to end read as exactly that: circles stuck
-  // together, because each one keeps its own silhouette. The fix is many small
-  // near-spherical segments spaced far closer than their own radius, so the
-  // union has no seam, with the radius following an anatomical profile instead
-  // of a single taper: shoulder, chest, waist, haunch, tail base.
-  const segN = far ? 4 : 13;
-  const spineLo = -BX * 1.02, spineHi = BX * 1.02;
-  for (let i = 0; i < segN; i++) {
-    const u = i / (segN - 1);                       // 0 = tail end, 1 = shoulders
-    const lx = spineLo + (spineHi - spineLo) * u;
-    const prof = bodyProfile(u);
-    // spine arches slightly, and drops toward the tail
-    const arch = Math.sin(u * Math.PI) * BY * 0.13 - (1 - u) * BY * 0.07;
-    const rr = BY * prof;
-    pushS(wx(lx, 0), bodyY + arch, wz(lx, 0), ...dirW(0, 1, 0),
-          rr * 0.92, rr * 0.95, rr * 1.04, base);
-  }
-  if (!far) {
-    // pale underside, following the same profile so it never breaks the outline
-    for (let i = 0; i < 9; i++) {
-      const u = i / 8;
-      const lx = spineLo * 0.86 + (spineHi * 0.86 - spineLo * 0.86) * u;
-      const rr = BY * bodyProfile(u) * 0.78;
-      pushS(wx(lx, 0), bodyY - BY * 0.40 + Math.sin(u * Math.PI) * BY * 0.05, wz(lx, 0),
-            ...dirW(0, 1, 0), rr * 0.80, rr * 0.52, rr * 0.92, belly);
-    }
-    // a darker dorsal band gives the back a direction and breaks the flat fill
-    const dorsal = [base[0] * 0.66, base[1] * 0.66, base[2] * 0.70];
-    for (let i = 0; i < 8; i++) {
-      const u = 0.06 + (i / 7) * 0.88;
-      const lx = spineLo * 0.9 + (spineHi * 0.9 - spineLo * 0.9) * u;
-      const rr = BY * bodyProfile(u);
-      pushS(wx(lx, 0), bodyY + Math.sin(u * Math.PI) * BY * 0.13 + rr * 0.62, wz(lx, 0),
-            ...dirW(0, 1, 0), rr * 0.52, rr * 0.30, rr * 0.44, dorsal);
-    }
-  }
-
-  // ---- neck and head -------------------------------------------------------
+  // ---- skin ---------------------------------------------------------------
+  // The body is one continuous surface, not a stack of spheres. A skeleton of
+  // balls is laid along the spine, up the neck and into the head, and a
+  // metaball isosurface is meshed over it. Feeding raw genome cells into that
+  // field gave a shapeless lump; feeding it the anatomy rig gives an animal
+  // whose surface simply has no seams. Built in units of the creature's own
+  // radius, so one skin serves every size of the same body plan.
   const NK = p.neck || 0;
   const headR = clamp(R * (NK > 0.15 ? 0.46 : 0.60), R * 0.28, R * 0.8);
   const neckLen = NK * R * 2.6;
   const hx = BX * 0.78 + neckLen * 0.75;
   const hy = bodyY + BY * 0.30 + neckLen * 0.72;
-  if (!far && neckLen > R * 0.12) {
-    const NS = clamp(Math.round(2 + NK * 3), 2, 6);
-    for (let i = 1; i <= NS; i++) {
-      const u = i / NS;
-      const nx = BX * 0.70 + (hx - BX * 0.70) * u;
-      const ny = bodyY + BY * 0.22 + (hy - bodyY - BY * 0.22) * u;
-      const rr = R * (0.34 - 0.10 * u) * (1 + NK * 0.15);
-      pushS(wx(nx, 0), ny, wz(nx, 0), ...dirW(0, 1, 0), rr, rr, rr, base);
-    }
-  }
   const headX = (far ? BX * 0.8 : hx) + headThrust;
   const headY = (far ? bodyY + BY * 0.25 : hy) + headDip * R * 0.7;
-  pushS(wx(headX, 0), headY, wz(headX, 0), ...dirW(1, 0, 0),
-        headR * 1.25, headR * 0.94, headR * 0.94, base);
-  if (far) return;
+  const NS = clamp(Math.round(2 + NK * 3), 2, 6);
 
-  if (nuzzle > 0.02) {
-    // a soft bloom while two animals pair, so it is legible at a distance
-    for (let q = 0; q < 5; q++) {
-      const a2 = (q / 5) * 6.283 + t * 2.2;
-      const rr2 = R * (0.9 + nuzzle * 1.5);
-      pushS(wx(Math.cos(a2) * rr2, Math.sin(a2) * rr2), bodyY + BY * 0.9 + nuzzle * R * 1.2,
-            wz(Math.cos(a2) * rr2, Math.sin(a2) * rr2), 0, 1, 0,
-            R * 0.16, R * 0.16, R * 0.16, [1, 0.62, 0.72]);
+  let skinned = false;
+  if (!far && R > 0.01) {
+    const iR = 1 / R;
+    const sizeKey = Math.round(BX * 40 / R) * 1000 + Math.round(BY * 40 / R) + Math.round(NK * 20) * 1000000;
+    if (!c._skel || c._skelKey !== sizeKey) {
+      const sk = [];
+      const lo = -BX * 1.02 * iR, hi = BX * 1.02 * iR;
+      const SEG = 11;
+      for (let i = 0; i < SEG; i++) {
+        const u = i / (SEG - 1);
+        sk.push({ x: lo + (hi - lo) * u,
+                  y: (Math.sin(u * Math.PI) * BY * 0.13 - (1 - u) * BY * 0.07) * iR,
+                  z: 0, r: BY * bodyProfile(u) * iR });
+      }
+      if (neckLen > R * 0.12) {
+        for (let i = 1; i <= NS; i++) {
+          const u = i / NS;
+          sk.push({ x: (BX * 0.70 + (hx - BX * 0.70) * u) * iR,
+                    y: ((BY * 0.22) + ((hy - bodyY) - BY * 0.22) * u) * iR,
+                    z: 0, r: (R * (0.34 - 0.10 * u) * (1 + NK * 0.15)) * iR });
+        }
+      }
+      sk.push({ x: hx * iR, y: (hy - bodyY) * iR, z: 0, r: headR * 0.98 * iR });
+      c._skel = sk; c._skelKey = sizeKey;
+    }
+    const mesh = getSkinMesh(c._skel);
+    if (mesh && bodyCount < MAX_BODY_INST) {
+      let arr = bodyByMesh.get(mesh);
+      if (!arr) { arr = []; bodyByMesh.set(mesh, arr); }
+      arr.push(wx(0, 0), bodyY, wz(0, 0), yaw, R, base[0], base[1], base[2]);
+      bodyCount++;
+      skinned = true;
     }
   }
+  if (!skinned) {
+    // while the skin bakes, and at distance, fall back to the sphere chain
+    const segN = far ? 4 : 11;
+    const lo = -BX * 1.02, hi = BX * 1.02;
+    for (let i = 0; i < segN; i++) {
+      const u = i / (segN - 1);
+      const rr = BY * bodyProfile(u);
+      const lx = lo + (hi - lo) * u;
+      pushS(wx(lx, 0), bodyY + Math.sin(u * Math.PI) * BY * 0.13 - (1 - u) * BY * 0.07, wz(lx, 0),
+            ...dirW(0, 1, 0), rr * 0.92, rr * 0.95, rr * 1.04, base);
+    }
+    if (!far && neckLen > R * 0.12) {
+      for (let i = 1; i <= NS; i++) {
+        const u = i / NS;
+        const nx2 = BX * 0.70 + (hx - BX * 0.70) * u;
+        const ny2 = bodyY + BY * 0.22 + (hy - bodyY - BY * 0.22) * u;
+        const rr = R * (0.34 - 0.10 * u) * (1 + NK * 0.15);
+        pushS(wx(nx2, 0), ny2, wz(nx2, 0), ...dirW(0, 1, 0), rr, rr, rr, base);
+      }
+    }
+    pushS(wx(headX, 0), headY, wz(headX, 0), ...dirW(1, 0, 0),
+          headR * 1.25, headR * 0.94, headR * 0.94, base);
+  }
+  if (far) return;
 
   // ---- jaw, teeth ----------------------------------------------------------
   if (n.MOUTH) {
@@ -3811,9 +3776,13 @@ function drawReachRing(t) {
   }
 }
 
+const bodyByMesh = new Map();
+let bodyCount = 0;
 function buildCreatureInstances(camX, camZ, t) {
   instCount = 0; spikeCount = 0;
   bodyBatches.length = 0;
+  bodyByMesh.clear(); bodyCount = 0;
+  pumpMeshQueue();
   player.target = pickTarget();
   drawReachRing(t);
   drawThreatRing(t);
@@ -3827,6 +3796,16 @@ function buildCreatureInstances(camX, camZ, t) {
     if (instCount > MAX_INST - 64) break;
     drawCreature(c, t, Math.sqrt(d2));
   }
+  // flatten the skinned bodies into one buffer with per-mesh draw offsets
+  let off = 0;
+  for (const [mesh, arr] of bodyByMesh) {
+    const n = arr.length / BINST_FLOATS;
+    if (off + n > MAX_BODY_INST) break;
+    bodyInstData.set(arr, off * BINST_FLOATS);
+    bodyBatches.push({ mesh, first: off, count: n });
+    off += n;
+  }
+  if (off) dev.queue.writeBuffer(bodyInstVB, 0, bodyInstData, 0, off * BINST_FLOATS);
   if (instCount) dev.queue.writeBuffer(instVB, 0, instData, 0, instCount * INST_FLOATS);
   return instCount;   // cones are flushed by buildPlantInstances, which appends to them
 }
@@ -4048,10 +4027,18 @@ const player = {
   c: null, yaw: 0, pitch: -0.05, spectator: false, generation: 0, deaths: 0,
   camX: 0, camY: 0, camZ: 0, freeY: 0,
   dist: 0,          // 0 = first person; >0 = third-person orbit distance
-  jumpY: 0, jumpV: 0, grounded: true, atkCD: 0, absorbed: 0,
+  jumpY: 0, jumpV: 0, grounded: true, atkCD: 0, absorbed: 0, fly: 0,
 };
 const GRAV = 520;          // world units / s^2
 const JUMP_V0 = 128;       // launch speed; clears roughly one climb step
+const PLAYER_SPEED = 1.65; // the body you steer moves faster than the sim's own pace
+// Flight. canFly previously only added a fixed hover offset, so a flier floated
+// at a constant height and could not gain any altitude. These give it a real
+// vertical axis with a climb rate paid for out of metabolism.
+const FLY_CLIMB = 190;     // world units / s while ascending
+const FLY_SINK = 62;       // passive sink when not actively climbing
+const FLY_DIVE = 240;      // held descent
+const FLY_CEIL = 620;      // ceiling above ground level
 const THIRD_MAX = 1200, THIRD_DEFAULT = 150, THIRD_SNAP = 26;  // below SNAP, snap to first person
 function isFirstPerson() { return !player.spectator && player.dist <= 0; }
 const keys = Object.create(null);
@@ -4269,6 +4256,7 @@ function respawn() {
   player.deaths++;
   player.generation++;
   player.absorbed = 0;
+  player.fly = 0;
   const cause = dead && dead.deathCause ? dead.deathCause : 'unknown';
   toast(`You died of ${cause}. Reborn as a newborn of your nearest kin (distance ${bestD.toFixed(2)}).`, 5600);
 }
@@ -4315,9 +4303,10 @@ function pickTarget() {
 function mateBlock(a, bb) {
   if (!a || !bb || !a.alive || !bb.alive) return 'no partner';
   if (!world.flags.sexual) return 'sexual reproduction is switched off';
-  const sigOf = (x) => x._sig || (x._sig = C.signature(x.genome, x.ph));
-  const gd = C.geneticDistance(sigOf(a), sigOf(bb));
-  if (gd > 9) return 'different species (genetic distance ' + gd.toFixed(1) + ', limit 9)';
+  // No species barrier for the player. The core still uses genetic distance to
+  // decide which creatures breed with each other, but you may cross with
+  // anything alive: the offspring is a genuine crossover of two distant
+  // genomes, which is the fastest way to pull traits into your own line.
   if (a.age <= C.maturity(a.ph)) return 'you are too young (' + a.age.toFixed(0) + '/' + C.maturity(a.ph).toFixed(0) + ')';
   if (bb.age <= C.maturity(bb.ph)) return 'it is too young';
   if ((a._growthAvg || 0) < 0.75) return 'you are still growing (' + ((a._growthAvg || 0) * 100).toFixed(0) + '%)';
@@ -4329,6 +4318,13 @@ function mateBlock(a, bb) {
   return null;
 }
 function canMate(a, bb) { return mateBlock(a, bb) === null; }
+// How far apart the pair is. Above the core's own species threshold of 9 this
+// is a cross-species pairing, which is allowed but worth flagging.
+function mateDistance(a, bb) {
+  if (!a || !bb) return 0;
+  const sigOf = (x) => x._sig || (x._sig = C.signature(x.genome, x.ph));
+  return C.geneticDistance(sigOf(a), sigOf(bb));
+}
 
 // Mating hands the player forward a generation: the offspring is a real
 // crossover of both parents, and the body you were steering is released to its
@@ -4359,7 +4355,9 @@ function tryMate() {
   player.c = baby;
   player.generation++;
   player.dist = Math.max(player.dist, THIRD_DEFAULT);
-  toast('You mated. You are now your own offspring, generation ' + player.generation +
+  const gd2 = mateDistance(c, mate);
+  toast('You mated' + (gd2 > 9 ? ' across species (distance ' + gd2.toFixed(1) + ')' : '') +
+        '. You are now your own offspring, generation ' + player.generation +
         '. Your old body walks on by itself.', 5200);
 }
 
@@ -4654,11 +4652,15 @@ function movePlayer(c, dt) {
   const len = Math.hypot(fx, fz);
   if (len < 1e-6) { c.vx = 0; c.vy = 0; return; }
   const inWater = terrain.isWater(c.x, c.y);
-  let sp = (inWater && p.canSwim) ? p.speedWater : p.speedLand;
-  sp *= terrain.speedMul(c.x, c.y, p.canFly, p.canSwim);
-  // sprint: shift, or hold space while running forward
-  const sprint = !!keys['shift'] || (!!keys[' '] && !!keys['w']);
+  const airborne = p.canFly && player.fly > 0.5;
+  let sp = airborne ? Math.max(p.speedAir, p.speedLand)
+         : (inWater && p.canSwim) ? p.speedWater : p.speedLand;
+  if (!airborne) sp *= terrain.speedMul(c.x, c.y, p.canFly, p.canSwim);
+  // sprint: shift, or hold space while running forward. In the air space is
+  // the climb control, so shift alone sprints.
+  const sprint = !!keys['shift'] || (!airborne && !!keys[' '] && !!keys['w']);
   if (sprint) sp *= (1 + C.GAIT_BOOST);
+  sp *= PLAYER_SPEED;
   c.vx = (fx / len) * sp; c.vy = (fz / len) * sp;
   // The core deliberately keeps physical movement on real time so you can
   // fast-forward generations without everything teleporting. For the body you
@@ -4689,8 +4691,30 @@ function movePlayer(c, dt) {
   }
 }
 
+// A flier gets an altitude, not a hover offset. Space climbs, ctrl dives, and
+// letting go sinks slowly instead of dropping you out of the sky. Climbing is
+// charged at the core's own gait rate, so staying up costs food.
+function updateFlight(dt) {
+  const c = player.c;
+  if (!c || !c.alive || !c.ph.canFly || player.spectator) {
+    if (player.fly > 0) player.fly = Math.max(0, player.fly - FLY_DIVE * dt);
+    return;
+  }
+  const p = c.ph;
+  const up = !!keys[' '], down = !!keys['control'] || !!keys['c'];
+  let v = -FLY_SINK;
+  if (up) v = FLY_CLIMB * clamp(0.55 + (p.wingEff || 0) * 0.30, 0.55, 1.6);
+  else if (down) v = -FLY_DIVE;
+  player.fly = clamp(player.fly + v * dt, 0, FLY_CEIL);
+  if (up && player.fly > 0.01) {
+    const bdt = dt * (world.params.timeScale != null ? world.params.timeScale : 0.01);
+    c.energy = Math.max(0, c.energy - p.upkeep * C.GAIT_COST * 1.4 * bdt);
+  }
+}
+
 function updateJump(dt) {
   if (!player.c || !player.c.alive) { player.jumpY = 0; player.jumpV = 0; player.grounded = true; return; }
+  if (player.c.ph.canFly) { player.jumpY = 0; player.jumpV = 0; player.grounded = true; return; }
   if (player.jumpY > 0 || player.jumpV > 0) {
     player.jumpV -= GRAV * dt;
     player.jumpY += player.jumpV * dt;
@@ -4700,7 +4724,12 @@ function updateJump(dt) {
 }
 function tryJump() {
   const c = player.c;
-  if (!c || !c.alive || !player.grounded || player.spectator) return;
+  if (!c || !c.alive || player.spectator) return;
+  if (c.ph.canFly) {          // a flier launches instead of hopping
+    player.fly = Math.max(player.fly, 26);
+    return;
+  }
+  if (!player.grounded) return;
   const p = c.ph;
   player.jumpV = JUMP_V0 * (0.75 + 0.35 * clamp((p.legLen || 1) * 0.6, 0, 1.2));
   player.grounded = false;
@@ -4712,6 +4741,7 @@ function tryJump() {
 function stepSim(dt) {
   if (player.atkCD > 0) player.atkCD = Math.max(0, player.atkCD - dt);
   updateJump(dt);
+  updateFlight(dt);
   const c = player.c;
   const alive = c && c.alive;
   const px = alive ? c.x : 0, py = alive ? c.y : 0;
@@ -4758,8 +4788,8 @@ function updateCamera(dt) {
     player.camZ = clamp(c.y + Math.sin(player.yaw) * fwd, 0, WORLD_H);
     const eye = Math.max(headY, groundAt(player.camX, player.camZ)
                 + ((p.standH || p.radius) * 0.6) * BODY_SCALE + NEAR * 3) + player.jumpY;
-    player.camY += (eye - player.camY) * Math.min(1, dt * 14);
-    if (!isFinite(player.camY)) player.camY = eye;
+    player.camY += (eye + player.fly - player.camY) * Math.min(1, dt * 14);
+    if (!isFinite(player.camY)) player.camY = eye + player.fly;
   } else {
     // THIRD PERSON: orbit the head along the current view ray, so the look
     // direction is identical in both modes and switching does not disorient.
@@ -4771,14 +4801,14 @@ function updateCamera(dt) {
     const cpi = Math.cos(player.pitch), spi = Math.sin(player.pitch);
     const tx2 = clamp(c.x - Math.cos(player.yaw) * cpi * dEff, 0, WORLD_W);
     const tz2 = clamp(c.y - Math.sin(player.yaw) * cpi * dEff, 0, WORLD_H);
-    const ty2 = headY + player.jumpY - spi * dEff;
+    const ty2 = headY + player.jumpY + player.fly - spi * dEff;
     player.camX += (tx2 - player.camX) * Math.min(1, dt * 14);
     player.camZ += (tz2 - player.camZ) * Math.min(1, dt * 14);
     player.camY += (ty2 - player.camY) * Math.min(1, dt * 14);
     if (!isFinite(player.camX)) { player.camX = tx2; player.camZ = tz2; player.camY = ty2; }
   }
   // never let the camera drop through the drawn surface
-  const floorY = groundAt(player.camX, player.camZ) + NEAR * 5;
+  const floorY = groundAt(player.camX, player.camZ) + NEAR * 5 + player.fly;
   if (player.camY < floorY) player.camY = floorY;
 }
 
@@ -4855,6 +4885,15 @@ function renderFrame(t) {
     pass.setVertexBuffer(0, coneVB); pass.setIndexBuffer(coneIB, 'uint16');
     pass.setVertexBuffer(1, spikeVB); pass.drawIndexed(coneCount, spikeCount);
   }
+  if (bodyBatches.length) {
+    pass.setPipeline(bodyPipe); pass.setBindGroup(0, bindG.body);
+    pass.setVertexBuffer(1, bodyInstVB);
+    for (const bt of bodyBatches) {
+      pass.setVertexBuffer(0, bt.mesh.vb);
+      pass.setIndexBuffer(bt.mesh.ib, 'uint32');
+      pass.drawIndexed(bt.mesh.count, bt.count, 0, 0, bt.first);
+    }
+  }
 
   pass.setPipeline(waterPipe); pass.setBindGroup(0, bindG.water);
   pass.setVertexBuffer(0, waterVB); pass.draw(6);
@@ -4883,7 +4922,9 @@ function updateHUD() {
       `<span class="k">neck</span> <span class="v">${(p.neck || 0).toFixed(2)}</span><br>` +
       `<span class="k">age</span> <span class="v">${c.age.toFixed(0)}/${c.maxAge.toFixed(0)}</span> · ` +
       `<span class="k">cells</span> <span class="v">${(p.parts || []).length}</span>` +
-      (tags.length ? ` · <span class="v">${tags.join(' ')}</span>` : '');
+      (tags.length ? ` · <span class="v">${tags.join(' ')}</span>` : '') +
+      (p.canFly ? `<br><span class="k">altitude</span> <span class="v">${player.fly.toFixed(0)}</span>` +
+                  ` <span class="k">(space climb, ctrl dive)</span>` : '');
   } else {
     $('v-name').textContent = player.spectator ? 'DETACHED CAMERA' : '—';
     $('v-stats').textContent = '';
@@ -4913,7 +4954,7 @@ function updateHUD() {
         ' &middot; def ' + d.defense.toFixed(0) + ' &middot; ~' + hits + ' hits to kill' +
         '<div class="keys"><span class="hit">F</span> ' + MOVE_DEF[bestMove(mp, tallyParts(mp))].label + ' ' +
         (why ? '<span style="opacity:.55">M mate: ' + why + '</span>'
-             : '<span class="ok">M</span> mate') +
+             : '<span class="ok">M</span> ' + (mateDistance(me, tgt) > 9 ? 'mate (hybrid)' : 'mate')) +
         ' <span>E</span> eat</div>';
       act.style.display = 'block';
     } else act.style.display = 'none';
@@ -4991,7 +5032,7 @@ async function rebuildWorld() {
   const adult = pickInitialPlayer();
   player.c = takeNewbornBody(adult);
   player.generation = 0; player.deaths = 0; player.absorbed = 0;
-  player.dist = THIRD_DEFAULT;
+  player.dist = THIRD_DEFAULT; player.fly = 0;
   births.length = 0; birthsPrimed = false;
   if (player.c) {
     player.camX = player.c.x; player.camZ = player.c.y;
@@ -5080,24 +5121,26 @@ function drawMinimap() {
   miniCtx.clearRect(0, 0, MW, MH);
   miniCtx.drawImage(miniBase, 0, 0);
   const sx = MW / WORLD_W, sz = MH / WORLD_H;
+  const k = MW / 432;                 // marker sizes track the canvas resolution
+  const dotR = 1.1 * k;
   const me = player.c;
   miniCtx.fillStyle = 'rgba(255,64,48,0.92)';
   for (const c of world.creatures) {
     if (!c.alive || c === me) continue;
-    miniCtx.fillRect(c.x * sx - 1, c.y * sz - 1, 2.2, 2.2);
+    miniCtx.fillRect(c.x * sx - dotR, c.y * sz - dotR, dotR * 2.2, dotR * 2.2);
   }
   miniCtx.fillStyle = 'rgba(160,140,110,0.75)';
-  for (const cz of world.carrion) miniCtx.fillRect(cz.x * sx - 1, cz.y * sz - 1, 1.6, 1.6);
+  for (const cz of world.carrion) miniCtx.fillRect(cz.x * sx - dotR * 0.8, cz.y * sz - dotR * 0.8, dotR * 1.6, dotR * 1.6);
   if (me && me.alive) {
     const px = me.x * sx, py = me.y * sz;
     miniCtx.strokeStyle = 'rgba(120,200,255,0.85)';
-    miniCtx.lineWidth = 1.4;
+    miniCtx.lineWidth = 1.4 * k;
     miniCtx.beginPath(); miniCtx.moveTo(px, py);
-    miniCtx.lineTo(px + Math.cos(player.yaw) * 11, py + Math.sin(player.yaw) * 11);
+    miniCtx.lineTo(px + Math.cos(player.yaw) * 11 * k, py + Math.sin(player.yaw) * 11 * k);
     miniCtx.stroke();
-    miniCtx.beginPath(); miniCtx.arc(px, py, 5, 0, 7); miniCtx.stroke();
+    miniCtx.beginPath(); miniCtx.arc(px, py, 5 * k, 0, 7); miniCtx.stroke();
     miniCtx.fillStyle = '#3fa6ff';
-    miniCtx.beginPath(); miniCtx.arc(px, py, 2.8, 0, 7); miniCtx.fill();
+    miniCtx.beginPath(); miniCtx.arc(px, py, 2.8 * k, 0, 7); miniCtx.fill();
   }
 }
 
@@ -5326,6 +5369,7 @@ window.__G3D = {
   get instCount() { return instCount; },
   attack: () => tryAttack(),
   mateBlock: (a, b2) => mateBlock(a, b2),
+  mateDistance: (a, b2) => mateDistance(a, b2),
   becomeArchetype: (k) => becomeArchetype(k),
   bestMove: (ph, n) => bestMove(ph, n),
   movesFor: (ph, n) => movesFor(ph, n),
@@ -5336,11 +5380,17 @@ window.__G3D = {
   mate: () => tryMate(),
   get target() { return player.target; },
   get births() { return births; },
+  get bodyBatchCount() { return bodyBatches.length; },
+  get bodyTris() { let n=0; for (const b of bodyBatches) n += b.mesh.tris * b.count; return n; },
+  get meshCacheSize() { return meshCache.size; },
+  pumpMesh: () => pumpMeshQueue(),
   get picker() { return player.picker; },
   pick: (i) => choosePicked(i),
   offer: (g, l) => offerTraits(g, l),
   eat: () => tryEat(),
   jump: () => tryJump(),
+  get fly() { return player.fly; },
+  setFly: (v) => { player.fly = v; },
   absorbFrom: (prey) => absorbPartFrom(prey),
   spawnNewborn: (src) => spawnNewborn(src),
   setDist(d) { player.dist = clamp(d, 0, THIRD_MAX); },
