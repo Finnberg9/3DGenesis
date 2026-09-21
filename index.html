@@ -2357,6 +2357,8 @@
       if (!c.alive) continue;
       updateGrowth(world, c, bdt); // v9.1: advance/refresh c.ph BEFORE p captures it below, so this tick sees live growth
       const p = c.ph; c.cooldown = Math.max(0, c.cooldown - dt); c.reproCD = Math.max(0, c.reproCD - bdt); c.age += bdt;
+      if (c.hurtT > 0) c.hurtT = Math.max(0, c.hurtT - dt);
+      if (c.foe) { c.foeT -= dt; if (c.foeT <= 0 || !c.foe.alive) { c.foe = null; c.react = null; } }
 
       // Safety net: a finless creature that has somehow ended up past the
       // drop-off (edge case in any push/spawn path) is returned to solid ground
@@ -2534,6 +2536,11 @@
         const fdx = c.fx - c.x, fdy = c.fy - c.y;
         if (fdx * fdx + fdy * fdy > 900) addDir(fdx, fdy, 1.1 * c.hunger);
       }
+      if (c.foe) {
+        const fx = c.foe.x - c.x, fy = c.foe.y - c.y;
+        if (c.react === 'fight') addDir(fx, fy, 4.2);
+        else addDir(-fx, -fy, 5.0);
+      }
       let dirx = _dx, diry = _dy;
 
       // resolve hunting (gated by brain pursue/avoid - aposematism lives here)
@@ -2542,8 +2549,14 @@
         const rr = (p.radius + prey.ph.radius + reachEff);
         if (eager > 0.2 && preyD < rr * rr && c.cooldown <= 0) { resolveAttack(world, c, prey, flags); c.cooldown = 0.4; }
       }
-      // forage consume (plant or carrion)
-      if (bestFood) {
+      // fight back
+      if (c.foe && c.react === 'fight' && c.cooldown <= 0 && c.foe.alive) {
+        const fdx = c.foe.x - c.x, fdy = c.foe.y - c.y;
+        const rr = p.radius + c.foe.ph.radius + reachEff + 10;
+        if (fdx * fdx + fdy * fdy < rr * rr) { retaliate(world, c, c.foe, flags); c.cooldown = 0.9; }
+      }
+      // forage consume (plant or carrion) -- never while under attack
+      if (bestFood && !(c.hurtT > 0)) {
         const rr = p.radius + reachEff + 6;
         if (bestFoodD < rr * rr) {
           // v8.4: carrion yield now runs through carrionDigest instead of a
@@ -2584,7 +2597,7 @@
       // the gait when it is going somewhere and lets it idle when it isn't --
       // that pressure is the whole point, and it is why the cost is not gated
       // on speed here.
-      const sp = realizedSpeed * (1 + GAIT_BOOST * c._gait) * (c.fear > 0.3 ? 1.15 : 1) * tMul;
+      const sp = realizedSpeed * (1 + GAIT_BOOST * c._gait) * (c.fear > 0.3 ? 1.15 : 1) * (c.foe && c.react === 'flee' ? 1.2 : 1) * tMul;
       if (len > 1e-6) { c.vx = (dirx / len) * sp; c.vy = (diry / len) * sp; } else { c.vx = 0; c.vy = 0; }
       if (c._gait > 0.01) c.energy -= p.upkeep * GAIT_COST * c._gait * bdt;
       let nx = clamp(c.x + c.vx * dt, 1, w - 1), ny = clamp(c.y + c.vy * dt, 1, h - 1);
@@ -2868,15 +2881,44 @@
     if (inWater) return Math.max(p.speedWater, p.canFly ? p.speedAir : 0, p.speedLand * 0.35);
     return Math.max(p.speedLand, p.canFly ? p.speedAir : 0, p.speedWater * 0.4);
   }
+  // ---- being attacked ---------------------------------------------------
+  const HURT_TIME = 5;      // seconds after the last hit during which nothing can be eaten
+  const FOE_TIME = 7;       // how long a victim keeps reacting to its attacker
+  function onHit(victim, attacker, dmg) {
+    if (!victim || !attacker) return;
+    victim.hurtT = HURT_TIME;
+    victim.foe = attacker; victim.foeT = FOE_TIME;
+    // meat eaters turn and fight; everything else runs
+    victim.react = (victim.ph.carnivory > 0.5) ? 'fight' : 'flee';
+    victim._hitSeq = (victim._hitSeq || 0) + 1;
+    victim._lastDmg = dmg || 0; victim._lastHitBy = attacker;
+    attacker._strikeSeq = (attacker._strikeSeq || 0) + 1;
+  }
+  // A cornered carnivore's counter-attack. Floored at a slice of the target's
+  // own reserve (scaled by size ratio) so a fight back is a real threat, not
+  // the 1-damage trickle of the plain exchange.
+  function retaliate(world, att, foe, flags) {
+    const a = att.ph, d = foe.ph;
+    const ratio = clamp(a.mass / Math.max(0.01, d.mass), 0.15, 2.5);
+    const dmg = Math.max(a.attack - d.defense * 0.6, d.storage * 0.03 * ratio, 1);
+    foe.energy -= dmg;
+    att.energy -= (d.counter || 0) * 0.5; if (att.energy < 0) att.energy = 0;
+    onHit(foe, att, dmg);
+    if (foe.energy <= 0 && foe.alive) {
+      foe.alive = false; foe.deathCause = 'predation'; recordDeath(world, foe);
+      if (!(att.hurtT > 0)) att.energy = Math.min(a.storage, att.energy + Math.max(6, (d.mass * 8) * 0.6));
+    }
+  }
   function resolveAttack(world, att, prey, flags) {
     const a = att.ph, d = prey.ph;
     let dmg = a.attack - d.defense * 0.6; if (dmg <= 0) dmg = 1;
     prey.energy -= dmg;
+    onHit(prey, att, dmg);
     att.energy -= d.counter * 0.5; if (att.energy < 0) att.energy = 0;
     if (prey.energy <= 0) {
       prey.alive = false; prey.deathCause = 'predation'; recordDeath(world, prey);
       const gain = (d.mass * 8 + Math.max(0, prey.energy + d.mass * 2)) * 0.6;
-      att.energy = Math.min(a.storage, att.energy + Math.max(6, gain));
+      if (!(att.hurtT > 0)) att.energy = Math.min(a.storage, att.energy + Math.max(6, gain));
       if (flags.toxins && d.toxin > 0) att.energy -= d.toxin * 22; // poison payback
       if (att.energy < 0) att.energy = 0;
     }
@@ -3036,13 +3078,50 @@
       const r = tl > 0.05 ? Math.max(0.03, tr0 * (1 - 0.78 * u)) : 0.0001;
       balls.push({ x: tx, y: ty, z: 0, r, g: 'tail', hide: tl <= 0.05 });
     }
-    return { balls, a, b, headIdx, tailStart, tailLen: tl, neckLen, NK, plan: P, flex: !!P.flex };
+    const sk = { balls, a, b, headIdx, tailStart, tailLen: tl, neckLen, NK, plan: P, flex: !!P.flex };
+    sk.skin = densifySkin(sk);
+    return sk;
+  }
+  // The skin is meshed from a DENSER chain than the anchor balls: every link
+  // of spine -> neck -> head (and each lateral mass ball to the spine) is
+  // filled with in-between balls spaced well under their radius, so no slider
+  // combination can stretch the body into separate blobs with gaps between.
+  function densifySkin(sk) {
+    const B = sk.balls, P = sk.plan;
+    const live = (i) => B[i] && !B[i].hide && B[i].g !== 'tail';
+    const out = [];
+    for (let i = 0; i < B.length; i++) if (live(i)) out.push({ x: B[i].x, y: B[i].y, z: B[i].z, r: B[i].r, f: 1 });
+    const link = (i, j) => {
+      if (!live(i) || !live(j)) return;
+      const A = B[i], C2 = B[j];
+      const d = Math.hypot(C2.x - A.x, C2.y - A.y, C2.z - A.z);
+      const rmin = Math.max(0.05, Math.min(A.r, C2.r));
+      const n = Math.min(40, Math.ceil(d / (rmin * 0.45)) - 1);
+      for (let k = 1; k <= n; k++) {
+        const u = k / (n + 1);
+        out.push({ x: A.x + (C2.x - A.x) * u, y: A.y + (C2.y - A.y) * u, z: A.z + (C2.z - A.z) * u, r: A.r + (C2.r - A.r) * u, f: 1 });
+      }
+    };
+    const nearestSpine = (x, y, z) => {
+      let bi = 0, bd = Infinity;
+      for (let i = 0; i < P.seg; i++) { const d = Math.hypot(B[i].x - x, B[i].y - y, B[i].z - z); if (d < bd) { bd = d; bi = i; } }
+      return bi;
+    };
+    for (let i = 0; i + 1 < P.seg; i++) link(i, i + 1);
+    for (let i = P.seg; i < P.seg + 6; i++) if (live(i)) link(i, nearestSpine(B[i].x, B[i].y, B[i].z));
+    // neck chain from the spine ball nearest its base, through the head to the snout
+    const chain = [];
+    for (let i = P.seg + 6; i < sk.headIdx; i++) if (live(i)) chain.push(i);
+    chain.push(sk.headIdx, sk.headIdx + 1);
+    let prev = nearestSpine(B[chain[0]].x, B[chain[0]].y, B[chain[0]].z);
+    for (const i of chain) { link(prev, i); prev = i; }
+    return out;
   }
   function wyv(d2, R2) { if (d2 >= R2) return 0; const t = 1 - d2 / R2; return t * t * t; }
   // Skin field of the non-tail balls (tail is drawn as its own chain).
   function skinField(sk, x, y, z) {
     let f = 0;
-    const B = sk.balls;
+    const B = sk.skin || sk.balls;
     for (let i = 0; i < B.length; i++) {
       const k = B[i];
       if (k.g === 'tail' || k.hide) continue;
@@ -3475,6 +3554,7 @@
 
   const API = {
     ...DESIGN_API,
+    onHit, HURT_TIME,
     makeRNG, gauss, clamp, PART, PART_TYPES, MOUTH_MODES, SINGLETON, CAPS, IN, OUT, MAX_SEGS, MAX_RADIAL,
     O_GAIT, O_GRAB, GAIT_BOOST, GAIT_COST, GRAB_GAIN, GRAB_COST, gaitFrac, grabFrac,
     seedHerbivore, mutate, crossover, cloneGenome, countNodes, collectNodes, develop,
@@ -3587,7 +3667,11 @@ function buildSkinMesh(skel) {
   }
   const span = Math.max(maxX - minX, maxY - minY, maxZ - minZ);
   if (!(span > 0)) return null;
-  const step = span / MESH_RES;
+  let step = span / MESH_RES;
+  if (skel[0] && skel[0].f) {
+    let minR = Infinity; for (const k of skel) minR = Math.min(minR, k.r);
+    step = Math.max(span / 88, Math.min(step, minR * 0.5));
+  }
   const nx = Math.min(96, Math.ceil((maxX - minX) / step) + 3);
   const ny = Math.min(96, Math.ceil((maxY - minY) / step) + 3);
   const nz = Math.min(96, Math.ceil((maxZ - minZ) / step) + 3);
@@ -3698,6 +3782,7 @@ function buildSkinMesh(skel) {
 // its own skin across most of its growth.
 function skinKey(skel) {
   let s = '';
+  if (skel[0] && skel[0].f) s += 'F';
   for (const k of skel) {
     s += (k.x * 12 | 0) + ',' + (k.y * 12 | 0) + ',' + (k.z * 12 | 0) + ',' + (k.r * 14 | 0) + ';';
   }
@@ -3710,7 +3795,7 @@ function getSkinMesh(skel) {
   if (meshQueue.length < 16) {
     meshCache.set(key, 'pending');
     // the skeleton is reused between frames, so store a copy
-    meshQueue.push({ key, skel: skel.map(k => ({ x: k.x, y: k.y, z: k.z, r: k.r, w: k.w })) });
+    meshQueue.push({ key, skel: skel.map(k => ({ x: k.x, y: k.y, z: k.z, r: k.r, w: k.w, f: k.f })) });
   }
   return null;
 }
@@ -4385,6 +4470,10 @@ function tallyParts(ph) {
 
 function drawCreature(c, t, camDist) {
   const p = c.ph;
+  if (c._strikeSeq !== c._seenStrike) {
+    if (c._seenStrike != null && c !== player.c) startAnim(c, bestMove(p, tallyParts(p)), 0.5);
+    c._seenStrike = c._strikeSeq;
+  }
   const T = terrain, LVw = T.LV.water;
   const h = T.height(c.x, c.y);
   const surf = groundAt(c.x, c.y);
@@ -5686,8 +5775,9 @@ const VIS_CATS = [
   { id: 'horns', label: 'horns' }, { id: 'armor', label: 'spikes & armour' }, { id: 'limbs', label: 'limbs, feet & hands' },
   { id: 'fins', label: 'fins' }, { id: 'wings', label: 'wings' }, { id: 'details', label: 'details' }, { id: 'paint', label: 'paint' },
 ];
-const STARTER_ITEMS = ['m_beak', 'm_grazer', 'm_jaws', 'e_round', 'e_slit', 'h_straight', 's_spike', 's_knob',
-                       'l_leg', 'l_thin', 't_paw', 'f_fin', 'd_crest'];
+// Nothing is unlocked at the start: every part is earned by killing an animal
+// that has one. Your current body's own parts stay usable while you edit it.
+const STARTER_ITEMS = [];
 function itemColor(id, c, dcol) {
   if (c) return c;
   const v = VIS[id];
@@ -5735,7 +5825,7 @@ function designGeo(des) {
     }
     return lo;
   });
-  const skin = sk.balls.filter(k => !k.hide && k.g !== 'tail').map(k => ({ x: k.x, y: k.y, z: k.z, r: k.r }));
+  const skin = sk.skin.map(k => ({ x: k.x, y: k.y, z: k.z, r: k.r, f: 1 }));
   // extent in R units, for camera distance and interaction range
   let ext = 1;
   for (const k of sk.balls) if (!k.hide) ext = Math.max(ext, Math.hypot(k.x, k.y, k.z) + k.r);
@@ -6544,6 +6634,7 @@ function absorbPartFrom(prey) {
 function tryEat() {
   const c = player.c;
   if (!c || !c.alive) return;
+  if (c.hurtT > 0) { toast('Under attack: you cannot eat for another ' + c.hurtT.toFixed(1) + ' s.', 1400); return; }
   const p = c.ph;
   const rr = interactRange(p), rr2 = rr * rr;
   let bestP = null, bestPD = Infinity, bestC = null, bestCD = Infinity;
@@ -6616,9 +6707,10 @@ function tryAttack() {
   const ratio = clamp(p.mass / Math.max(0.01, best.ph.mass), 0.12, 3);
   const floor = Math.max(1, best.ph.storage * 0.05 * ratio * MD.dmg);
   if (dmg < floor) dmg = floor;
-  // the thing you hit flinches
+  // the thing you hit flinches, and remembers you
   startAnim(best, 'flinch', 0.35);
   best.energy -= dmg;
+  C.onHit(best, c, dmg);
   c.energy -= (best.ph.counter || 0) * 0.5;
   if (c.energy < 0) c.energy = 0;
   if (best.energy > 0) {
@@ -6629,7 +6721,8 @@ function tryAttack() {
   }
   best.alive = false; best.deathCause = 'predation';
   const gain = (best.ph.mass * 8 + best.ph.mass * 2) * 0.6;
-  c.energy = Math.min(p.storage, c.energy + Math.max(6, gain));
+  if (c.hurtT > 0) toast('Killed it, but you are still under attack and cannot feed on it.', 2400);
+  else c.energy = Math.min(p.storage, c.energy + Math.max(6, gain));
   if (world.flags.toxins && best.ph.toxin > 0) {
     c.energy -= best.ph.toxin * 22;
     if (c.energy < 0) c.energy = 0;
@@ -6767,6 +6860,15 @@ function stepSim(dt) {
   const alive = c && c.alive;
   const px = alive ? c.x : 0, py = alive ? c.y : 0;
   world.step(dt);
+  if (c && c._hitSeq !== player._seenHit) {
+    const by = c._lastHitBy;
+    if (player._seenHit != null && c.alive && by) {
+      startAnim(c, 'flinch', 0.35);
+      const diet = by.ph.carnivory > 0.5 ? 'a carnivore' : 'an animal';
+      toast('Hit by ' + diet + ' for ' + (c._lastDmg || 0).toFixed(0) + '. You cannot eat for 5 s.', 1600);
+    }
+    player._seenHit = c._hitSeq;
+  }
   if (alive && c.alive) {
     // discard whatever the brain decided for this body; it is yours to steer
     c.x = px; c.y = py;
@@ -7651,14 +7753,19 @@ const ED = {
   origPh: null, statBrain: null, t0: 0, lastT: 0, ui: null, shift: 0,
 };
 // ---- persistent progress: kills, unlocked parts, saved creatures -------------
-const PROG_KEY = 'genesis3d.progress.v1';
+const PROG_KEY = 'genesis3d.progress.v2';
+const PROG_KEY_OLD = 'genesis3d.progress.v1';
+// parts that used to be free at the start; they are not carried over as earned
+const OLD_STARTERS = new Set(['m_beak', 'm_grazer', 'm_jaws', 'e_round', 'e_slit', 'h_straight', 's_spike', 's_knob', 'l_leg', 'l_thin', 't_paw', 'f_fin', 'd_crest']);
 const PROG = { kills: 0, unlocked: new Set(STARTER_ITEMS), saved: [], last: null };
 const SANDBOX = /[?&]sandbox=1/.test(location.search);
 function loadProgress() {
   try {
-    const raw = localStorage.getItem(PROG_KEY);
+    let raw = localStorage.getItem(PROG_KEY), migrating = false;
+    if (!raw) { raw = localStorage.getItem(PROG_KEY_OLD); migrating = !!raw; }
     if (!raw) return;
     const o = JSON.parse(raw);
+    if (migrating && Array.isArray(o.unlocked)) o.unlocked = o.unlocked.filter(id => !OLD_STARTERS.has(id));
     if (o && typeof o === 'object') {
       PROG.kills = Math.max(0, (o.kills | 0));
       if (Array.isArray(o.unlocked)) for (const id of o.unlocked) if (VIS[id]) PROG.unlocked.add(id);
@@ -7675,7 +7782,35 @@ function saveProgress() {
   } catch (e) { /* storage full or blocked: progress simply is not remembered */ }
 }
 loadProgress();
-const itemAvailable = (id) => SANDBOX || PROG.unlocked.has(id) || ED.grants.has(id);
+// Parts you have not unlocked are still yours up to the number your body
+// already carries (so a default body can be rearranged), but no more copies.
+function countItem(des, id) {
+  let n = 0;
+  for (const p of des.parts || []) if (p.id === id) n++;
+  for (const l of des.limbs || []) { if (l.id === id) n++; if (l.tip && l.tip.id === id) n++; }
+  return n;
+}
+function spareOf(id) {
+  if (SANDBOX || PROG.unlocked.has(id)) return Infinity;
+  if (!ED.des) return 0;
+  return Math.max(0, ((ED.grantCount && ED.grantCount[id]) || 0) - countItem(ED.des, id));
+}
+const itemAvailable = (id) => spareOf(id) > 0;
+const isUnlocked = (id) => SANDBOX || PROG.unlocked.has(id);
+function edCanUse(id, n) {
+  const sp = spareOf(id);
+  if (sp >= n) return true;
+  const own = (ED.grantCount && ED.grantCount[id]) || 0;
+  edFlash(own ? (sp > 0 && n > 1 ? 'You only have one more of these. Turn mirror off, or kill animals that have one to unlock it.' : 'Your body only has ' + own + ' of these. Kill an animal that has one to unlock more.')
+              : 'Locked. Kill an animal that has one and choose it to unlock it.');
+  return false;
+}
+function grantCountOf(d) {
+  const m = {};
+  for (const p of d.parts || []) m[p.id] = (m[p.id] || 0) + 1;
+  for (const l of d.limbs || []) { m[l.id] = (m[l.id] || 0) + 1; if (l.tip) m[l.tip.id] = (m[l.tip.id] || 0) + 1; }
+  return m;
+}
 const planBaseCost = (() => { const cache = {}; return (p) => (cache[p] != null ? cache[p] : (cache[p] = C.designCost(C.defaultDesign(p)))); })();
 const KILL_SPACE = 3, FREE_SPACE = 8;
 // A body you already have is never over budget just for being opened: the
@@ -7715,6 +7850,8 @@ function edAddPart(id, hit) {
   const pair = ED.mirror && !single && Math.abs(hit.p[2]) > 0.08;
   let need = itemCost(id) * (pair ? 2 : 1);
   if (single) for (const q of des.parts) if (C.ITEM_SIM[q.id] && C.ITEM_SIM[q.id].t === 'MOUTH') need -= itemCost(q.id);
+  const sameMouth = single && des.parts.some(q => q.id === id);
+  if (!sameMouth && !edCanUse(id, pair ? 2 : 1)) return false;
   if (need > edSpaceLeft()) { edDenied(pair ? 'Not enough genome space for a mirrored pair. Turn off mirror or kill more to grow.' : 'Not enough genome space. Kill more animals to grow it.'); return false; }
   edPushUndo();
   if (single) des.parts = des.parts.filter(q => !(C.ITEM_SIM[q.id] && C.ITEM_SIM[q.id].t === 'MOUTH'));
@@ -7757,6 +7894,7 @@ function edAddLimb(id, hit) {
   const des = ED.des, G = designGeo(des), sk = G.sk;
   const pair = ED.mirror && Math.abs(hit.p[2]) > 0.08;
   const need = itemCost(id) * (pair ? 2 : 1);
+  if (!edCanUse(id, pair ? 2 : 1)) return false;
   if (need > edSpaceLeft()) { edDenied('Not enough genome space for ' + (pair ? 'a pair of limbs' : 'a limb') + '.'); return false; }
   edPushUndo();
   const pose = defaultLimbPose(sk, G.cls.stand, hit);
@@ -7781,6 +7919,8 @@ function edSetTip(lb, id) {
   let need = itemCost(id) * (tw ? 2 : 1);
   if (lb.tip) need -= itemCost(lb.tip.id);
   if (tw && tw.tip) need -= itemCost(tw.tip.id);
+  const uses = (lb.tip && lb.tip.id === id ? 0 : 1) + (tw && !(tw.tip && tw.tip.id === id) ? 1 : 0);
+  if (uses && !edCanUse(id, uses)) return false;
   if (need > edSpaceLeft()) { edDenied('Not enough genome space for that.'); return false; }
   edPushUndo();
   lb.tip = { id, c: null, s: 1 };
@@ -7866,8 +8006,7 @@ function edSetPlan(p) {
   const keepCol = ED.des && ED.des.col ? JSON.parse(JSON.stringify(ED.des.col)) : null;
   ED.des = C.defaultDesign(p);
   if (keepCol && ED.keepPaint) ED.des.col = keepCol;
-  ED.grants = new Set(designItems(ED.des));
-  for (const id of ED.origItems || []) ED.grants.add(id);
+  ED.grantCount = grantCountOf(ED.des);
   ED.sel = null; edTouch(); edRefreshUI();
 }
 function designItems(d) {
@@ -8421,7 +8560,7 @@ function edBindGrid() {
     t.addEventListener('pointerleave', () => edHideTip());
     t.addEventListener('pointerdown', (e) => {
       e.preventDefault();
-      if (!itemAvailable(id)) { edFlash('Locked. Kill an animal that has one and choose it to unlock it.'); return; }
+      if (!itemAvailable(id)) { edCanUse(id, 1); return; }
       edStartPaletteDrag(id, e);
     });
   }
@@ -8430,8 +8569,10 @@ function edShowTip(id, el) {
   const v = VIS[id]; if (!v) return;
   const av = itemAvailable(id);
   const tip = ED.ui.tip;
+  const sp = spareOf(id), own = (ED.grantCount && ED.grantCount[id]) || 0;
   tip.innerHTML = `<b>${v.name}</b><span class="c">genome space ${itemCost(id)}</span><div>${effectText(id)}</div>` +
-    (av ? '' : '<div class="lk">locked: kill an animal that has one, then pick it</div>');
+    (sp === Infinity ? '' : own ? `<div class="lk">not unlocked: your body has ${own}, ${sp} left to place. kill an animal that has one to unlock it</div>`
+                                : '<div class="lk">locked: kill an animal that has one, then pick it</div>');
   const r = el.getBoundingClientRect(), pr = ED.ui.pal.getBoundingClientRect();
   tip.style.display = 'block';
   const z = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ui')) || 1;
@@ -8551,7 +8692,7 @@ function edRenderSaved() {
   for (const b of el.querySelectorAll('[data-load]')) b.onclick = () => {
     const s = PROG.saved[+b.getAttribute('data-load')]; if (!s) return;
     edPushUndo(); ED.des = C.cloneDesign(s.design); ED.sel = null;
-    for (const id of designItems(ED.des)) if (!itemAvailable(id)) ED.grants.add(id);
+    { const g = grantCountOf(ED.des); for (const k in g) ED.grantCount[k] = Math.max(ED.grantCount[k] || 0, g[k]); }
     edTouch(); ED.savedOpen = false; edRefreshUI();
   };
   for (const b of el.querySelectorAll('[data-del]')) b.onclick = () => { PROG.saved.splice(+b.getAttribute('data-del'), 1); saveProgress(); edRenderSaved(); };
@@ -8756,7 +8897,7 @@ function openEditor(mode) {
   }
   ED.capFloor = ED.mode === 'game' ? C.designCost(ED.des) : 0;
   ED.origItems = designItems(ED.des);
-  ED.grants = new Set(ED.origItems);
+  ED.grantCount = grantCountOf(ED.des);
   ED.undo = []; ED.redo = []; ED.sel = null; ED.hover = null; ED.drag = null; ED.ghost = null; ED.savedOpen = false;
   ED.cam.yaw = 0.95; ED.cam.pitch = 0.2; ED.cam.zoom = 1;
   ED.open = true;
@@ -8911,7 +9052,7 @@ function preyItems(prey) {
   else {
     const seed = (prey.id * 2654435761) >>> 0;
     const pickN = (arr, k, salt) => {
-      const out = [], pool = arr.slice().sort((a, b) => (itemAvailable(a) - itemAvailable(b)) || (((seed ^ salt ^ a.length * 7) % 7) - 3));
+      const out = [], pool = arr.slice().sort((a, b) => (isUnlocked(a) - isUnlocked(b)) || (((seed ^ salt ^ a.length * 7) % 7) - 3));
       for (const id of pool) { if (out.length >= k) break; out.push(id); }
       return out;
     };
@@ -8927,7 +9068,7 @@ function preyItems(prey) {
   }
   // locked ones first, then the rest; at most nine
   ids = [...new Set(ids)].filter(id => VIS[id]);
-  ids.sort((a, b) => itemAvailable(a) - itemAvailable(b));
+  ids.sort((a, b) => isUnlocked(a) - isUnlocked(b));
   return ids.slice(0, 9);
 }
 function edOnKill(prey) {
@@ -8972,7 +9113,8 @@ function edHudLine() {
   const used = des ? C.designCost(des) : null;
   const cap = des ? edCapacity(des) : null;
   el.innerHTML = (des ? `<span class="k">genome</span> <span class="v">${used}/${cap}</span> &middot; ` : '') +
-    `<span class="k">kills</span> <span class="v">${PROG.kills}</span> &middot; <span class="k">parts</span> <span class="v">${PROG.unlocked.size}/${Object.keys(VIS).length}</span>`;
+    `<span class="k">kills</span> <span class="v">${PROG.kills}</span> &middot; <span class="k">parts</span> <span class="v">${PROG.unlocked.size}/${Object.keys(VIS).length}</span>` +
+    (c && c.hurtT > 0 ? `<br><span style="color:#ff8a76">under attack: cannot eat for ${c.hurtT.toFixed(1)} s</span>` : '');
 }
 
 // ================================================================== boot
