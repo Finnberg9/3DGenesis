@@ -13,7 +13,7 @@
     font-family:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;}
   canvas#gpu{display:block;width:100vw;height:100vh;cursor:crosshair}
   .panel{position:fixed;background:var(--panel);border:1px solid var(--line);border-radius:10px;
-    padding:10px 12px;backdrop-filter:blur(7px);font-size:12px;line-height:1.5;pointer-events:none}
+    padding:11px 14px;backdrop-filter:blur(7px);font-size:13px;line-height:1.5;pointer-events:none}
   #vitals{left:14px;bottom:14px;min-width:260px}
   #env{right:14px;top:14px;min-width:210px;text-align:right}
   #evt{left:50%;transform:translateX(-50%);bottom:96px;text-align:center;opacity:0;transition:opacity .4s;
@@ -27,16 +27,16 @@
   b.t{color:var(--cyan);font-weight:700;letter-spacing:.06em}
   #start{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
     background:radial-gradient(ellipse at 50% 40%,#0b2320,#04100e 70%);z-index:20;cursor:pointer}
-  #start .box{text-align:center;max-width:560px;padding:34px 40px;border:1px solid var(--line);
+  #start .box{text-align:center;max-width:640px;padding:36px 44px;border:1px solid var(--line);
     border-radius:14px;background:rgba(5,20,18,.72)}
-  #start h1{margin:0 0 6px;font-size:26px;letter-spacing:.16em;color:var(--cyan);font-weight:700}
-  #start p{margin:8px 0;color:var(--dim);font-size:13px;line-height:1.65}
-  #start .keys{margin-top:16px;font-size:12px;color:var(--ink);opacity:.85}
-  #start .go{margin-top:16px;color:var(--cyan);font-size:12px;letter-spacing:.06em}
+  #start h1{margin:0 0 8px;font-size:32px;letter-spacing:.16em;color:var(--cyan);font-weight:700}
+  #start p{margin:8px 0;color:var(--dim);font-size:14.5px;line-height:1.65}
+  #start .keys{margin-top:16px;font-size:13.5px;line-height:1.7;color:var(--ink);opacity:.85}
+  #start .go{margin-top:16px;color:var(--cyan);font-size:14px;letter-spacing:.06em}
   #start .arch{margin-top:18px}
   #start .alab{color:var(--dim);font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px}
-  #start .arch button{font-family:inherit;font-size:12px;background:#0a201d;color:var(--cyan);
-    border:1px solid var(--line);border-radius:7px;padding:7px 12px;margin:3px;cursor:pointer}
+  #start .arch button{font-family:inherit;font-size:14px;background:#0a201d;color:var(--cyan);
+    border:1px solid var(--line);border-radius:8px;padding:9px 15px;margin:4px;cursor:pointer}
   #start .arch button:hover{background:#12332e;border-color:#35e0d8}
   #err{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:30;
     background:#04100e;padding:40px;text-align:center;font-size:14px;line-height:1.7}
@@ -68,11 +68,11 @@
   #panel .stat{display:flex;justify-content:space-between;padding:2px 0;color:var(--dim)}
   #panel .stat b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
   #ptab{position:fixed;right:450px;top:12px;z-index:13;background:rgba(6,18,17,.85);border:1px solid var(--line);
-    color:var(--cyan);border-radius:7px;padding:5px 9px;font:600 11px 'IBM Plex Mono',monospace;cursor:pointer}
+    color:var(--cyan);border-radius:7px;padding:6px 11px;font:600 13px 'IBM Plex Mono',monospace;cursor:pointer}
   #ptab.closed{right:12px}
   #picker{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);z-index:14;display:none;
     background:rgba(4,14,13,.94);border:1px solid #3d8f86;border-radius:10px;padding:11px 13px;
-    min-width:290px;backdrop-filter:blur(8px);font-size:12px}
+    min-width:320px;backdrop-filter:blur(8px);font-size:13.5px}
   #picker .ptitle{color:var(--cyan);font-size:11px;letter-spacing:.10em;text-transform:uppercase;
     margin-bottom:8px;font-weight:700}
   #picker .popt,#picker .pskip{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:6px;color:var(--ink)}
@@ -93,7 +93,7 @@
   @media (prefers-reduced-motion:reduce){#mini{transition:none}}
   #act{position:fixed;left:50%;top:56%;transform:translateX(-50%);z-index:12;display:none;
     background:rgba(4,14,13,.86);border:1px solid var(--line);border-radius:8px;padding:6px 11px;
-    font-size:12px;color:var(--ink);text-align:center;pointer-events:none;backdrop-filter:blur(6px)}
+    font-size:13.5px;color:var(--ink);text-align:center;pointer-events:none;backdrop-filter:blur(6px)}
   #act b{color:var(--cyan);text-transform:uppercase;font-size:11px;letter-spacing:.08em}
   #act .keys{margin-top:4px;font-size:11px;color:var(--dim)}
   #act .keys span{display:inline-block;border:1px solid var(--line);border-radius:4px;
@@ -157,6 +157,14 @@
   #panel h2{font-size:12px!important;letter-spacing:.16em!important;color:#35e0d8!important;margin-bottom:12px!important}
   #panel .card.brief p{font-size:13.5px;line-height:1.6}
   @media (prefers-reduced-motion:reduce){#panel .toggles label{transition:none}}
+
+  /* ---------- interface scale: every menu is zoomed by --ui (set by script) ---------- */
+  #panel,#ptab,.panel,#start .box,#err>div,#picker,#mini,#act,#warn{zoom:var(--ui,1)}
+  #panel .uisz{display:flex;align-items:center;gap:8px;margin:0 0 12px;font-size:13px;color:var(--dim)}
+  #panel .uisz span{flex:1}
+  #panel .uisz button{width:auto!important;margin:0!important;padding:5px 11px!important;font-size:15px;line-height:1}
+  #panel .uisz #uiAuto{font-size:12px}
+  #panel .uisz b{min-width:54px;text-align:center;color:var(--ink);font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -192,7 +200,9 @@
 
   <div class="card">
     <h2>control panel</h2>
-    <div class="popbox" title="number of founder animals placed on the island. Takes effect on reset.">
+    <div class="uisz" title="scales every menu and overlay. Auto fits your screen resolution."><span>interface size</span>
+        <button type="button" id="uiDown" aria-label="smaller interface">&minus;</button><b id="uiVal">auto</b><button type="button" id="uiUp" aria-label="larger interface">+</button><button type="button" id="uiAuto">auto</button></div>
+      <div class="popbox" title="number of founder animals placed on the island. Takes effect on reset.">
         <div class="pop-h"><span>start population</span><em>applies on reset</em></div>
         <div class="pop-row"><input id="startPopR" type="range" min="2" max="500" step="1" value="50" aria-label="start population slider"><input id="startPop" type="number" min="2" max="2000" value="50" aria-label="start population"></div>
         <div class="ctl-d">founders placed on the island. Slider covers 2 to 500; type up to 2000.</div>
@@ -215,7 +225,7 @@
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">corpse yield</span><b id="cyv">1.0</b></div><input id="cy" type="range" min="0.2" max="4" step="0.1" value="1"><div class="ctl-d">multiplier on corpse energy. Live, applies to new corpses.</div></div>
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">pre-run</span><b id="prerunv">0</b></div><input id="prerun" type="range" min="0" max="300" step="10" value="0"><div class="ctl-d">biological seconds to run the world before you enter it. 0 = you witness the very first generation. Takes effect on reset.</div></div>
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">food patchiness</span><b id="fpv">0.70</b></div><input id="fp" type="range" min="0" max="1" step="0.05" value="0.7"><div class="ctl-d">how strongly food clusters into thickets and bare ground. Takes effect on reset.</div></div>
-    <div class="ctl"><div class="ctl-h"><span class="ctl-n">founder diversity</span><b id="fdv">0.00</b></div><input id="fd" type="range" min="0" max="1" step="0.05" value="0"><div class="ctl-d">how far founders are pre-mutated apart. Takes effect on reset.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">founder diversity</span><b id="fdv">0.40</b></div><input id="fd" type="range" min="0" max="1" step="0.05" value="0.4"><div class="ctl-d">how far founders are pre-mutated apart. Takes effect on reset.</div></div>
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">height variation</span><b id="trv">1.00</b></div><input id="trelief" type="range" min="0.3" max="2.2" step="0.05" value="1"><div class="ctl-d">how tall mountains and ridges rise, and how rough the general terrain is. 1 = default. Takes effect on reset.</div></div>
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">water depth</span><b id="twv">1.00</b></div><input id="twater" type="range" min="0.3" max="2.5" step="0.05" value="1"><div class="ctl-d">how deep the open ocean and inland lakes cut below the waterline. 1 = default. Takes effect on reset.</div></div>
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">tree density</span><b id="ttv">1.00</b></div><input id="ttree" type="range" min="0.2" max="2.5" step="0.05" value="1"><div class="ctl-d">fraction of eligible plants that render as full trees vs low ground cover. 1 = default. Live.</div></div>
@@ -5154,7 +5164,7 @@ function panelOpts() {
     timeScale: num('tscale', 0.12), plantEnergy: num('pe', 30),
     dayLen: num('dayl', 6), yearLen: num('yearl', 70),
     carrionLife: num('clife', 12), carrionYield: num('cy', 1),
-    founderDiversity: num('fd', 0), foodPatchiness: num('fp', 0.7), flags: panelFlags(),
+    founderDiversity: num('fd', 0.4), foodPatchiness: num('fp', 0.7), flags: panelFlags(),
     terrainRelief: num('trelief', 1), waterDepthMul: num('twater', 1),
     regionDensity: num('tregion', 1), treeDensity: num('ttree', 1),
   };
@@ -5610,6 +5620,53 @@ window.__G3D.boot = init();
   }
   all();
   window.addEventListener('load', function () { if (box && sl) { var v = parseInt(box.value, 10); if (isFinite(v)) sl.value = String(Math.min(500, Math.max(2, v))); } all(); });
+})();
+</script>
+
+<script>
+/* Interface scale. On high-resolution screens at 100% OS scaling every menu was
+   tiny, so all overlays are CSS-zoomed by a factor that follows the viewport size
+   (1.0 at ~1600x900, 2.0 at ~3200x1800), times an optional user multiplier that
+   is remembered per browser. UI only; no simulation state is touched. */
+(function () {
+  'use strict';
+  var KEY = 'genesis3d.uiScale', PANEL_W = 450, STEP = 0.1, MIN_M = 0.6, MAX_M = 2.0;
+  var mult = 1, manual = false;
+  try { var sv = parseFloat(localStorage.getItem(KEY)); if (isFinite(sv) && sv >= MIN_M && sv <= MAX_M) { mult = sv; manual = true; } } catch (_) {}
+  function autoScale() {
+    var w = window.innerWidth || 1600, h = window.innerHeight || 900;
+    var z = Math.min(w / 1600, h / 900);
+    return Math.max(1, Math.min(3, z));
+  }
+  var last = 0;
+  function apply(fire) {
+    var w = window.innerWidth || 1600;
+    var z = autoScale() * mult;
+    z = Math.min(z, (w * 0.5) / PANEL_W);       // side panel never takes more than half the screen
+    z = Math.max(0.75, Math.min(3.5, z));
+    z = Math.round(z * 100) / 100;
+    var lbl = document.getElementById('uiVal');
+    if (lbl) lbl.textContent = manual ? Math.round(mult * 100) + '%' : 'auto';
+    if (z === last) return;
+    last = z;
+    document.documentElement.style.setProperty('--ui', String(z));
+    // the canvas area changed size without a window resize; let the app re-fit its buffers
+    if (fire) { try { window.dispatchEvent(new Event('resize')); } catch (_) {} }
+  }
+  function save() { try { if (manual) localStorage.setItem(KEY, String(mult)); else localStorage.removeItem(KEY); } catch (_) {} }
+  function bump(d) { mult = Math.max(MIN_M, Math.min(MAX_M, Math.round((mult + d) * 10) / 10)); manual = true; save(); apply(true); }
+  var up = document.getElementById('uiUp'), dn = document.getElementById('uiDown'), au = document.getElementById('uiAuto');
+  if (up) up.addEventListener('click', function () { bump(STEP); });
+  if (dn) dn.addEventListener('click', function () { bump(-STEP); });
+  if (au) au.addEventListener('click', function () { mult = 1; manual = false; save(); apply(true); });
+  var pending = false;
+  window.addEventListener('resize', function () {   // our own dispatched resize is a no-op here (z unchanged)
+    if (pending) return; pending = true;
+    requestAnimationFrame(function () { pending = false; apply(true); });
+  });
+  apply(false);
+  // first layout used the zoomed panel width: make the app re-measure its canvas once loaded
+  window.addEventListener('load', function () { apply(false); try { window.dispatchEvent(new Event('resize')); } catch (_) {} });
 })();
 </script>
 </body>
