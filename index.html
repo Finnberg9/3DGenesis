@@ -3079,58 +3079,84 @@
       balls.push({ x: tx, y: ty, z: 0, r, g: 'tail', hide: tl <= 0.05 });
     }
     const sk = { balls, a, b, headIdx, tailStart, tailLen: tl, neckLen, NK, plan: P, flex: !!P.flex };
-    sk.skin = densifySkin(sk);
+    buildBodyPrims(sk);
     return sk;
   }
-  // The skin is meshed from a DENSER chain than the anchor balls: every link
-  // of spine -> neck -> head (and each lateral mass ball to the spine) is
-  // filled with in-between balls spaced well under their radius, so no slider
-  // combination can stretch the body into separate blobs with gaps between.
-  function densifySkin(sk) {
+  // ---- signed-distance skin -------------------------------------------------
+  // The skin is a smooth union of tapered capsules ("round cones") running
+  // through the skeleton: spine, lateral mass, neck, head and snout, and the
+  // tail. A round cone is continuous by construction, so no slider setting can
+  // open a gap, and a smooth minimum blends each joint into its neighbour.
+  // Radii are the balls' visible radii (the old metaball iso sat at ~0.8 r).
+  const VISR = { body: 0.92, neck: 0.86, head: 0.8, tail: 0.95 };
+  function smin(a, b, k) {
+    if (k <= 0) return Math.min(a, b);
+    const h = Math.max(k - Math.abs(a - b), 0) / k;
+    return Math.min(a, b) - h * h * k * 0.25;
+  }
+  // exact signed distance to a round cone (sphere-swept segment, radius ra at a
+  // tapering to rb at b), after Inigo Quilez
+  function sdRoundCone(px, py, pz, ax, ay, az, bx, by, bz, ra, rb) {
+    const bax = bx - ax, bay = by - ay, baz = bz - az;
+    const l2 = bax * bax + bay * bay + baz * baz;
+    if (l2 < 1e-10) { const dx = px - ax, dy = py - ay, dz = pz - az; return Math.sqrt(dx * dx + dy * dy + dz * dz) - Math.max(ra, rb); }
+    const rr = ra - rb, a2 = l2 - rr * rr, il2 = 1 / l2;
+    const pax = px - ax, pay = py - ay, paz = pz - az;
+    const y = pax * bax + pay * bay + paz * baz, z = y - l2;
+    const xx = pax * l2 - bax * y, xy = pay * l2 - bay * y, xz = paz * l2 - baz * y;
+    const x2 = xx * xx + xy * xy + xz * xz, y2 = y * y * l2, z2 = z * z * l2;
+    const k = Math.sign(rr) * rr * rr * x2;
+    if (Math.sign(z) * a2 * z2 > k) return Math.sqrt(x2 + z2) * il2 - rb;
+    if (Math.sign(y) * a2 * y2 < k) return Math.sqrt(x2 + y2) * il2 - ra;
+    return (Math.sqrt(x2 * a2 * il2) + y * rr) * il2 - ra;
+  }
+  function primDist(q, x, y, z) {
+    return q.t === 's' ? Math.hypot(x - q.ax, y - q.ay, z - q.az) - q.ra
+                       : sdRoundCone(x, y, z, q.ax, q.ay, q.az, q.bx, q.by, q.bz, q.ra, q.rb);
+  }
+  function buildBodyPrims(sk) {
     const B = sk.balls, P = sk.plan;
-    const live = (i) => B[i] && !B[i].hide && B[i].g !== 'tail';
-    const out = [];
-    for (let i = 0; i < B.length; i++) if (live(i)) out.push({ x: B[i].x, y: B[i].y, z: B[i].z, r: B[i].r, f: 1 });
-    const link = (i, j) => {
+    const live = (i) => B[i] && !B[i].hide;
+    const vr = (i) => B[i].r * (VISR[B[i].g] || 0.9);
+    const body = [], tail = [];
+    const cone = (i, j, out, k) => {
       if (!live(i) || !live(j)) return;
-      const A = B[i], C2 = B[j];
-      const d = Math.hypot(C2.x - A.x, C2.y - A.y, C2.z - A.z);
-      const rmin = Math.max(0.05, Math.min(A.r, C2.r));
-      const n = Math.min(40, Math.ceil(d / (rmin * 0.45)) - 1);
-      for (let k = 1; k <= n; k++) {
-        const u = k / (n + 1);
-        out.push({ x: A.x + (C2.x - A.x) * u, y: A.y + (C2.y - A.y) * u, z: A.z + (C2.z - A.z) * u, r: A.r + (C2.r - A.r) * u, f: 1 });
-      }
+      out.push({ t: 'c', ax: B[i].x, ay: B[i].y, az: B[i].z, bx: B[j].x, by: B[j].y, bz: B[j].z, ra: vr(i), rb: vr(j), k, i, j });
     };
+    const sph = (i, out, k) => { if (live(i)) out.push({ t: 's', ax: B[i].x, ay: B[i].y, az: B[i].z, ra: vr(i), k, i, j: i }); };
+    const kb = 0.32 * sk.b;
+    for (let i = 0; i + 1 < P.seg; i++) cone(i, i + 1, body, kb);
     const nearestSpine = (x, y, z) => {
       let bi = 0, bd = Infinity;
       for (let i = 0; i < P.seg; i++) { const d = Math.hypot(B[i].x - x, B[i].y - y, B[i].z - z); if (d < bd) { bd = d; bi = i; } }
       return bi;
     };
-    for (let i = 0; i + 1 < P.seg; i++) link(i, i + 1);
-    for (let i = P.seg; i < P.seg + 6; i++) if (live(i)) link(i, nearestSpine(B[i].x, B[i].y, B[i].z));
-    // neck chain from the spine ball nearest its base, through the head to the snout
+    for (let i = P.seg; i < P.seg + 6; i++) if (live(i)) { sph(i, body, kb * 1.4); cone(i, nearestSpine(B[i].x, B[i].y, B[i].z), body, kb * 1.4); }
     const chain = [];
     for (let i = P.seg + 6; i < sk.headIdx; i++) if (live(i)) chain.push(i);
-    chain.push(sk.headIdx, sk.headIdx + 1);
+    chain.push(sk.headIdx);
     let prev = nearestSpine(B[chain[0]].x, B[chain[0]].y, B[chain[0]].z);
-    for (const i of chain) { link(prev, i); prev = i; }
-    return out;
-  }
-  function wyv(d2, R2) { if (d2 >= R2) return 0; const t = 1 - d2 / R2; return t * t * t; }
-  // Skin field of the non-tail balls (tail is drawn as its own chain).
-  function skinField(sk, x, y, z) {
-    let f = 0;
-    const B = sk.skin || sk.balls;
-    for (let i = 0; i < B.length; i++) {
-      const k = B[i];
-      if (k.g === 'tail' || k.hide) continue;
-      const R = k.r * SKIN_REACH;
-      const dx = x - k.x, dy = y - k.y, dz = z - k.z;
-      f += wyv(dx * dx + dy * dy + dz * dz, R * R);
+    for (const i of chain) { cone(prev, i, body, 0.18); prev = i; }
+    sph(sk.headIdx, body, 0.22);
+    cone(sk.headIdx, sk.headIdx + 1, body, 0.2);
+    // tail: from the rump through every tail ball
+    if (sk.tailLen > 0.05) {
+      const t0 = { x: -sk.a * 0.92, y: sk.b * 0.08, z: 0 };
+      const r0 = B[sk.tailStart].r * 1.15 * VISR.tail;
+      tail.push({ t: 'c', ax: t0.x, ay: t0.y, az: t0.z, bx: B[sk.tailStart].x, by: B[sk.tailStart].y, bz: B[sk.tailStart].z, ra: r0, rb: vr(sk.tailStart), k: 0.25, i: sk.tailStart, j: sk.tailStart, bone: 'tail0' });
+      for (let i = sk.tailStart; i + 1 < sk.tailStart + P.ts; i++) cone(i, i + 1, tail, 0.12);
     }
-    return f;
+    sk.prims = body; sk.tailPrims = tail;
   }
+  function sdfSkin(sk, x, y, z, withTail) {
+    let d = 1e9;
+    const L = sk.prims;
+    for (let n = 0; n < L.length; n++) d = smin(d, primDist(L[n], x, y, z), L[n].k);
+    if (withTail) { const T = sk.tailPrims; for (let n = 0; n < T.length; n++) d = smin(d, primDist(T[n], x, y, z), T[n].k); }
+    return d;
+  }
+  // kept for callers that still think in fields: inside > 0.5, outside < 0.5
+  function skinField(sk, x, y, z) { return SKIN_ISO - sdfSkin(sk, x, y, z, false); }
   function nearestBall(sk, x, y, z, allowTail) {
     let best = 0, bd = Infinity;
     const B = sk.balls;
@@ -3142,56 +3168,34 @@
     }
     return best;
   }
-  function fieldNormal(sk, x, y, z) {
-    const e = 0.01;
-    const gx = skinField(sk, x + e, y, z) - skinField(sk, x - e, y, z);
-    const gy = skinField(sk, x, y + e, z) - skinField(sk, x, y - e, z);
-    const gz = skinField(sk, x, y, z + e) - skinField(sk, x, y, z - e);
+  function fieldNormal(sk, x, y, z, withTail) {
+    const e = 0.004;
+    const gx = sdfSkin(sk, x + e, y, z, withTail) - sdfSkin(sk, x - e, y, z, withTail);
+    const gy = sdfSkin(sk, x, y + e, z, withTail) - sdfSkin(sk, x, y - e, z, withTail);
+    const gz = sdfSkin(sk, x, y, z + e, withTail) - sdfSkin(sk, x, y, z - e, withTail);
     const l = Math.hypot(gx, gy, gz);
-    return l > 1e-9 ? [-gx / l, -gy / l, -gz / l] : [0, 1, 0];
+    return l > 1e-9 ? [gx / l, gy / l, gz / l] : [0, 1, 0];
   }
-  // Ray against the skin and the tail chain. Returns {p, n, b, t} or null.
+  // Ray against the whole skin (tail included) by sphere tracing the distance
+  // field. Returns {p, n, b, t} or null.
   function raySkin(sk, ox, oy, oz, dx, dy, dz, tMax) {
-    let best = null;
-    // tail (and every flex chain ball) as spheres
-    const B = sk.balls;
-    for (let i = 0; i < B.length; i++) {
-      const k = B[i];
-      if (k.hide || k.g !== 'tail') continue;
-      const cx = ox - k.x, cy = oy - k.y, cz = oz - k.z;
-      const bq = cx * dx + cy * dy + cz * dz, cq = cx * cx + cy * cy + cz * cz - k.r * k.r;
-      const disc = bq * bq - cq;
-      if (disc < 0) continue;
-      const t = -bq - Math.sqrt(disc);
-      if (t > 0 && t < tMax && (!best || t < best.t)) {
-        const px = ox + dx * t, py = oy + dy * t, pz = oz + dz * t;
-        const l = k.r || 1;
-        best = { t, p: [px, py, pz], n: [(px - k.x) / l, (py - k.y) / l, (pz - k.z) / l], b: i };
+    let t = 0;
+    let d0 = sdfSkin(sk, ox, oy, oz, true);
+    if (d0 < 0) return null;                 // started inside the body
+    for (let it = 0; it < 256 && t < tMax; it++) {
+      const px = ox + dx * t, py = oy + dy * t, pz = oz + dz * t;
+      const d = sdfSkin(sk, px, py, pz, true);
+      if (d < 0.0015) {
+        return { t, p: [px, py, pz], n: fieldNormal(sk, px, py, pz, true), b: nearestBall(sk, px, py, pz, true) };
       }
+      t += Math.max(d * 0.85, 0.002);
     }
-    const lim = best ? best.t : tMax;
-    const step = 0.025;
-    let prev = skinField(sk, ox, oy, oz), tp = 0;
-    for (let t = step; t < lim; t += step) {
-      const f = skinField(sk, ox + dx * t, oy + dy * t, oz + dz * t);
-      if (f >= SKIN_ISO && prev < SKIN_ISO) {
-        let lo = tp, hi = t;
-        for (let it = 0; it < 10; it++) {
-          const m = (lo + hi) * 0.5;
-          if (skinField(sk, ox + dx * m, oy + dy * m, oz + dz * m) >= SKIN_ISO) hi = m; else lo = m;
-        }
-        const px = ox + dx * hi, py = oy + dy * hi, pz = oz + dz * hi;
-        return { t: hi, p: [px, py, pz], n: fieldNormal(sk, px, py, pz), b: nearestBall(sk, px, py, pz, false) };
-      }
-      prev = f; tp = t;
-    }
-    return best;
+    return null;
   }
   // Pull a point back onto the surface along its own normal.
   function snapToSkin(sk, p, n) {
-    const L = 1.2;
-    const hit = raySkin(sk, p[0] + n[0] * L, p[1] + n[1] * L, p[2] + n[2] * L, -n[0], -n[1], -n[2], L * 2.2);
-    return hit;
+    const L = 1.4;
+    return raySkin(sk, p[0] + n[0] * L, p[1] + n[1] * L, p[2] + n[2] * L, -n[0], -n[1], -n[2], L * 2.4);
   }
   // Anchor stored on a part: ball index + offset from that ball's centre in
   // units of its radius, so a slider that fattens the ball moves the part out
@@ -3394,7 +3398,7 @@
   const DESIGN_API = {
     ITEM_SIM, ITEM_SINGLE, PLANS, BODY_RANGE, planProfile, buildDesignSkeleton, skinField, raySkin, snapToSkin,
     anchorPos, setAnchor, reseatDesign, classifyLimbs, designCost, cloneDesign, compileDesign, jitterDesign,
-    nearestBall, fieldNormal, SKIN_REACH, SKIN_ISO,
+    nearestBall, fieldNormal, SKIN_REACH, SKIN_ISO, sdfSkin, sdRoundCone, primDist, smin,
   };
   // ---------------------------------------------------------- default designs
   // Each body plan ships with a starting body: eyes, a mouth and whatever
@@ -3919,7 +3923,7 @@ function makeCone(seg) {
 let dev, ctx, fmt, canvas, depthTex, msaaTex, world, terrain;
 const SAMPLES = 4;   // MSAA; the jagged silhouettes were the single worst artefact
 let gBuf, gArr = new Float32Array(32);          // 128-byte globals block
-let terrainPipe, instPipe, waterPipe, bodyPipe, unlitPipe, tubePipe, overPipe, bindG;
+let terrainPipe, instPipe, waterPipe, bodyPipe, unlitPipe, tubePipe, overPipe, skinPipe, skinBind, skinInstVB, bindG;
 let bodyInstVB;
 const BINST_FLOATS = 20;                    // pos3 yaw scale base3 coat3 detail3 pattern pad wave3 pad
 const MAX_BODY_INST = 1200;
@@ -4120,6 +4124,116 @@ struct VO { @builtin(position) pos: vec4<f32>, @location(0) nrm: vec3<f32>,
   else if (tis > 0.5) { col = vec3<f32>(0.90, 0.86, 0.74); }
   return vec4<f32>(shade(col, i.nrm, i.wpos), 1.0);
 }`;
+// Skinned creature skin: two-bone vertex blend, lateral wave for serpents,
+// noise-based coat patterns in rest space (so they never swim over moving
+// limbs), baked ambient occlusion, per-vertex part colour, leathery micro
+// relief and a soft sheen.
+const WGSL_SKIN = WGSL_COMMON + `
+@group(0) @binding(1) var<storage, read> bones : array<mat4x4<f32>>;
+struct VO { @builtin(position) pos: vec4<f32>, @location(0) nrm: vec3<f32>,
+            @location(1) wpos: vec3<f32>, @location(2) opos: vec3<f32>, @location(3) onrm: vec3<f32>,
+            @location(4) base: vec3<f32>, @location(5) coat: vec3<f32>, @location(6) detail: vec3<f32>,
+            @location(7) misc: vec4<f32>, @location(8) vcol: vec3<f32> };
+@vertex fn vs(@location(0) p: vec3<f32>, @location(1) n: vec3<f32>, @location(2) ao: f32,
+              @location(3) bn: vec2<f32>, @location(4) bw: f32, @location(5) vc: vec3<f32>, @location(6) paint: f32,
+              @location(7) iPos: vec3<f32>, @location(8) iYaw: f32, @location(9) iScl: f32,
+              @location(10) iBase: vec3<f32>, @location(11) iCoat: vec3<f32>, @location(12) iDetail: vec3<f32>,
+              @location(13) iPat: f32, @location(14) iWave: vec3<f32>, @location(15) iBone: f32) -> VO {
+  let b0 = i32(iBone + bn.x + 0.5);
+  let b1 = i32(iBone + bn.y + 0.5);
+  let M0 = bones[b0]; let M1 = bones[b1];
+  let q0 = M0 * vec4<f32>(p, 1.0); let q1 = M1 * vec4<f32>(p, 1.0);
+  var pp = q0.xyz * bw + q1.xyz * (1.0 - bw);
+  let hl = q0.w * bw + q1.w * (1.0 - bw);
+  let n0 = mat3x3<f32>(M0[0].xyz, M0[1].xyz, M0[2].xyz) * n;
+  let n1 = mat3x3<f32>(M1[0].xyz, M1[1].xyz, M1[2].xyz) * n;
+  let nn = normalize(n0 * bw + n1 * (1.0 - bw));
+  if (iWave.x > 0.0) {
+    pp.z += iWave.x * sin(iWave.y - pp.x * 2.4) * (0.35 + 0.65 * clamp((iWave.z - pp.x) / (2.0 * iWave.z), 0.0, 1.0));
+  }
+  let s = sin(iYaw); let c = cos(iYaw);
+  let q = pp * iScl;
+  let w = vec3<f32>(q.x * c - q.z * s, q.y, q.x * s + q.z * c) + iPos;
+  let rn = vec3<f32>(nn.x * c - nn.z * s, nn.y, nn.x * s + nn.z * c);
+  var o: VO; o.pos = g.viewProj * vec4<f32>(w, 1.0);
+  o.nrm = rn; o.wpos = w; o.opos = p; o.onrm = n;
+  o.base = iBase; o.coat = iCoat; o.detail = iDetail; o.misc = vec4<f32>(iPat, ao, paint, hl); o.vcol = vc;
+  return o;
+}
+fn hash3(p: vec3<f32>) -> f32 {
+  let q = fract(p * vec3<f32>(0.1031, 0.1030, 0.0973));
+  let r = q + dot(q, q.yxz + 33.33);
+  return fract((r.x + r.y) * r.z);
+}
+fn vnoise(p: vec3<f32>) -> f32 {
+  let i = floor(p); let f = fract(p);
+  let u = f * f * (3.0 - 2.0 * f);
+  let a = mix(mix(hash3(i), hash3(i + vec3<f32>(1.0, 0.0, 0.0)), u.x),
+              mix(hash3(i + vec3<f32>(0.0, 1.0, 0.0)), hash3(i + vec3<f32>(1.0, 1.0, 0.0)), u.x), u.y);
+  let b = mix(mix(hash3(i + vec3<f32>(0.0, 0.0, 1.0)), hash3(i + vec3<f32>(1.0, 0.0, 1.0)), u.x),
+              mix(hash3(i + vec3<f32>(0.0, 1.0, 1.0)), hash3(i + vec3<f32>(1.0, 1.0, 1.0)), u.x), u.y);
+  return mix(a, b, u.z);
+}
+fn fbm(p: vec3<f32>) -> f32 {
+  return vnoise(p) * 0.55 + vnoise(p * 2.03 + 11.7) * 0.28 + vnoise(p * 4.1 + 3.1) * 0.17;
+}
+// distance to the nearest and second-nearest jittered cell point
+fn worley(p: vec3<f32>) -> vec2<f32> {
+  let i = floor(p); let f = fract(p);
+  var d1 = 9.0; var d2 = 9.0;
+  for (var z = -1; z <= 1; z++) { for (var y = -1; y <= 1; y++) { for (var x = -1; x <= 1; x++) {
+    let o = vec3<f32>(f32(x), f32(y), f32(z));
+    let c = i + o;
+    let r = o + vec3<f32>(hash3(c), hash3(c + 17.1), hash3(c + 41.7)) * 0.8 + 0.1 - f;
+    let d = dot(r, r);
+    if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) { d2 = d; }
+  } } }
+  return vec2<f32>(sqrt(d1), sqrt(d2));
+}
+@fragment fn fs(i: VO) -> @location(0) vec4<f32> {
+  let p = i.opos; let n = normalize(i.onrm);
+  let pat = i.misc.x;
+  let edge = fbm(p * 2.2) - 0.5;
+  // coat: countershaded underside with a soft, noisy boundary
+  let coatW = smoothstep(-0.12, 0.42, -n.y + edge * 0.45) * 0.95;
+  var m = 0.0;
+  if (pat > 0.5 && pat < 1.5) {            // stripes, warped so they look grown, not drawn
+    let v = sin(p.x * 6.2 + fbm(p * 1.4) * 3.2 + p.y * 1.1);
+    m = smoothstep(0.25, 0.55, v);
+  } else if (pat > 1.5 && pat < 2.5) {     // spots
+    let wv = worley(p * 2.8 + vec3<f32>(edge * 0.6));
+    m = 1.0 - smoothstep(0.26, 0.36, wv.x);
+  } else if (pat > 2.5 && pat < 3.5) {     // patches separated by pale seams
+    let wv = worley(p * 1.9 + vec3<f32>(edge * 0.8));
+    m = smoothstep(0.05, 0.12, wv.y - wv.x);
+  } else if (pat > 3.5 && pat < 4.5) {     // dark saddle along the back
+    m = smoothstep(0.2, 0.5, n.y + edge * 0.7);
+  } else if (pat > 4.5) {                  // speckle
+    let wv = worley(p * 9.0);
+    m = 1.0 - smoothstep(0.14, 0.22, wv.x);
+  }
+  var painted = mix(i.base, i.detail, m * (1.0 - coatW));
+  painted = mix(painted, i.coat, coatW);
+  // subtle mottling so a flat colour still reads as living skin
+  painted *= 0.93 + 0.12 * fbm(p * 7.0);
+  var col = mix(i.vcol, painted, clamp(i.misc.z, 0.0, 1.0));
+  // leathery micro relief: perturb the shading normal with a small noise vector
+  let bp = p * 26.0;
+  let bump = vec3<f32>(vnoise(bp) - 0.5, vnoise(bp + 19.3) - 0.5, vnoise(bp + 37.1) - 0.5);
+  let N = normalize(i.nrm + bump * 0.22);
+  let ao = pow(clamp(i.misc.y, 0.0, 1.0), 1.15);
+  col = col * i.misc.w;
+  var lit = shade(col * (0.35 + 0.65 * ao), N, i.wpos);
+  // soft sheen and a warm light-bleed on the terminator, like thin skin
+  let L = normalize(g.lightDir.xyz);
+  let V = normalize(g.camPos.xyz - i.wpos);
+  let H = normalize(L + V);
+  lit += vec3<f32>(1.0, 0.97, 0.9) * pow(max(dot(N, H), 0.0), 40.0) * 0.12 * g.params.z * ao;
+  let wrap = clamp(1.0 - abs(dot(N, L)), 0.0, 1.0);
+  lit += col * vec3<f32>(0.22, 0.08, 0.05) * wrap * wrap * 0.35 * g.params.z;
+  return vec4<f32>(lit, 1.0);
+}`;
+
 // Unlit geometry with vertex colour (the editor's sky dome)
 const WGSL_UNLIT = WGSL_COMMON + `
 struct VO { @builtin(position) pos: vec4<f32>, @location(0) col: vec3<f32> };
@@ -4297,6 +4411,34 @@ function buildPipelines() {
     primitive: { topology: 'triangle-list', cullMode: 'back' },
     depthStencil: { format: 'depth24plus', depthWriteEnabled: false, depthCompare: 'always' }, multisample: MS,
   });
+  const skm = dev.createShaderModule({ code: WGSL_SKIN });
+  skinPipe = dev.createRenderPipeline({
+    layout: 'auto',
+    vertex: { module: skm, entryPoint: 'vs', buffers: [
+      { arrayStride: 56, attributes: [
+        { shaderLocation: 0, offset: 0,  format: 'float32x3' },
+        { shaderLocation: 1, offset: 12, format: 'float32x3' },
+        { shaderLocation: 2, offset: 24, format: 'float32'   },
+        { shaderLocation: 3, offset: 28, format: 'float32x2' },
+        { shaderLocation: 4, offset: 36, format: 'float32'   },
+        { shaderLocation: 5, offset: 40, format: 'float32x3' },
+        { shaderLocation: 6, offset: 52, format: 'float32'   }] },
+      { arrayStride: BINST_FLOATS * 4, stepMode: 'instance', attributes: [
+        { shaderLocation: 7,  offset: 0,  format: 'float32x3' },
+        { shaderLocation: 8,  offset: 12, format: 'float32'   },
+        { shaderLocation: 9,  offset: 16, format: 'float32'   },
+        { shaderLocation: 10, offset: 20, format: 'float32x3' },
+        { shaderLocation: 11, offset: 32, format: 'float32x3' },
+        { shaderLocation: 12, offset: 44, format: 'float32x3' },
+        { shaderLocation: 13, offset: 56, format: 'float32'   },
+        { shaderLocation: 14, offset: 64, format: 'float32x3' },
+        { shaderLocation: 15, offset: 76, format: 'float32'   }] } ] },
+    fragment: { module: skm, entryPoint: 'fs', targets: [{ format: fmt }] },
+    primitive: { topology: 'triangle-list', cullMode: 'none' },
+    depthStencil: depthState, multisample: MS,
+  });
+  boneBuf = dev.createBuffer({ size: boneData.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+  skinInstVB = dev.createBuffer({ size: skinInstData.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
   const bm = dev.createShaderModule({ code: WGSL_BODY });
   bodyPipe = dev.createRenderPipeline({
     layout: 'auto',
@@ -4371,6 +4513,8 @@ function buildPipelines() {
   plantVB  = dev.createBuffer({ size: plantData.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
 }
 function makeBindGroups() {
+  skinBind = dev.createBindGroup({ layout: skinPipe.getBindGroupLayout(0), entries: [
+    { binding: 0, resource: { buffer: gBuf } }, { binding: 1, resource: { buffer: boneBuf } }] });
   bindG = {
     terrain: dev.createBindGroup({ layout: terrainPipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: gBuf } }] }),
     inst:    dev.createBindGroup({ layout: instPipe.getBindGroupLayout(0),    entries: [{ binding: 0, resource: { buffer: gBuf } }] }),
@@ -4978,6 +5122,8 @@ const bodyByMesh = new Map();
 let bodyCount = 0;
 function buildCreatureInstances(camX, camZ, t) {
   instCount = 0; spikeCount = 0; tubeN = 0;
+  resetSkinFrame();
+  pumpDesignMeshes(6);
   bodyBatches.length = 0;
   bodyByMesh.clear(); bodyCount = 0;
   pumpMeshQueue();
@@ -5309,6 +5455,8 @@ function makeG(P, X, Y, Z, S, fwL, upL) {
       return makeG(P, v3.rot(X, k, ang), v3.rot(Y, k, ang), v3.rot(Z, k, ang), S, g.fw, g.up);
     },
     at(x, y, z) { return makeG(W(x, y, z), X, Y, Z, S, g.fw, g.up); },
+    // smooth tapered tube between two local points (radii in local units)
+    tb(a, b, ra, rb, col) { const A = W(a[0], a[1], a[2]), Bw = W(b[0], b[1], b[2]); pushT(A[0], A[1], A[2], Bw[0], Bw[1], Bw[2], ra * S, col, rb * S); },
   };
   return g;
 }
@@ -5815,17 +5963,6 @@ function designGeo(des) {
   if (des._geo && des._geoRev === (des._rev || 0)) return des._geo;
   const sk = C.buildDesignSkeleton(des);
   const cls = C.classifyLimbs(des, sk);
-  // iso radius of each ball, for flexible bodies drawn as a chain of spheres
-  const iso = sk.balls.map((k) => {
-    if (k.hide || k.g === 'tail') return k.r;
-    let lo = 0, hi = k.r * 1.6;
-    for (let it = 0; it < 14; it++) {
-      const m = (lo + hi) / 2;
-      if (C.skinField(sk, k.x, k.y + m, k.z) >= C.SKIN_ISO) lo = m; else hi = m;
-    }
-    return lo;
-  });
-  const skin = sk.skin.map(k => ({ x: k.x, y: k.y, z: k.z, r: k.r, f: 1 }));
   // extent in R units, for camera distance and interaction range
   let ext = 1;
   for (const k of sk.balls) if (!k.hide) ext = Math.max(ext, Math.hypot(k.x, k.y, k.z) + k.r);
@@ -5833,7 +5970,7 @@ function designGeo(des) {
     const f = v3.add(o.root, o.lb.f);
     ext = Math.max(ext, v3.len(f) + 0.3);
   }
-  des._geo = { sk, cls, iso, skin, ext };
+  des._geo = { sk, cls, ext };
   des._geoRev = des._rev || 0;
   return des._geo;
 }
@@ -5877,7 +6014,7 @@ const rotYv = (v, a) => { const c = Math.cos(a), s = Math.sin(a); return [v[0] *
 //   hl       { part, limb } highlighted objects, hide Set of dead tissue types
 //   lod      0 full, 1 no fine detail
 //   pushBody(mesh, colours) draws the skin
-function drawDesign(des, X) {
+function drawDesignOld(des, X) {
   const G = designGeo(des);
   const sk = G.sk, B = sk.balls, P = sk.plan;
   const col = des.col || { base: [0.5, 0.6, 0.5], coat: [0.9, 0.9, 0.8], detail: [0.2, 0.3, 0.2], pat: 0 };
@@ -6027,6 +6164,1049 @@ function drawLimbTube(a, b, c, th, R, col, fine) {
   }
 }
 
+// =====================================================================
+// FUSED CREATURE MESH (CPU side)
+// A designed creature is one continuous skin: body, neck, head, tail, limbs,
+// feet, hands, lips, eye sockets and every other fleshy part are primitives
+// of a single signed-distance field joined with smooth minimums, then meshed
+// with surface nets. Each vertex records the two bones that move it (so legs
+// bend at the knee and the tail swings), a baked ambient-occlusion term (so
+// creases under the jaw and in the armpits darken like real skin) and a
+// colour for parts painted their own colour.
+// Everything is in body-local rest space, in units of the body radius R.
+// =====================================================================
+const MESH_V_FLOATS = 14;   // pos3 nrm3 ao1 bone0 bone1 w0 col3 paint1
+// Flat, monomorphic copy of the primitives for the hot loops.
+const PS = 22;
+function packPrims(prims) {
+  const T = new Float64Array(prims.length * PS);
+  prims.forEach((q, i) => {
+    const o = i * PS;
+    T[o + 1] = q.ax; T[o + 2] = q.ay; T[o + 3] = q.az; T[o + 10] = q.k || 0;
+    if (q.t === 's') { T[o] = 0; T[o + 7] = q.ra; }
+    else if (q.t === 'c') {
+      const bax = q.bx - q.ax, bay = q.by - q.ay, baz = q.bz - q.az, l2 = bax * bax + bay * bay + baz * baz;
+      if (l2 < 1e-10) { T[o] = 0; T[o + 7] = Math.max(q.ra, q.rb); return; }
+      T[o] = 1; T[o + 4] = bax; T[o + 5] = bay; T[o + 6] = baz; T[o + 7] = q.ra; T[o + 8] = q.rb;
+      const rr = q.ra - q.rb; T[o + 9] = l2; T[o + 11] = rr; T[o + 12] = l2 - rr * rr; T[o + 13] = 1 / l2;
+    } else {
+      T[o] = 2;
+      T[o + 4] = q.ex[0] / q.rx; T[o + 5] = q.ex[1] / q.rx; T[o + 6] = q.ex[2] / q.rx;
+      T[o + 7] = q.ey[0] / q.ry; T[o + 8] = q.ey[1] / q.ry; T[o + 9] = q.ey[2] / q.ry;
+      T[o + 11] = q.ez[0] / q.rz; T[o + 12] = q.ez[1] / q.rz; T[o + 13] = q.ez[2] / q.rz;
+      T[o + 14] = 1 / q.rx; T[o + 15] = 1 / q.ry; T[o + 16] = 1 / q.rz; T[o + 17] = Math.min(q.rx, q.ry, q.rz);
+    }
+  });
+  return T;
+}
+function sdPacked(T, o, x, y, z) {
+  const px = x - T[o + 1], py = y - T[o + 2], pz = z - T[o + 3];
+  const ty = T[o];
+  if (ty === 0) return Math.sqrt(px * px + py * py + pz * pz) - T[o + 7];
+  if (ty === 1) {
+    const bax = T[o + 4], bay = T[o + 5], baz = T[o + 6], l2 = T[o + 9], rr = T[o + 11], a2 = T[o + 12], il2 = T[o + 13];
+    const yy = px * bax + py * bay + pz * baz, zz = yy - l2;
+    const xx = px * l2 - bax * yy, xy = py * l2 - bay * yy, xz = pz * l2 - baz * yy;
+    const x2 = xx * xx + xy * xy + xz * xz, y2 = yy * yy * l2, z2 = zz * zz * l2;
+    const k = (rr > 0 ? 1 : rr < 0 ? -1 : 0) * rr * rr * x2;
+    if ((zz > 0 ? a2 * z2 : zz < 0 ? -a2 * z2 : 0) > k) return Math.sqrt(x2 + z2) * il2 - T[o + 8];
+    if ((yy > 0 ? a2 * y2 : yy < 0 ? -a2 * y2 : 0) < k) return Math.sqrt(x2 + y2) * il2 - T[o + 7];
+    return (Math.sqrt(x2 * a2 * il2) + yy * rr) * il2 - T[o + 7];
+  }
+  const u = px * T[o + 4] + py * T[o + 5] + pz * T[o + 6];
+  const v = px * T[o + 7] + py * T[o + 8] + pz * T[o + 9];
+  const w = px * T[o + 11] + py * T[o + 12] + pz * T[o + 13];
+  const k0 = Math.sqrt(u * u + v * v + w * w);
+  const u2 = u * T[o + 14], v2 = v * T[o + 15], w2 = w * T[o + 16];
+  const k1 = Math.sqrt(u2 * u2 + v2 * v2 + w2 * w2);
+  return k1 > 1e-9 ? k0 * (k0 - 1) / k1 : -T[o + 17];
+}
+function primBounds(q) {
+  const m = q.k * 0.5;
+  if (q.t === 's') return [q.ax - q.ra - m, q.ay - q.ra - m, q.az - q.ra - m, q.ax + q.ra + m, q.ay + q.ra + m, q.az + q.ra + m];
+  if (q.t === 'c') {
+    const r = Math.max(q.ra, q.rb) + m;
+    return [Math.min(q.ax, q.bx) - r, Math.min(q.ay, q.by) - r, Math.min(q.az, q.bz) - r,
+            Math.max(q.ax, q.bx) + r, Math.max(q.ay, q.by) + r, Math.max(q.az, q.bz) + r];
+  }
+  const r = Math.max(q.rx, q.ry, q.rz) + m;
+  return [q.ax - r, q.ay - r, q.az - r, q.ax + r, q.ay + r, q.az + r];
+}
+function primMinR(q) { return q.t === 's' ? q.ra : q.t === 'c' ? Math.min(q.ra, q.rb) : Math.min(q.rx, q.ry, q.rz); }
+
+// Mesh a list of primitives. quality: 1 = editor / your own body, 0 = distant AI.
+function meshPrims(prims, quality) {
+  if (!prims.length) return null;
+  const bb = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+  let minR = Infinity;
+  const pb = prims.map((q) => {
+    const b = primBounds(q);
+    for (let i = 0; i < 3; i++) { bb[i] = Math.min(bb[i], b[i]); bb[i + 3] = Math.max(bb[i + 3], b[i + 3]); }
+    const r = primMinR(q); if (r > 0.02) minR = Math.min(minR, r);
+    return b;
+  });
+  if (!isFinite(minR)) minR = 0.1;
+  const span = Math.max(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]);
+  // a grid fine enough for the thinnest limb, bounded both ways
+  const maxCells = quality ? 124 : 72, minCells = quality ? 56 : 36;
+  let step = minR * (quality ? 0.5 : 0.8);
+  step = Math.min(Math.max(step, span / maxCells), span / minCells);
+  const pad = step * 2;
+  const ox = bb[0] - pad, oy = bb[1] - pad, oz = bb[2] - pad;
+  let nx = Math.ceil((bb[3] - bb[0] + 2 * pad) / step) + 1;
+  let ny = Math.ceil((bb[4] - bb[1] + 2 * pad) / step) + 1;
+  let nz = Math.ceil((bb[5] - bb[2] + 2 * pad) / step) + 1;
+  const N = nx * ny * nz;
+  const FAR = 1e3;
+  const F = new Float32Array(N).fill(FAR);
+  const B1 = new Int16Array(N).fill(-1), B2 = new Int16Array(N).fill(-1);
+  const D1 = new Float32Array(N).fill(FAR), D2 = new Float32Array(N).fill(FAR);
+  const at = (i, j, k) => (k * ny + j) * nx + i;
+  // Two-level evaluation. The field is first evaluated on a coarse lattice (one
+  // point per 4x4x4 block corner). Only blocks the surface can pass through, or
+  // close enough that normals and creases sample them, are then evaluated exactly
+  // per cell, and only against the primitives that can reach that block. Every
+  // other cell takes the trilinear coarse value, which has the right sign and a
+  // smooth magnitude for the occlusion samples.
+  const BS = 4, cs = BS * step;
+  const cx = Math.ceil((nx - 1) / BS) + 1, cy = Math.ceil((ny - 1) / BS) + 1, cz = Math.ceil((nz - 1) / BS) + 1;
+  const CF = new Float32Array(cx * cy * cz).fill(FAR);
+  const cat = (I, J, K) => (K * cy + J) * cx + I;
+  const smoothInto = (f, d, kk) => {
+    if (kk > 0) { const h = kk - Math.abs(f - d); if (h > 0) { const hh = h / kk; return Math.min(f, d) - hh * hh * kk * 0.25; } }
+    return d < f ? d : f;
+  };
+  const TP = packPrims(prims);
+  const cRange = (b) => [
+    Math.max(0, Math.floor((b[0] - ox) / cs) - 1), Math.min(cx - 1, Math.ceil((b[3] - ox) / cs) + 1),
+    Math.max(0, Math.floor((b[1] - oy) / cs) - 1), Math.min(cy - 1, Math.ceil((b[4] - oy) / cs) + 1),
+    Math.max(0, Math.floor((b[2] - oz) / cs) - 1), Math.min(cz - 1, Math.ceil((b[5] - oz) / cs) + 1)];
+  const pr = pb.map(cRange);
+  for (let pi = 0; pi < prims.length; pi++) {
+    const q = prims[pi], r = pr[pi];
+    for (let K = r[4]; K <= r[5]; K++) for (let J = r[2]; J <= r[3]; J++) {
+      let idx = cat(r[0], J, K);
+      for (let I = r[0]; I <= r[1]; I++, idx++) CF[idx] = smoothInto(CF[idx], sdPacked(TP, pi * PS, ox + I * cs, oy + J * cs, oz + K * cs), q.k);
+    }
+  }
+  // blocks to refine
+  const bx = cx - 1, by = cy - 1, bz = cz - 1;
+  const HDb = 0.5 * Math.sqrt(3) * cs, margin = HDb * 1.15 + step;
+  const lists = new Array(bx * by * bz);
+  const bid = (I, J, K) => (K * by + J) * bx + I;
+  for (let K = 0; K < bz; K++) for (let J = 0; J < by; J++) for (let I = 0; I < bx; I++) {
+    let lo = FAR;
+    for (let c = 0; c < 8; c++) { const v = Math.abs(CF[cat(I + (c & 1), J + ((c >> 1) & 1), K + ((c >> 2) & 1))]); if (v < lo) lo = v; }
+    if (lo < margin) lists[bid(I, J, K)] = [];
+  }
+  for (let pi = 0; pi < prims.length; pi++) {
+    const r = pr[pi];
+    for (let K = Math.max(0, r[4] - 1); K <= Math.min(bz - 1, r[5]); K++)
+      for (let J = Math.max(0, r[2] - 1); J <= Math.min(by - 1, r[3]); J++)
+        for (let I = Math.max(0, r[0] - 1); I <= Math.min(bx - 1, r[1]); I++) {
+          const L = lists[bid(I, J, K)]; if (L) L.push(pi);
+        }
+  }
+  const dcs = new Float32Array(prims.length);
+  for (let K = 0; K < bz; K++) for (let J = 0; J < by; J++) for (let I = 0; I < bx; I++) {
+    const i0 = I * BS, j0 = J * BS, k0 = K * BS;
+    const iE = Math.min(nx - 1, i0 + BS), jE = Math.min(ny - 1, j0 + BS), kE = Math.min(nz - 1, k0 + BS);
+    const L = lists[bid(I, J, K)];
+    if (!L) {
+      // trilinear fill from the 8 coarse corners
+      const c000 = CF[cat(I, J, K)], c100 = CF[cat(I + 1, J, K)], c010 = CF[cat(I, J + 1, K)], c110 = CF[cat(I + 1, J + 1, K)];
+      const c001 = CF[cat(I, J, K + 1)], c101 = CF[cat(I + 1, J, K + 1)], c011 = CF[cat(I, J + 1, K + 1)], c111 = CF[cat(I + 1, J + 1, K + 1)];
+      for (let k = k0; k <= kE; k++) {
+        const tz = (k - k0) / BS;
+        for (let j = j0; j <= jE; j++) {
+          const ty = (j - j0) / BS;
+          const a0 = c000 + (c010 - c000) * ty, a1 = c100 + (c110 - c100) * ty;
+          const b0 = c001 + (c011 - c001) * ty, b1 = c101 + (c111 - c101) * ty;
+          const e0 = a0 + (b0 - a0) * tz, e1 = a1 + (b1 - a1) * tz;
+          let idx = at(i0, j, k);
+          for (let i = i0; i <= iE; i++, idx++) { if (D1[idx] < FAR) continue; F[idx] = e0 + (e1 - e0) * ((i - i0) / BS); }
+        }
+      }
+      continue;
+    }
+    if (!L.length) continue;
+    // which primitives can reach this block
+    const mx = ox + (i0 + BS * 0.5) * step, my = oy + (j0 + BS * 0.5) * step, mz = oz + (k0 + BS * 0.5) * step;
+    let up = FAR;
+    for (let n = 0; n < L.length; n++) { const d = sdPacked(TP, L[n] * PS, mx, my, mz); dcs[n] = d; if (d + HDb < up) up = d + HDb; }
+    let m = 0;
+    for (let n = 0; n < L.length; n++) if (dcs[n] - HDb < up + TP[L[n] * PS + 10] + 2 * step) L[m++] = L[n];
+    L.length = m;
+    for (let k = k0; k <= kE; k++) {
+      const z = oz + k * step;
+      for (let j = j0; j <= jE; j++) {
+        const y = oy + j * step;
+        let idx = at(i0, j, k);
+        for (let i = i0; i <= iE; i++, idx++) {
+          if (D1[idx] < FAR) continue;           // shared face already done exactly
+          const x = ox + i * step;
+          let f = FAR, d1 = FAR, d2 = FAR, b1 = -1, b2 = -1;
+          for (let n = 0; n < m; n++) {
+            const pi = L[n], d = sdPacked(TP, pi * PS, x, y, z), kk = TP[pi * PS + 10];
+            if (kk > 0) { const h = kk - Math.abs(f - d); if (h > 0) { const hh = h / kk; f = Math.min(f, d) - hh * hh * kk * 0.25; } else if (d < f) f = d; }
+            else if (d < f) f = d;
+            if (d < d1) { d2 = d1; b2 = b1; d1 = d; b1 = pi; } else if (d < d2) { d2 = d; b2 = pi; }
+          }
+          F[idx] = f; D1[idx] = d1 < FAR ? d1 : FAR * 0.999; D2[idx] = d2; B1[idx] = b1; B2[idx] = b2;
+        }
+      }
+    }
+  }
+  // ---- surface nets ---------------------------------------------------------
+  const CORN = [[0,0,0],[1,0,0],[0,1,0],[1,1,0],[0,0,1],[1,0,1],[0,1,1],[1,1,1]];
+  const EDG = [[0,1],[2,3],[4,5],[6,7],[0,2],[1,3],[4,6],[5,7],[0,4],[1,5],[2,6],[3,7]];
+  const cnx = nx - 1, cny = ny - 1;
+  const vid = new Int32Array(cnx * cny * (nz - 1)).fill(-1);
+  const cid = (i, j, k) => (k * cny + j) * cnx + i;
+  const pos = [];
+  const cv = new Float32Array(8);
+  // only refined blocks can hold surface cells
+  const RB = [];
+  for (let K = 0; K < bz; K++) for (let J = 0; J < by; J++) for (let I = 0; I < bx; I++) if (lists[bid(I, J, K)]) RB.push(I, J, K);
+  for (let r = 0; r < RB.length; r += 3) {
+  const I0 = RB[r] * BS, J0 = RB[r + 1] * BS, K0 = RB[r + 2] * BS;
+  const IE = Math.min(nx - 1, I0 + BS), JE = Math.min(ny - 1, J0 + BS), KE = Math.min(nz - 1, K0 + BS);
+  for (let k = K0; k < KE; k++) for (let j = J0; j < JE; j++) for (let i = I0; i < IE; i++) {
+    let neg = 0;
+    for (let c = 0; c < 8; c++) { const o = CORN[c]; const v = F[at(i + o[0], j + o[1], k + o[2])]; cv[c] = v; if (v < 0) neg++; }
+    if (neg === 0 || neg === 8) continue;
+    let sx = 0, sy = 0, sz = 0, n = 0;
+    for (let e = 0; e < 12; e++) {
+      const a = EDG[e][0], b = EDG[e][1], va = cv[a], vb = cv[b];
+      if ((va < 0) === (vb < 0)) continue;
+      const t = va / (va - vb);
+      const A = CORN[a], Bc = CORN[b];
+      sx += A[0] + (Bc[0] - A[0]) * t; sy += A[1] + (Bc[1] - A[1]) * t; sz += A[2] + (Bc[2] - A[2]) * t; n++;
+    }
+    vid[cid(i, j, k)] = pos.length / 3;
+    pos.push(i + sx / n, j + sy / n, k + sz / n);   // grid units for now
+  }
+  }
+  const nv = pos.length / 3;
+  if (!nv) return null;
+  const idxArr = [];
+  const quad = (a, b, c, d, flip) => {
+    if (a < 0 || b < 0 || c < 0 || d < 0) return;
+    if (flip) idxArr.push(a, b, c, a, c, d); else idxArr.push(a, d, c, a, c, b);
+  };
+  for (let r = 0; r < RB.length; r += 3) {
+  const I0 = Math.max(1, RB[r] * BS), J0 = Math.max(1, RB[r + 1] * BS), K0 = Math.max(1, RB[r + 2] * BS);
+  const IE = Math.min(nx - 1, RB[r] * BS + BS), JE = Math.min(ny - 1, RB[r + 1] * BS + BS), KE = Math.min(nz - 1, RB[r + 2] * BS + BS);
+  for (let k = K0; k < KE; k++) for (let j = J0; j < JE; j++) for (let i = I0; i < IE; i++) {
+    const v0 = F[at(i, j, k)] < 0;
+    if ((F[at(i + 1, j, k)] < 0) !== v0) quad(vid[cid(i, j - 1, k - 1)], vid[cid(i, j, k - 1)], vid[cid(i, j, k)], vid[cid(i, j - 1, k)], !v0);
+    if ((F[at(i, j + 1, k)] < 0) !== v0) quad(vid[cid(i - 1, j, k - 1)], vid[cid(i, j, k - 1)], vid[cid(i, j, k)], vid[cid(i - 1, j, k)], v0);
+    if ((F[at(i, j, k + 1)] < 0) !== v0) quad(vid[cid(i - 1, j - 1, k)], vid[cid(i, j - 1, k)], vid[cid(i, j, k)], vid[cid(i - 1, j, k)], !v0);
+  }
+  }
+  if (!idxArr.length) return null;
+  // trilinear field sample and gradient in grid units
+  const clampi = (v, hi) => (v < 0 ? 0 : v > hi ? hi : v);
+  const Fg = (i, j, k) => F[at(clampi(i, nx - 1), clampi(j, ny - 1), clampi(k, nz - 1))];
+  const sample = (gx, gy, gz) => {
+    const i = Math.floor(gx), j = Math.floor(gy), k = Math.floor(gz);
+    const tx = gx - i, ty = gy - j, tz = gz - k;
+    const c00 = Fg(i, j, k) * (1 - tx) + Fg(i + 1, j, k) * tx, c10 = Fg(i, j + 1, k) * (1 - tx) + Fg(i + 1, j + 1, k) * tx;
+    const c01 = Fg(i, j, k + 1) * (1 - tx) + Fg(i + 1, j, k + 1) * tx, c11 = Fg(i, j + 1, k + 1) * (1 - tx) + Fg(i + 1, j + 1, k + 1) * tx;
+    return (c00 * (1 - ty) + c10 * ty) * (1 - tz) + (c01 * (1 - ty) + c11 * ty) * tz;
+  };
+  const out = new Float32Array(nv * MESH_V_FLOATS);
+  const aoH = [1.2, 2.4, 4.0, 6.5];
+  for (let v = 0; v < nv; v++) {
+    const gx = pos[v * 3], gy = pos[v * 3 + 1], gz = pos[v * 3 + 2];
+    // gradient by central differences of the trilinear field
+    const e = 0.5;
+    let nxv = sample(gx + e, gy, gz) - sample(gx - e, gy, gz);
+    let nyv = sample(gx, gy + e, gz) - sample(gx, gy - e, gz);
+    let nzv = sample(gx, gy, gz + e) - sample(gx, gy, gz - e);
+    const nl = Math.hypot(nxv, nyv, nzv) || 1; nxv /= nl; nyv /= nl; nzv /= nl;
+    // ambient occlusion: how far the field falls short along the normal
+    let occ = 0, wsum = 0;
+    for (let s2 = 0; s2 < aoH.length; s2++) {
+      const h = aoH[s2] * (quality ? 1 : 0.7);
+      const f = sample(gx + nxv * h, gy + nyv * h, gz + nzv * h) / step;
+      const wgt = 1 / (s2 + 1);
+      occ += Math.max(0, h - f) / h * wgt; wsum += wgt;
+    }
+    const ao = clamp(1 - (occ / wsum) * 1.6, 0.32, 1);
+    // bones and colour from the nearest grid corner's two closest primitives
+    const ci = clampi(Math.round(gx), nx - 1), cj = clampi(Math.round(gy), ny - 1), ck = clampi(Math.round(gz), nz - 1);
+    const ix = at(ci, cj, ck);
+    const p1 = B1[ix] >= 0 ? prims[B1[ix]] : prims[0];
+    const p2 = B2[ix] >= 0 ? prims[B2[ix]] : p1;
+    const dd = D2[ix] - D1[ix];
+    const blend = Math.max(0.04, Math.max(p1.k, p2.k) * 0.8);
+    const u = clamp(dd / blend, 0, 1);
+    const w1 = 0.5 + 0.5 * u * u * (3 - 2 * u);
+    const o = v * MESH_V_FLOATS;
+    out[o] = ox + gx * step; out[o + 1] = oy + gy * step; out[o + 2] = oz + gz * step;
+    out[o + 3] = nxv; out[o + 4] = nyv; out[o + 5] = nzv;
+    out[o + 6] = ao;
+    let b1 = p1.bone | 0, b2 = p2.bone | 0, ww = w1;
+    if (b1 === b2) { ww = 1; }
+    out[o + 7] = b1; out[o + 8] = b2; out[o + 9] = ww;
+    const c1 = p1.col, c2 = p2.col;
+    const pa1 = c1 ? 0 : 1, pa2 = c2 ? 0 : 1;
+    const cc1 = c1 || [1, 1, 1], cc2 = c2 || [1, 1, 1];
+    // colour boundaries are sharper than bone blends
+    const cu = clamp(dd / Math.max(0.02, blend * 0.35), 0, 1);
+    const cw = 0.5 + 0.5 * cu * cu * (3 - 2 * cu);
+    out[o + 10] = cc1[0] * cw + cc2[0] * (1 - cw);
+    out[o + 11] = cc1[1] * cw + cc2[1] * (1 - cw);
+    out[o + 12] = cc1[2] * cw + cc2[2] * (1 - cw);
+    out[o + 13] = pa1 * cw + pa2 * (1 - cw);
+  }
+  return { vertData: out, idx: new Uint32Array(idxArr), verts: nv, tris: idxArr.length / 3 };
+}
+
+// =====================================================================
+// DESIGNED CREATURES v2: one fused, skinned skin + hard parts
+// =====================================================================
+// ---- flesh builder ------------------------------------------------------------
+// Collects SDF primitives in a part's local frame (same axes and units as the
+// hard-part drawing frame) and converts them to body rest space.
+function makeF(out, P, X, Y, Z, S, bone) {
+  const W = (x, y, z) => [P[0] + (X[0] * x + Y[0] * y + Z[0] * z) * S, P[1] + (X[1] * x + Y[1] * y + Z[1] * z) * S, P[2] + (X[2] * x + Y[2] * y + Z[2] * z) * S];
+  const D = (x, y, z) => v3.norm([X[0] * x + Y[0] * y + Z[0] * z, X[1] * x + Y[1] * y + Z[1] * z, X[2] * x + Y[2] * y + Z[2] * z]);
+  const F = {
+    bone, jawBone: bone,
+    s(x, y, z, r, k, col) { const p = W(x, y, z); out.push({ t: 's', ax: p[0], ay: p[1], az: p[2], ra: r * S, k: k * S, bone: F.bone, col: col || null }); },
+    c(a, b, ra, rb, k, col) { const p = W(a[0], a[1], a[2]), q = W(b[0], b[1], b[2]); out.push({ t: 'c', ax: p[0], ay: p[1], az: p[2], bx: q[0], by: q[1], bz: q[2], ra: ra * S, rb: rb * S, k: k * S, bone: F.bone, col: col || null }); },
+    // ellipsoid: centre, its y axis along (ay...), x axis hint, radii
+    e(x, y, z, ax, ay, az, hx, hy, hz, rx, ry, rz, k, col) {
+      const p = W(x, y, z);
+      const ey = D(ax, ay, az);
+      let ex = D(hx, hy, hz);
+      ex = v3.norm(v3.sub(ex, v3.mul(ey, v3.dot(ex, ey))));
+      if (!isFinite(ex[0]) || v3.len(ex) < 0.5) ex = v3.norm(v3.cross(ey, Math.abs(ey[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0]));
+      const ez = v3.cross(ex, ey);
+      out.push({ t: 'e', ax: p[0], ay: p[1], az: p[2], ex, ey, ez, rx: rx * S, ry: ry * S, rz: rz * S, k: k * S, bone: F.bone, col: col || null });
+    },
+    jaw() { F.bone = F.jawBone; },
+    main() { F.bone = bone; },
+  };
+  return F;
+}
+// ---- per-item flesh (fused into the skin) and hard pieces (drawn on top) ------
+// Items not listed draw entirely as hard pieces with their original VIS art.
+const HARD = {};
+const FLESH = {};
+// mouths ------------------------------------------------------------------------
+FLESH.m_beak = (F) => { F.e(0, 0.08, 0, 0, 1, 0, 1, 0, 0, 0.66, 0.34, 0.7, 0.28); };
+HARD.m_beak = (g, c, e) => {
+  g.cn(0.16, 0.05, 0, -0.34, 1, 0, 0.52, 1.45, c);
+  g.ball(0.42, 0.62, 0.26, 0.07, BLACKP); g.ball(0.42, 0.62, -0.26, 0.07, BLACKP);
+  const j = g.rotated(0, 0, 1, e.jaw);
+  j.cn(-0.3, 0.05, 0, 0.06, 1, 0, 0.42, 0.95, colMul(c, 0.82));
+};
+FLESH.m_grazer = (F, c) => {
+  F.e(0, 0.24, 0, 0, 1, 0, 1, 0, 0, 0.56, 0.5, 0.86, 0.3);
+  F.e(0.2, 0.42, 0, 0, 1, 0, 1, 0, 0, 0.36, 0.38, 0.8, 0.1, c);
+  F.jaw(); F.e(-0.32, 0.36, 0, 0, 1, 0, 1, 0, 0, 0.3, 0.34, 0.72, 0.1, c); F.main();
+};
+HARD.m_grazer = (g, c, e) => {
+  const j = g.rotated(0, 0, 1, e.jaw * 0.5);
+  j.sp(-0.06, 0.66, 0, 0, 1, 0, 0.07 + e.chomp * 0.08, 0.12, 0.56, MAW);
+  g.sp(0.46, 0.7, 0.3, 0.3, 1, 0.4, 0.1, 0.05, 0.08, colMul(c, 0.3)); g.sp(0.46, 0.7, -0.3, 0.3, 1, -0.4, 0.1, 0.05, 0.08, colMul(c, 0.3));
+};
+FLESH.m_trunk = (F, c, e) => {
+  let p = [0, 0, 0], d = [0, 1, 0];
+  for (let i = 0; i < 7; i++) {
+    const r = 0.46 - i * 0.045;
+    d = v3.norm(v3.add(d, [-0.23, 0, 0]));
+    const q = v3.add(p, v3.mul(d, 0.42));
+    F.c(p, q, r, r - 0.045, 0.06);
+    p = q;
+  }
+};
+HARD.m_trunk = (g, c) => {
+  let p = [0, 0, 0], d = [0, 1, 0];
+  for (let i = 0; i < 7; i++) { d = v3.norm(v3.add(d, [-0.23, 0, 0])); p = v3.add(p, v3.mul(d, 0.42)); }
+  g.sp(p[0], p[1], p[2], d[0], d[1], d[2], 0.16, 0.05, 0.16, colMul(c, 0.35));
+};
+const jawFlesh = (F, big) => {
+  const k = big ? 1.18 : 1;
+  F.e(0.3 * k, 0.4, 0, 0.15, 1, 0, 1, 0, 0, 0.34 * k, 0.68 * k, 0.9 * k, 0.28);
+  F.jaw(); F.e(-0.42 * k, 0.34, 0, -0.1, 1, 0, 1, 0, 0, 0.3 * k, 0.6 * k, 0.82 * k, 0.16); F.main();
+};
+FLESH.m_jaws = (F) => jawFlesh(F, false);
+FLESH.m_maw = (F) => jawFlesh(F, true);
+const jawHard = (g, e, big) => {
+  const k = big ? 1.18 : 1;
+  const j = g.rotated(0, 0, 1, e.jaw);
+  g.sp(-0.05 * k, 0.36, 0, 0, 1, 0, 0.3 * k, 0.5 * k, 0.66 * k, MAW);
+  const nT = big ? 6 : 5;
+  for (let i = 0; i < nT; i++) {
+    const z = (i - (nT - 1) / 2) * 0.26 * k, y = 0.62 + (1 - Math.abs(i - (nT - 1) / 2) / nT) * 0.1;
+    g.cn(0.16 * k, y, z, -1, 0.12, 0, 0.075 * k, 0.3 * k, IVORY);
+    j.cn(-0.26 * k, y - 0.04, z * 0.95, 1, 0.12, 0, 0.07 * k, 0.26 * k, IVORY);
+  }
+  if (big) for (const s of [1, -1]) { g.cn(0.2 * k, 0.7, s * 0.52 * k, -1, 0.18, 0, 0.12 * k, 0.72 * k, IVORY); j.cn(-0.3 * k, 0.66, s * 0.6 * k, 1, 0.2, 0, 0.1 * k, 0.5 * k, IVORY); }
+  j.sp(-0.16 * k, 0.42, 0, 0, 1, 0, 0.12 * k, 0.34 * k, 0.38 * k, TONGUE);
+};
+HARD.m_jaws = (g, c, e) => jawHard(g, e, false);
+HARD.m_maw = (g, c, e) => jawHard(g, e, true);
+FLESH.m_hook = (F) => { F.e(0, 0.1, 0, 0, 1, 0, 1, 0, 0, 0.62, 0.36, 0.66, 0.26); };
+HARD.m_hook = (g, c, e) => {
+  let p = [0.2, 0.12, 0], d = [0, 1, 0];
+  for (let i = 0; i < 4; i++) {
+    d = v3.norm(v3.add(d, [-0.42, 0, 0]));
+    const q = v3.add(p, v3.mul(d, 0.34));
+    g.tb(p, q, 0.46 - i * 0.1, 0.36 - i * 0.1, c);
+    g.ball(q[0], q[1], q[2], 0.36 - i * 0.1, c);
+    p = q;
+  }
+  g.cn(p[0], p[1], p[2], d[0], d[1], d[2], 0.1, 0.3, c);
+  g.rotated(0, 0, 1, e.jaw).cn(-0.3, 0.05, 0, 0.1, 1, 0, 0.34, 0.8, colMul(c, 0.85));
+};
+// eyes: a fleshy socket fused into the skin, a glossy eyeball on top ----------
+const socket = (F, k) => { F.e(0, 0.12 * k, 0, 0, 1, 0, 1, 0, 0, 1.2 * k, 0.62 * k, 1.2 * k, 0.4 * k); };
+FLESH.e_round = (F) => socket(F, 1);
+FLESH.e_slit = (F) => socket(F, 1);
+FLESH.e_big = (F) => socket(F, 1.25);
+HARD.e_round = (g, c, e) => drawEye(g, c, e, 1, 'round');
+HARD.e_slit = (g, c, e) => drawEye(g, c, e, 1, 'slit');
+HARD.e_big = (g, c, e) => drawEye(g, c, e, 1.25, 'goggle');
+FLESH.e_stalk = (F, c, e) => {
+  F.c([0, 0, 0], [0.1, 1.3, 0.05], 0.4, 0.26, 0.2);
+  F.c([0.1, 1.3, 0.05], [0.25, 2.05, 0.1], 0.26, 0.22, 0.12);
+  F.e(0.25, 2.1, 0.1, 0, 1, 0, 1, 0, 0, 1.05, 0.62, 1.05, 0.2);
+};
+HARD.e_stalk = (g, c, e) => { drawEye(g.at(0.25, 2.1, 0.1), c, e, 0.95, 'round'); };
+FLESH.e_cluster = (F) => { F.e(0, 0.1, 0, 0, 1, 0, 1, 0, 0, 1.05, 0.38, 0.95, 0.3); };
+HARD.e_cluster = (g, c) => {
+  const pts = [[0.45, 0.32, 0.3], [0.45, 0.32, -0.3], [-0.1, 0.36, 0.55], [-0.1, 0.36, -0.55], [-0.2, 0.44, 0]];
+  for (const p of pts) { g.ball(p[0], p[1], p[2], 0.32, colMul(c, 0.55)); g.ball(p[0] + 0.1, p[1] + 0.2, p[2] + 0.06, 0.08, WHITE); }
+};
+FLESH.e_bug = (F) => { F.e(0, 0.1, 0, 0, 1, 0, 1, 0, 0, 1.12, 0.4, 1.12, 0.3); };
+HARD.e_bug = VIS.e_bug.draw;
+// horns: a skin mound at the root and a smooth tapered horn -------------------
+const mound = (F, r, h) => { F.e(0, 0.02, 0, 0, 1, 0, 1, 0, 0, r, h || r * 0.55, r, r * 0.9); };
+FLESH.h_straight = (F) => mound(F, 0.42);
+HARD.h_straight = (g, c) => {
+  const d = v3.norm([-0.22, 1, 0]);
+  g.tb([0, 0, 0], v3.mul(d, 1.2), 0.3, 0.17, c);
+  g.cn(...v3.mul(d, 1.2), d[0], d[1], d[2], 0.17, 0.75, c);
+  g.tb([0, 0.02, 0], v3.mul(d, 0.25), 0.33, 0.3, colMul(c, 0.86));
+};
+const hornChain = (g, c, pts, r0, r1, tipLen) => {
+  for (let i = 0; i < pts.length - 1; i++) {
+    const u0 = i / (pts.length - 1), u1 = (i + 1) / (pts.length - 1);
+    const ra = r0 + (r1 - r0) * u0, rb = r0 + (r1 - r0) * u1;
+    const col = i % 3 === 1 ? colMul(c, 0.93) : c;
+    g.tb(pts[i], pts[i + 1], ra, rb, col);
+    if (i > 0) g.ball(pts[i][0], pts[i][1], pts[i][2], ra * 0.98, col);
+  }
+  const a = pts[pts.length - 2], b = pts[pts.length - 1];
+  const d = v3.norm(v3.sub(b, a));
+  g.ball(b[0], b[1], b[2], r1 * 0.98, c);
+  g.cn(b[0], b[1], b[2], d[0], d[1], d[2], r1, tipLen, c);
+};
+FLESH.h_curved = (F) => mound(F, 0.42);
+HARD.h_curved = (g, c) => {
+  const pts = [[0, 0, 0]]; let p = [0, 0, 0], d = [0, 1, 0];
+  for (let i = 0; i < 6; i++) { d = v3.norm(v3.add(d, [-0.28, 0, 0.05])); p = v3.add(p, v3.mul(d, 0.33)); pts.push(p); }
+  hornChain(g, c, pts, 0.3, 0.08, 0.35);
+};
+FLESH.h_ram = (F) => mound(F, 0.46);
+HARD.h_ram = (g, c) => {
+  const pts = [[0, 0, 0]];
+  const N = 16;
+  for (let i = 1; i <= N; i++) {
+    const th = i / N * Math.PI * 1.75, rr = 0.85 * (1 - i / N * 0.45);
+    pts.push([-Math.sin(th) * rr, 0.25 + (1 - Math.cos(th)) * rr * 0.8, 0.22 * i / N]);
+  }
+  hornChain(g, c, pts, 0.36, 0.1, 0.15);
+  // growth ridges
+  for (let i = 2; i < pts.length - 2; i += 2) g.ball(pts[i][0], pts[i][1], pts[i][2], 0.36 * (1 - i / N * 0.7) * 1.06, colMul(c, 0.84));
+};
+FLESH.h_antler = (F) => mound(F, 0.34);
+HARD.h_antler = (g, c) => {
+  const beam = [[0, 0, 0], [-0.22, 0.8, 0.1], [-0.52, 1.6, 0.25], [-0.72, 2.3, 0.4]];
+  hornChain(g, c, beam, 0.16, 0.08, 0.4);
+  for (const [i, dx, dz] of [[1, 0.9, 0.1], [2, 0.8, 0.4], [2, 0.2, -0.5]]) {
+    const d = v3.norm([dx, 0.8, dz]);
+    const e = v3.add(beam[i], v3.mul(d, 0.45));
+    g.tb(beam[i], e, 0.1, 0.07, c); g.cn(e[0], e[1], e[2], d[0], d[1], d[2], 0.07, 0.35, c);
+  }
+};
+FLESH.h_rhino = (F) => mound(F, 0.62, 0.3);
+HARD.h_rhino = (g, c) => {
+  const d = v3.norm([-0.16, 1, 0]);
+  g.tb([0, 0, 0], v3.mul(d, 0.5), 0.52, 0.4, c);
+  g.cn(...v3.mul(d, 0.5), d[0], d[1], d[2], 0.4, 1.2, c);
+  g.cn(-0.72, 0, 0, -0.1, 1, 0, 0.24, 0.6, colMul(c, 0.9));
+};
+FLESH.h_tusk = (F) => mound(F, 0.34, 0.22);
+HARD.h_tusk = (g, c) => {
+  const pts = [[0, 0, 0]]; let p = [0, 0, 0], d = [0, 1, 0];
+  for (let i = 0; i < 5; i++) { d = v3.norm(v3.add(d, [0.3, 0, 0.05])); p = v3.add(p, v3.mul(d, 0.4)); pts.push(p); }
+  hornChain(g, c, pts, 0.26, 0.1, 0.35);
+};
+// spikes and armour ---------------------------------------------------------------
+FLESH.s_spike = (F) => mound(F, 0.4, 0.2);
+HARD.s_spike = (g, c) => { const d = v3.norm([-0.18, 1, 0]); g.cn(0, 0, 0, d[0], d[1], d[2], 0.3, 1.5, c); };
+FLESH.s_quills = (F) => mound(F, 0.38, 0.14);
+HARD.s_quills = (g, c, e) => {
+  const dirs = [[-0.2, 1, 0], [-0.5, 1, 0.3], [-0.5, 1, -0.3], [0.1, 1, 0.45], [0.1, 1, -0.45], [-0.8, 1, 0]];
+  dirs.forEach((d, i) => { g.cn(d[0] * 0.15, 0, d[2] * 0.15, d[0], d[1], d[2], 0.07, 1.5 + (i % 3) * 0.25, i % 2 ? c : e.detail); });
+};
+FLESH.s_plate = (F) => {
+  F.e(0, 0.02, 0, 0, 1, 0, 1, 0, 0, 0.72, 0.22, 0.3, 0.25);
+};
+HARD.s_plate = (g, c) => {
+  const bk = backOf(g);
+  g.cn(0, -0.1, 0, bk[0] * 0.3, 1, bk[2] * 0.3, 0.85, 1.9, c, bk[0], 0, bk[2], 0.09);
+  g.cn(0, 0.15, 0, bk[0] * 0.3, 1, bk[2] * 0.3, 0.55, 1.35, colMul(c, 1.3), bk[0], 0, bk[2], 0.11);
+};
+FLESH.s_shell = (F) => { F.e(0, 0, 0, 0, 1, 0, 1, 0, 0, 1.55, 0.3, 1.35, 0.3); };
+HARD.s_shell = VIS.s_shell.draw;
+FLESH.s_knob = (F, c) => { F.s(0, 0.3, 0, 0.62, 0.25, c); };
+HARD.s_knob = (g) => {
+  for (let i = 0; i < 6; i++) { const a = i / 6 * 6.283; g.cn(Math.cos(a) * 0.42, 0.55, Math.sin(a) * 0.42, Math.cos(a), 1, Math.sin(a), 0.1, 0.35, IVORY); }
+  g.cn(0, 0.88, 0, 0, 1, 0, 0.1, 0.4, IVORY);
+};
+FLESH.s_club = (F, c) => { F.c([0, 0, 0], [0, 0.8, 0], 0.3, 0.34, 0.2); F.s(0, 1.3, 0, 0.72, 0.2, c); };
+HARD.s_club = (g) => {
+  for (let i = 0; i < 10; i++) {
+    const a = i * 2.39996, y = 1 - (i + 0.5) / 10 * 2, r = Math.sqrt(1 - y * y);
+    const d = [Math.cos(a) * r, y, Math.sin(a) * r];
+    g.cn(d[0] * 0.62, 1.3 + d[1] * 0.62, d[2] * 0.62, d[0], d[1], d[2], 0.13, 0.5, IVORY);
+  }
+};
+// feet and hands (frame: y along the shin away from the ankle, x forward) ---------
+FLESH.t_paw = (F) => {
+  F.e(0.1, 0.24, 0, 0, 1, 0, 1, 0, 0, 0.62, 0.36, 0.62, 0.22);
+  for (let i = 0; i < 4; i++) { const z = (i - 1.5) * 0.3, x = 0.46 + (1.5 - Math.abs(i - 1.5)) * 0.1; F.s(x, 0.44, z, 0.2, 0.08); }
+};
+HARD.t_paw = (g) => {
+  for (let i = 0; i < 4; i++) { const z = (i - 1.5) * 0.3, x = 0.46 + (1.5 - Math.abs(i - 1.5)) * 0.1; g.cn(x + 0.14, 0.52, z, 1, 0.45, 0, 0.065, 0.22, IVORY); }
+};
+FLESH.t_hoof = (F) => { F.e(0, 0.06, 0, 0, 1, 0, 1, 0, 0, 0.52, 0.3, 0.52, 0.2); };
+HARD.t_hoof = (g, c) => {
+  g.tb([0.04, 0.22, 0], [0.08, 0.8, 0], 0.48, 0.62, c);
+  g.sp(0.08, 0.8, 0, 0, 1, 0, 0.6, 0.04, 0.6, colMul(c, 0.6));
+  g.sp(0.36, 0.55, 0, 1, 0, 0, 0.1, 0.25, 0.04, colMul(c, 0.5), 0, 1, 0);
+};
+FLESH.t_talon = (F, c) => {
+  F.s(0, 0.14, 0, 0.3, 0.12, c);
+  for (const t of [[1, 0, 0.35], [1, 0, 0], [1, 0, -0.35], [-1, 0, 0]]) {
+    const dir = v3.norm([t[0], 0.35, t[2]]);
+    F.c([0, 0.2, 0], v3.add([0, 0.2, 0], v3.mul(dir, t[0] > 0 ? 0.85 : 0.45)), 0.14, 0.09, 0.08, c);
+  }
+};
+HARD.t_talon = (g) => {
+  for (const t of [[1, 0, 0.35], [1, 0, 0], [1, 0, -0.35], [-1, 0, 0]]) {
+    const dir = v3.norm([t[0], 0.35, t[2]]);
+    const b = v3.add([0, 0.2, 0], v3.mul(dir, t[0] > 0 ? 0.85 : 0.45));
+    const cd = v3.norm([dir[0] * 0.6, 0.85, dir[2] * 0.6]);
+    g.tb(b, v3.add(b, v3.mul(cd, 0.14)), 0.08, 0.065, KERATIN);
+    g.cn(...v3.add(b, v3.mul(cd, 0.14)), cd[0], cd[1], cd[2], 0.065, 0.24, KERATIN);
+  }
+};
+const fingerPts = (i, curl) => {
+  const x = (i - 1.5) * 0.24;
+  const pts = [[x, 0.7, 0]];
+  let p = pts[0], d = [0, 1, 0];
+  for (let k = 0; k < 3; k++) { d = v3.norm(v3.add(d, [0, 0, curl * 0.6])); p = v3.add(p, v3.mul(d, 0.26 - k * 0.03)); pts.push(p); }
+  return { pts, d };
+};
+FLESH.t_hand = (F, c, e) => {
+  F.e(0, 0.36, 0, 0, 1, 0, 1, 0, 0, 0.5, 0.46, 0.26, 0.2);
+  const curl = 0.35;
+  for (let i = 0; i < 4; i++) { const { pts } = fingerPts(i, curl); for (let k = 0; k < 3; k++) F.c(pts[k], pts[k + 1], 0.1, 0.085, 0.05); }
+  F.c([0.42, 0.3, 0.05], [0.7, 0.6, 0.25], 0.11, 0.09, 0.08);
+};
+HARD.t_hand = (g) => {
+  for (let i = 0; i < 4; i++) { const { pts, d } = fingerPts(i, 0.35); const p = pts[3]; g.cn(p[0], p[1], p[2], d[0], d[1], d[2], 0.06, 0.13, IVORY); }
+};
+FLESH.t_claw = (F) => { F.e(0, 0.3, 0, 0, 1, 0, 1, 0, 0, 0.56, 0.42, 0.42, 0.2); };
+HARD.t_claw = (g, c) => {
+  for (let i = 0; i < 3; i++) {
+    const x = (i - 1) * 0.3;
+    const pts = [[x, 0.6, 0.12]]; let p = pts[0], d = [0, 1, 0.3];
+    for (let k = 0; k < 4; k++) { d = v3.norm(v3.add(d, [0, -0.08, 0.4])); p = v3.add(p, v3.mul(d, 0.27)); pts.push(p); }
+    hornChain(g, c, pts, 0.12, 0.05, 0.18);
+  }
+};
+FLESH.t_pincer = (F) => { F.s(0, 0.1, 0, 0.32, 0.12); };
+HARD.t_pincer = (g, c, e) => {
+  g.sp(0, 0.6, 0, 0, 1, 0, 0.5, 0.72, 0.42, c);
+  const o = 0.18 + e.grip * 0.25;
+  g.cn(0.18, 1.1, 0, -o, 1, 0, 0.24, 1.0, colMul(c, 1.1));
+  g.cn(-0.2, 1.1, 0, o, 1, 0, 0.2, 0.85, colMul(c, 0.9));
+  g.ball(0.2, 0.9, 0.2, 0.08, IVORY); g.ball(-0.2, 0.9, 0.2, 0.08, IVORY);
+};
+FLESH.t_flipper = (F, c) => { F.e(0.2, 0.9, 0, 0.25, 1, 0, 1, 0, 0, 0.72, 1.05, 0.13, 0.15); };
+HARD.t_flipper = () => {};
+FLESH.t_pad = (F, c) => { F.c([0, 0, 0], [0, 0.3, 0], 0.4, 0.46, 0.12); F.e(0, 0.36, 0, 0, 1, 0, 1, 0, 0, 0.66, 0.16, 0.66, 0.1, c); };
+HARD.t_pad = (g, c) => { g.sp(0, 0.5, 0, 0, 1, 0, 0.3, 0.05, 0.3, colMul(c, 0.6)); };
+// fins, wings and details: fleshy roots, hard membranes --------------------------
+for (const id of ['f_fin', 'f_dorsal', 'f_fluke']) FLESH[id] = (F) => { F.e(0, 0.02, 0, 0, 1, 0, 1, 0, 0, 0.36, 0.2, 0.3, 0.2); };
+for (const id of ['w_bat', 'w_feather', 'w_insect']) FLESH[id] = (F) => { F.e(0, 0.03, 0, 0, 1, 0, 1, 0, 0, 0.3, 0.2, 0.3, 0.2); };
+FLESH.d_antenna = (F) => mound(F, 0.3, 0.2);
+FLESH.d_crest = (F) => mound(F, 0.32, 0.15);
+FLESH.d_gills = (F) => { for (let i = 0; i < 3; i++) F.e(0.03, 0.05, (i - 1) * 0.42, 0, 1, 0, 1, 0, 0, 0.72, 0.16, 0.16, 0.06); };
+HARD.d_gills = (g, c) => { for (let i = 0; i < 2; i++) g.sp(0.03, 0.06, (i - 0.5) * 0.42, 0, 1, 0, 0.66, 0.08, 0.06, colMul(c, 0.4), 1, 0, 0); };
+FLESH.d_gland = (F, c) => {
+  F.e(0, 0.36, 0, 0, 1, 0, 1, 0, 0, 0.66, 0.58, 0.66, 0.25, c);
+  for (let i = 0; i < 3; i++) { const a = i * 2.1; F.s(Math.cos(a) * 0.5, 0.6, Math.sin(a) * 0.5, 0.14, 0.06, colMul(c, 0.7)); }
+};
+HARD.d_gland = (g, c) => { g.ball(0.2, 0.84, 0.15, 0.14, colHi(c)); };
+const hardOf = (id) => HARD[id] || (VIS[id] && VIS[id].draw) || null;
+
+// ---- bones ----------------------------------------------------------------------
+// 0 body, 1 jaw, a fixed block of tail slots, then (upper, lower) per limb.
+// The layout is kept stable across edits so a mesh that is a moment out of
+// date (while its replacement bakes) still binds to sensible bones.
+const TAIL_SLOTS = 12;
+function boneLayout(G) {
+  const nl = G.cls.limbs.length;
+  const nt = G.sk.tailLen > 0.05 ? Math.min(TAIL_SLOTS, G.sk.plan.ts) : 0;
+  const limb0 = 2 + TAIL_SLOTS;
+  return { nl, jaw: 1, tail0: 2, nt, limb0, count: limb0 + 2 * nl };
+}
+// The mouth part the jaw bone hinges on (first mouth on the body)
+function mouthPart(des) { return (des.parts || []).find(p => C.ITEM_SIM[p.id] && C.ITEM_SIM[p.id].t === 'MOUTH') || null; }
+// Rest-space frame of a surface part.
+// Anchors are stored against the skeleton balls; the visible skin is the SDF
+// surface, which sits a little inside the ball radii, so the anchor is slid
+// along its normal onto that surface (cached per design revision).
+function partRest(G, pt) {
+  const sk = G.sk, B = sk.balls;
+  const bi = clamp(pt.b | 0, 0, B.length - 1), k = B[bi];
+  let cache = G._rest;
+  if (!cache) cache = G._rest = new Map();
+  const hit = cache.get(pt);
+  if (hit && hit.src === pt.o && hit.n === pt.n && hit.b === pt.b && hit.spin === pt.spin) return hit.r;
+  let p = C.anchorPos(sk, pt);
+  if (k.g !== 'tail') {
+    const n0 = v3.norm(pt.n || [0, 1, 0]);
+    const h = C.snapToSkin(sk, p, n0);
+    if (h && v3.len(v3.sub(h.p, p)) < Math.max(0.12, k.r * 0.45)) p = h.p;
+  }
+  const side = p[2] < -0.04 ? -1 : 1;
+  const fr = partFrame(pt.n || [0, 1, 0], pt.spin || 0, side, false);
+  const r = { p, fr, bi, side };
+  cache.set(pt, { src: pt.o, n: pt.n, b: pt.b, spin: pt.spin, r });
+  return r;
+}
+function limbRadii(lb) {
+  const vis = VIS[lb.id] || VIS.l_leg;
+  const th = clamp(lb.th || 1, 0.5, 2) * (vis.thick || 1);
+  return { th, r0: 0.17 * th, r1: 0.122 * th, r2: 0.092 * th };
+}
+// Everything fleshy about a design, as SDF primitives with bones and colours.
+function creaturePrims(des, G) {
+  const sk = G.sk, B = sk.balls, L = boneLayout(G);
+  const cols = des.col || { base: [0.5, 0.6, 0.5], coat: [0.9, 0.9, 0.8], detail: [0.2, 0.3, 0.2], pat: 0 };
+  const out = [];
+  for (const q of sk.prims) out.push(Object.assign({}, q, { bone: 0, col: null }));
+  sk.tailPrims.forEach((q, j) => out.push(Object.assign({}, q, { bone: L.tail0 + j, col: null })));
+  // limbs
+  G.cls.limbs.forEach((o, li) => {
+    const lb = o.lb, up = L.limb0 + 2 * li, lo = up + 1;
+    const { th, r0, r1, r2 } = limbRadii(lb);
+    const col = lb.c || null;
+    const root = o.root, knee = v3.add(root, lb.k), foot = v3.add(root, lb.f);
+    out.push({ t: 's', ax: root[0], ay: root[1], az: root[2], ra: r0 * 1.12, k: 0.24 * th, bone: up, col });
+    out.push({ t: 'c', ax: root[0], ay: root[1], az: root[2], bx: knee[0], by: knee[1], bz: knee[2], ra: r0, rb: r1, k: 0.06, bone: up, col });
+    out.push({ t: 'c', ax: knee[0], ay: knee[1], az: knee[2], bx: foot[0], by: foot[1], bz: foot[2], ra: r1 * 1.02, rb: r2, k: 0.06, bone: lo, col });
+    // muscle swell on the upper segment
+    const ud = v3.sub(knee, root), L1 = v3.len(ud);
+    if (L1 > 0.2) {
+      const m = v3.lerp(root, knee, 0.36), ey = v3.norm(ud);
+      let ex = v3.norm(v3.cross(ey, [0, 0, 1])); if (!isFinite(ex[0]) || v3.len(ex) < 0.5) ex = [1, 0, 0];
+      out.push({ t: 'e', ax: m[0], ay: m[1], az: m[2], ex, ey, ez: v3.cross(ex, ey), rx: r0 * 1.12, ry: L1 * 0.32, rz: r0 * 1.08, k: 0.08, bone: up, col });
+    }
+    if (lb.tip && FLESH[lb.tip.id]) {
+      const tv = VIS[lb.tip.id];
+      const dir = v3.norm(v3.sub(foot, knee));
+      let xw = v3.sub([1, 0, 0], v3.mul(dir, dir[0]));
+      if (v3.len(xw) < 0.3) xw = v3.sub([0, 1, 0], v3.mul(dir, dir[1]));
+      xw = v3.norm(xw);
+      const side = root[2] < -0.04 ? -1 : 1;
+      const zw = v3.mul(v3.cross(dir, xw), side);
+      const S = tv.size * clamp(lb.tip.s || 1, 0.4, 2.5) * th;
+      const tc = lb.tip.c || (Array.isArray(tv.col) ? tv.col : null);
+      const F = makeF(out, foot, xw, dir, zw, S, lo);
+      FLESH[lb.tip.id](F, tc, { base: cols.base });
+    }
+  });
+  // part flesh
+  const mouth = mouthPart(des);
+  for (const pt of des.parts || []) {
+    const fl = FLESH[pt.id];
+    if (!fl) continue;
+    const vis = VIS[pt.id];
+    const { p, fr, bi } = partRest(G, pt);
+    const bone = B[bi].g === 'tail' ? L.tail0 + (bi - sk.tailStart) : 0;
+    const S = vis.size * clamp(pt.s || 1, 0.3, 3);
+    const c = pt.c || (Array.isArray(vis.col) ? vis.col : null);
+    const F = makeF(out, p, fr.x, fr.y, fr.z, S, bone);
+    if (pt === mouth) F.jawBone = L.jaw;
+    fl(F, c, { base: cols.base });
+  }
+  return out;
+}
+
+// ---- GPU mesh cache and background baking ------------------------------------------
+// Meshes are baked off the main thread by a small pool of workers running the
+// same meshPrims() source, so editing or a crowd of new creatures never stalls a
+// frame. If workers are unavailable the queue is drained on the main thread
+// within a per-frame time budget instead.
+const meshLRU = new Set();
+const MESH_LRU_MAX = 200;
+const meshBuildQueue = [];
+const meshJobs = new Map();
+let meshJobId = 1, meshPool = null, meshPoolBroken = false;
+function meshWorkerSource() {
+  return ['"use strict";', 'const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);',
+    `const MESH_V_FLOATS = ${MESH_V_FLOATS}; const PS = ${PS};`,
+    packPrims, sdPacked, primBounds, primMinR, meshPrims].map(String).join('\n') + `
+onmessage = (e) => {
+  const d = e.data; let m = null, err = null;
+  try { m = meshPrims(d.prims, d.q); } catch (x) { err = String((x && x.stack) || x); }
+  if (m) postMessage({ id: d.id, vertData: m.vertData, idx: m.idx, tris: m.tris }, [m.vertData.buffer, m.idx.buffer]);
+  else postMessage({ id: d.id, err: err || 'empty' });
+};`;
+}
+function meshPoolInit() {
+  if (meshPool || meshPoolBroken) return meshPool;
+  try {
+    if (typeof Worker === 'undefined') throw new Error('no workers');
+    const url = URL.createObjectURL(new Blob([meshWorkerSource()], { type: 'text/javascript' }));
+    const n = clamp(((navigator.hardwareConcurrency || 4) - 1) | 0, 1, 3);
+    meshPool = [];
+    for (let i = 0; i < n; i++) {
+      const w = new Worker(url);
+      const slot = { w, busy: 0 };
+      w.onmessage = (e) => { slot.busy = 0; meshJobDone(e.data); meshDispatch(); };
+      w.onerror = (e) => { console.warn('mesh worker failed, baking on the main thread', e.message || e); meshPoolFail(); };
+      meshPool.push(slot);
+    }
+  } catch (e) { console.warn('mesh workers unavailable:', e.message); meshPoolBroken = true; meshPool = null; }
+  return meshPool;
+}
+function meshPoolFail() {
+  if (meshPoolBroken) return;
+  meshPoolBroken = true;
+  if (meshPool) for (const s of meshPool) { try { s.w.terminate(); } catch (e) {} }
+  meshPool = null;
+  // everything in flight goes back on the queue for the main-thread path
+  for (const j of meshJobs.values()) { j.des._job = null; if (!j.des._queued) { j.des._queued = j.q; meshBuildQueue.push(j.des); } }
+  meshJobs.clear();
+}
+function designMeshKey(des) { return (des._rev || 0); }
+function uploadDesignMesh(m) {
+  const vb = dev.createBuffer({ size: m.vertData.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+  dev.queue.writeBuffer(vb, 0, m.vertData);
+  const ib = dev.createBuffer({ size: m.idx.byteLength, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST });
+  dev.queue.writeBuffer(ib, 0, m.idx);
+  return { vb, ib, count: m.idx.length, tris: m.tris };
+}
+function dropDesignMesh(des) {
+  const m = des._mesh;
+  if (m && m.gpu && !m.shared) { m.gpu.vb.destroy(); m.gpu.ib.destroy(); }
+  des._mesh = null;
+  meshLRU.delete(des);
+}
+function installDesignMesh(des, key, q, nl, m) {
+  const old = des._mesh;
+  if (old && old.gpu && !old.shared) { old.gpu.vb.destroy(); old.gpu.ib.destroy(); }
+  des._mesh = { key, q, nl, gpu: m ? uploadDesignMesh(m) : null, failed: !m };
+  meshLRU.delete(des); meshLRU.add(des);
+  while (meshLRU.size > MESH_LRU_MAX) { const o = meshLRU.values().next().value; if (o === des) break; dropDesignMesh(o); }
+  return des._mesh.gpu;
+}
+function buildDesignMeshNow(des, quality) {
+  const G = designGeo(des);
+  let m = null;
+  try { m = meshPrims(creaturePrims(des, G), quality); } catch (e) { console.error(e); m = null; }
+  return installDesignMesh(des, designMeshKey(des), quality, G.cls.limbs.length, m);
+}
+function meshRequest(des, q) {
+  if (des._job) { if (des._job.key !== designMeshKey(des) || des._job.q < q) des._want = Math.max(des._want || 0, q); return; }
+  if (des._queued) { if (q > des._queued) des._queued = q; return; }
+  des._queued = q;
+  if (q) meshBuildQueue.unshift(des); else meshBuildQueue.push(des);
+  meshDispatch();
+}
+function meshDispatch() {
+  const pool = meshPoolInit();
+  if (!pool) return;
+  for (const slot of pool) {
+    if (slot.busy) continue;
+    let des = null;
+    while (meshBuildQueue.length && !des) {
+      const d = meshBuildQueue.shift();
+      const q = d._queued || 0; d._queued = 0;
+      const m = d._mesh;
+      if (m && m.key === designMeshKey(d) && m.q >= q) continue;
+      des = d; des._jq = q;
+    }
+    if (!des) return;
+    const G = designGeo(des);
+    let prims;
+    try { prims = creaturePrims(des, G); } catch (e) { console.error(e); continue; }
+    const id = meshJobId++;
+    const job = { des, key: designMeshKey(des), q: des._jq, nl: G.cls.limbs.length };
+    des._job = job; meshJobs.set(id, job);
+    slot.busy = id;
+    slot.w.postMessage({ id, prims, q: job.q });
+  }
+}
+function meshJobDone(r) {
+  const job = meshJobs.get(r.id);
+  if (!job) return;
+  meshJobs.delete(r.id);
+  const des = job.des;
+  des._job = null;
+  const cur = des._mesh;
+  const fresh = cur && cur.key === designMeshKey(des);
+  // take the result unless we already hold a mesh of the current design that is at least as good
+  if (!(fresh && (job.key !== cur.key || cur.q >= job.q))) {
+    if (r.err) { if (!cur) des._mesh = { key: job.key, q: job.q, nl: job.nl, gpu: null, failed: true }; if (r.err !== 'empty') console.warn('mesh bake failed', r.err); }
+    else installDesignMesh(des, job.key, job.q, job.nl, r);
+  }
+  const want = des._want || 0; des._want = 0;
+  const now = des._mesh;
+  if (!now || now.key !== designMeshKey(des) || now.q < want) meshRequest(des, Math.max(want, job.q));
+}
+// sync: 'now' builds the exact mesh immediately (thumbnails). true builds a quick
+// low-detail mesh right away only when there is nothing at all to show, and
+// bakes the requested quality in the background. false never blocks.
+function getDesignMesh(des, quality, sync) {
+  const m = des._mesh;
+  const fresh = m && m.key === designMeshKey(des);
+  if (fresh && m.q >= quality) { meshLRU.delete(des); meshLRU.add(des); return m.gpu; }
+  if (sync === 'now') return buildDesignMeshNow(des, quality);
+  if (sync && !(m && m.gpu)) { buildDesignMeshNow(des, 0); if (quality > 0) meshRequest(des, quality); return des._mesh.gpu; }
+  if (!(fresh && m.failed)) meshRequest(des, quality);
+  return m && m.gpu ? m.gpu : null;
+}
+// main-thread fallback when workers are not available
+function pumpDesignMeshes(budgetMs) {
+  if (meshPoolInit()) { meshDispatch(); return; }
+  const t0 = performance.now();
+  while (meshBuildQueue.length && performance.now() - t0 < budgetMs) {
+    const des = meshBuildQueue.shift();
+    const q = des._queued || 0; des._queued = 0;
+    const m = des._mesh;
+    if (m && m.key === designMeshKey(des) && m.q >= q) continue;
+    buildDesignMeshNow(des, q);
+  }
+}
+
+// ---- per-frame bones and skinned draws -------------------------------------------
+const MAX_BONES = 8192;
+const boneData = new Float32Array(MAX_BONES * 16);
+let boneN = 0, boneBuf = null;
+const skinDraws = [];
+const MAX_SKIN_INST = 600;
+const skinInstData = new Float32Array(MAX_SKIN_INST * BINST_FLOATS);
+function boneIdentity(o, hl) {
+  boneData.fill(0, o, o + 16);
+  boneData[o] = 1; boneData[o + 5] = 1; boneData[o + 10] = 1; boneData[o + 15] = hl || 1;
+}
+// matrix taking rest segment a0->b0 to posed a1->b1 (rotation about the joint + move)
+function boneSegment(o, a0, b0, a1, b1, hl) {
+  const u0 = v3.norm(v3.sub(b0, a0)), u1 = v3.norm(v3.sub(b1, a1));
+  let axis = v3.cross(u0, u1);
+  const s = v3.len(axis), c = clamp(v3.dot(u0, u1), -1, 1);
+  let R;
+  if (s < 1e-6) R = c > 0 ? [1, 0, 0, 0, 1, 0, 0, 0, 1] : [1, 0, 0, 0, -1, 0, 0, 0, -1];
+  else {
+    axis = v3.mul(axis, 1 / s);
+    const [x, y, z] = axis, t = 1 - c;
+    // row-major 3x3
+    R = [t * x * x + c, t * x * y - s * z, t * x * z + s * y,
+         t * x * y + s * z, t * y * y + c, t * y * z - s * x,
+         t * x * z - s * y, t * y * z + s * x, t * z * z + c];
+  }
+  // p' = R (p - a0) + a1 -> translation = a1 - R a0 ; store column-major mat4
+  const tx = a1[0] - (R[0] * a0[0] + R[1] * a0[1] + R[2] * a0[2]);
+  const ty = a1[1] - (R[3] * a0[0] + R[4] * a0[1] + R[5] * a0[2]);
+  const tz = a1[2] - (R[6] * a0[0] + R[7] * a0[1] + R[8] * a0[2]);
+  boneData[o] = R[0]; boneData[o + 1] = R[3]; boneData[o + 2] = R[6]; boneData[o + 3] = 0;
+  boneData[o + 4] = R[1]; boneData[o + 5] = R[4]; boneData[o + 6] = R[7]; boneData[o + 7] = 0;
+  boneData[o + 8] = R[2]; boneData[o + 9] = R[5]; boneData[o + 10] = R[8]; boneData[o + 11] = 0;
+  boneData[o + 12] = tx; boneData[o + 13] = ty; boneData[o + 14] = tz; boneData[o + 15] = hl || 1;
+}
+// rotation by ang about an axis through a hinge point (same handedness as v3.rot)
+function boneHinge(o, hinge, axis, ang, hl) {
+  const [x, y, z] = v3.norm(axis), c = Math.cos(ang), s = Math.sin(ang), t = 1 - c;
+  const R = [t * x * x + c, t * x * y - s * z, t * x * z + s * y,
+             t * x * y + s * z, t * y * y + c, t * y * z - s * x,
+             t * x * z - s * y, t * y * z + s * x, t * z * z + c];
+  const tx = hinge[0] - (R[0] * hinge[0] + R[1] * hinge[1] + R[2] * hinge[2]);
+  const ty = hinge[1] - (R[3] * hinge[0] + R[4] * hinge[1] + R[5] * hinge[2]);
+  const tz = hinge[2] - (R[6] * hinge[0] + R[7] * hinge[1] + R[8] * hinge[2]);
+  boneData[o] = R[0]; boneData[o + 1] = R[3]; boneData[o + 2] = R[6]; boneData[o + 3] = 0;
+  boneData[o + 4] = R[1]; boneData[o + 5] = R[4]; boneData[o + 6] = R[7]; boneData[o + 7] = 0;
+  boneData[o + 8] = R[2]; boneData[o + 9] = R[5]; boneData[o + 10] = R[8]; boneData[o + 11] = 0;
+  boneData[o + 12] = tx; boneData[o + 13] = ty; boneData[o + 14] = tz; boneData[o + 15] = hl || 1;
+}
+function resetSkinFrame() { boneN = 0; skinDraws.length = 0; }
+function flushSkinDraws(pass) {
+  if (!skinDraws.length) return;
+  if (!boneBuf) return;
+  dev.queue.writeBuffer(boneBuf, 0, boneData, 0, boneN * 16);
+  const n = Math.min(skinDraws.length, MAX_SKIN_INST);
+  for (let i = 0; i < n; i++) skinInstData.set(skinDraws[i].inst, i * BINST_FLOATS);
+  dev.queue.writeBuffer(skinInstVB, 0, skinInstData, 0, n * BINST_FLOATS);
+  pass.setPipeline(skinPipe); pass.setBindGroup(0, skinBind);
+  pass.setVertexBuffer(1, skinInstVB);
+  for (let i = 0; i < n; i++) {
+    const d = skinDraws[i];
+    pass.setVertexBuffer(0, d.mesh.vb);
+    pass.setIndexBuffer(d.mesh.ib, 'uint32');
+    pass.drawIndexed(d.mesh.count, 1, 0, 0, i);
+  }
+}
+
+// ---- draw one designed creature -----------------------------------------------------
+// X: toW / toL (body space <-> world), dirW, R, t, seed, gaitPhase, tail, flap,
+// chomp, grip, blink, hl, lod, far, hide, limbPose, quality, sync,
+// place { pos, yaw } for the skin instance
+function drawDesign(des, X) {
+  const G = designGeo(des);
+  const sk = G.sk, B = sk.balls, P = sk.plan;
+  const col = des.col || { base: [0.5, 0.6, 0.5], coat: [0.9, 0.9, 0.8], detail: [0.2, 0.3, 0.2], pat: 0 };
+  const base = X.tint ? colMix(col.base, X.tint, X.tintK) : col.base;
+  const coat = X.tint ? colMix(col.coat, X.tint, X.tintK) : col.coat;
+  const detail = col.detail;
+  const R = X.R, t = X.t, seed = X.seed || 0;
+  const hide = X.hide;
+  const L = boneLayout(G);
+  // serpentine wave (applied by the skin shader to every vertex; mirrored here for hard parts)
+  const wAmp = sk.flex ? (X.flexAmp != null ? X.flexAmp : 0.25) : 0;
+  const wPh = (X.gaitPhase || 0) * 1.2 + seed;
+  const waveZ = (x) => wAmp ? wAmp * Math.sin(wPh - x * 2.4) * (0.35 + 0.65 * clamp((sk.a - x) / (2 * sk.a), 0, 1)) : 0;
+  const wv = (p) => wAmp ? [p[0], p[1], p[2] + waveZ(p[0])] : p;
+  // tail pose
+  const tp = sk.tailLen > 0.05 ? tailPose(sk, X.gaitPhase != null ? X.gaitPhase : t, X.tailAmp != null ? X.tailAmp : 0.6, X.tailSwing || 0, seed) : [];
+  const mesh = X.far && !X.meshFar ? null : getDesignMesh(des, X.quality || 0, !!X.sync);
+  const hlOn = (obj, list) => X.hl && (X.hl.part === obj || X.hl.limb === obj || (X.hl.mirror && obj.m && ((X.hl.part && X.hl.part.m === obj.m) || (X.hl.limb && X.hl.limb.m === obj.m))));
+  // posed limbs, in body space
+  const limbs = G.cls.limbs.map((o, li) => {
+    const lb = o.lb;
+    const root = o.root, knee = v3.add(root, lb.k), foot = v3.add(root, lb.f);
+    const pose = X.limbPose ? X.limbPose(o, li, root, knee, foot) : null;
+    return pose ? { root, knee: X.toL(pose.knee), foot: X.toL(pose.foot), rest: { root, knee, foot } }
+                : { root, knee, foot, rest: { root, knee, foot } };
+  });
+  const jawAng = (X.chomp || 0) * 0.42;
+  const nlB = Math.max(L.nl, (des._mesh && des._mesh.nl) || 0);
+  const boneCount = L.limb0 + 2 * nlB;
+  if (mesh && boneBuf && boneN + boneCount <= MAX_BONES && skinDraws.length < MAX_SKIN_INST) {
+    const bb = boneN;
+    for (let j = 0; j < L.limb0; j++) boneIdentity((bb + j) * 16, 1);
+    limbs.forEach((l, li) => {
+      const h = hlOn(G.cls.limbs[li].lb) ? 1.3 : 1;
+      boneSegment((bb + L.limb0 + 2 * li) * 16, l.rest.root, l.rest.knee, l.root, l.knee, h);
+      boneSegment((bb + L.limb0 + 1 + 2 * li) * 16, l.rest.knee, l.rest.foot, l.knee, l.foot, h);
+    });
+    if (L.nt) {
+      let a0 = [-sk.a * 0.92, sk.b * 0.08, 0], a1 = a0;
+      for (let j = 0; j < L.nt; j++) {
+        const k = B[sk.tailStart + j];
+        const b0 = [k.x, k.y, k.z], b1 = tp[j].p;
+        boneSegment((bb + L.tail0 + j) * 16, a0, b0, a1, b1, 1);
+        a0 = b0; a1 = b1;
+      }
+    }
+    const mp = mouthPart(des);
+    if (mp) { const pr = partRest(G, mp); boneHinge((bb + L.jaw) * 16, pr.p, pr.fr.z, jawAng * pr.side, 1); }
+    else boneIdentity((bb + L.jaw) * 16, 1);
+    for (let li = L.nl; li < nlB; li++) { boneIdentity((bb + L.limb0 + 2 * li) * 16, 1); boneIdentity((bb + L.limb0 + 1 + 2 * li) * 16, 1); }
+    boneN += boneCount;
+    const inst = new Float32Array(BINST_FLOATS);
+    const q = X.toW([0, 0, 0]);
+    inst.set([q[0], q[1], q[2], X.yaw || 0, R, base[0], base[1], base[2], coat[0], coat[1], coat[2], detail[0], detail[1], detail[2], col.pat | 0, X.selBody ? 1 : 0, wAmp, wPh, sk.a, bb]);
+    skinDraws.push({ mesh, inst });
+  } else {
+    // placeholder while the skin bakes: the same primitives as simple shapes
+    for (const q of sk.prims) {
+      const a = X.toW(wv([q.ax, q.ay, q.az]));
+      if (q.t === 's') pushSX(a[0], a[1], a[2], 0, 1, 0, 0, 0, 0, q.ra * R, q.ra * R, q.ra * R, base);
+      else { const b = X.toW(wv([q.bx, q.by, q.bz])); pushT(a[0], a[1], a[2], b[0], b[1], b[2], q.ra * R, base, q.rb * R); pushSX(b[0], b[1], b[2], 0, 1, 0, 0, 0, 0, q.rb * R, q.rb * R, q.rb * R, base); }
+    }
+    let prev = X.toW(wv([-sk.a * 0.92, sk.b * 0.08, 0]));
+    for (let j = 0; j < tp.length; j++) {
+      const q = X.toW(wv(tp[j].p)), r = B[sk.tailStart + j].r * 0.95 * R;
+      pushT(prev[0], prev[1], prev[2], q[0], q[1], q[2], r * 1.1, base, r); prev = q;
+    }
+    if (!X.far) limbs.forEach((l, li) => {
+      const { th } = limbRadii(G.cls.limbs[li].lb);
+      drawLimbTube(X.toW(wv(l.root)), X.toW(wv(l.knee)), X.toW(wv(l.foot)), th, R, G.cls.limbs[li].lb.c || base, false);
+    });
+  }
+  if (X.far) return;
+  const env = { t, seed, base, coat, detail, limb: base, flap: X.flap || 0, chomp: X.chomp || 0, jaw: jawAng, grip: X.grip || 0, blink: 0, lod: X.lod || 0 };
+  // ---- hard pieces of surface parts ----------------------------------------------
+  const parts = des.parts || [];
+  const mouth = mouthPart(des);
+  for (let pi = 0; pi < parts.length; pi++) {
+    const pt = parts[pi];
+    const vis = VIS[pt.id];
+    const draw = hardOf(pt.id);
+    if (!vis || !draw) continue;
+    const sim = C.ITEM_SIM[pt.id];
+    if (hide && sim && hide.has(sim.t)) continue;
+    if (X.lod >= 2 && vis.size * (pt.s || 1) < 0.24) continue;
+    const r0 = partRest(G, pt);
+    let lp = r0.p, n = r0.fr.y, fx = r0.fr.x, fz = r0.fr.z;
+    if (B[r0.bi].g === 'tail') {
+      // follow the tail bone: rigid transform of the segment this ball ends
+      const j = r0.bi - sk.tailStart;
+      const k = B[r0.bi];
+      const off = v3.sub(lp, [k.x, k.y, k.z]);
+      const yaw = tp[j] ? tp[j].yaw : 0;
+      lp = v3.add(tp[j] ? tp[j].p : [k.x, k.y, k.z], rotYv(off, yaw));
+      n = rotYv(n, yaw); fx = rotYv(fx, yaw); fz = rotYv(fz, yaw);
+    }
+    lp = wv(lp);
+    const S = vis.size * clamp(pt.s || 1, 0.3, 3) * R;
+    const fr = { x: fx, y: n, z: fz };
+    const g = makeG(X.toW(lp), X.dirW(fx), X.dirW(n), X.dirW(fz), S, frameLocal(fr, [1, 0, 0]), frameLocal(fr, [0, 1, 0]));
+    let cc = itemColor(pt.id, pt.c, { base, coat, detail });
+    if (hlOn(pt)) cc = colHi(cc);
+    env.seed = seed + pi * 1.7;
+    env.blink = X.blink ? X.blink(pi) : 0;
+    env.jaw = pt === mouth ? jawAng : 0;
+    draw(g, cc, env);
+  }
+  // ---- hard pieces of feet and hands --------------------------------------------------
+  limbs.forEach((l, li) => {
+    const lb = G.cls.limbs[li].lb;
+    if (hide && hide.has(G.cls.limbs[li].leg ? 'LEG' : 'ARM')) return;
+    if (!lb.tip || !VIS[lb.tip.id]) return;
+    const tv = VIS[lb.tip.id], draw = hardOf(lb.tip.id);
+    if (!draw) return;
+    const { th } = limbRadii(lb);
+    const kw = X.toW(wv(l.knee)), fw = X.toW(wv(l.foot));
+    const dirW2 = v3.norm(v3.sub(fw, kw));
+    const fwdW = X.dirW([1, 0, 0]);
+    let xw = v3.sub(fwdW, v3.mul(dirW2, v3.dot(fwdW, dirW2)));
+    if (v3.len(xw) < 0.3) { const upW = X.dirW([0, 1, 0]); xw = v3.sub(upW, v3.mul(dirW2, v3.dot(upW, dirW2))); }
+    xw = v3.norm(xw);
+    const side = l.root[2] < -0.04 ? -1 : 1;
+    const zw = v3.mul(v3.cross(dirW2, xw), side);
+    const S = tv.size * clamp(lb.tip.s || 1, 0.4, 2.5) * th * R;
+    const g = makeG(fw, xw, dirW2, zw, S, [1, 0, 0], [0, -1, 0]);
+    let tc = itemColor(lb.tip.id, lb.tip.c, { base, coat, detail });
+    if (hlOn(lb)) tc = colHi(tc);
+    env.limb = lb.c || base;
+    draw(g, tc, env);
+  });
+}
+
 // ---- designed creature inside the live world --------------------------------
 function legRanks(G) {
   if (G._ranks) return G._ranks;
@@ -6068,11 +7248,19 @@ function drawDesignedCreature(c, t, camDist, A) {
   const Rw = A.R;
   const toW = (l) => [A.wx(l[0] * Rw, l[2] * Rw), A.bodyY + l[1] * Rw, A.wz(l[0] * Rw, l[2] * Rw)];
   const dW = (v) => A.dirW(v[0], v[1], v[2]);
+  // world -> body space (inverse of toW; used to bring IK results back for skinning)
+  const o0 = toW([0, 0, 0]), cyw = Math.cos(A.yaw), syw = Math.sin(A.yaw);
+  const toL = (w) => {
+    const dx = w[0] - o0[0], dz = w[2] - o0[2];
+    return [(dx * cyw + dz * syw) / Rw, (w[1] - o0[1]) / Rw, (-dx * syw + dz * cyw) / Rw];
+  };
+  const isPlayer = typeof player !== 'undefined' && player && player.c === c;
   const ranks = legRanks(G);
   const airborne = A.hover > Rw * 0.4;
   const walk = !airborne && !A.swimming;
   const X = {
-    R: Rw, t, seed: c.id * 0.37, toW, dirW: dW, far: A.far, lod: camDist > 650 ? 2 : camDist > 420 ? 1 : 0,
+    R: Rw, t, seed: c.id * 0.37, toW, toL, yaw: A.yaw, dirW: dW,
+    quality: isPlayer || camDist < 120 ? 1 : 0, sync: false, far: A.far, lod: camDist > 650 ? 2 : camDist > 420 ? 1 : 0,
     hide: deadTypes(c), gaitPhase: A.phase0, tailSwing: A.tailSwing,
     tailAmp: 0.35 + 0.65 * A.gaitAmt, flexAmp: 0.10 + 0.22 * A.gaitAmt,
     flap: Math.sin(t * (airborne ? 6.5 : 3.4) + c.id) * (airborne ? 0.62 : (p.canFly ? 0.18 : 0.08)),
@@ -6080,15 +7268,6 @@ function drawDesignedCreature(c, t, camDist, A) {
     grip: clamp(c._grab || 0, 0, 1),
     tint: A.flinch > 0.01 ? [1, 0.25, 0.22] : null, tintK: A.flinch * 0.55,
     blink: (pi) => (((t * 0.29 + pi * 0.137 + c.id * 0.071) % 1) < 0.035 ? 1 : 0),
-    pushBody(mesh, cols) {
-      if (bodyCount >= MAX_BODY_INST) return;
-      let arr = bodyByMesh.get(mesh);
-      if (!arr) { arr = []; bodyByMesh.set(mesh, arr); }
-      const q = toW([0, 0, 0]);
-      arr.push(q[0], q[1], q[2], A.yaw, Rw, cols.base[0], cols.base[1], cols.base[2],
-               cols.coat[0], cols.coat[1], cols.coat[2], cols.detail[0], cols.detail[1], cols.detail[2], cols.pat, 0, cols.wave[0], cols.wave[1], cols.wave[2], 0);
-      bodyCount++;
-    },
     limbPose(o, li, root, knee, foot) {
       if (!o.leg) {
         const sw = A.armSwing, gr = clamp(c._grab || 0, 0, 1);
@@ -7020,6 +8199,7 @@ function renderFrame(t) {
     }
   }
 
+  flushSkinDraws(pass);
   pass.setPipeline(waterPipe); pass.setBindGroup(0, bindG.water);
   pass.setVertexBuffer(0, waterVB); pass.draw(6);
   pass.end();
@@ -7690,6 +8870,7 @@ function edFlushAndDraw(pass) {
     pass.setVertexBuffer(1, spikeVB); pass.drawIndexed(coneCount, spikeCount);
   }
   drawTubes(pass);
+  flushSkinDraws(pass);
   if (bodyBatches.length) {
     pass.setPipeline(bodyPipe); pass.setBindGroup(0, bindG.body);
     pass.setVertexBuffer(1, bodyInstVB);
@@ -7714,6 +8895,7 @@ function edSetGlobals(eye, target, aspect, fov, fogDen, t) {
 function edResetInstances() {
   instCount = 0; spikeCount = 0; tubeN = 0;
   bodyByMesh.clear(); bodyCount = 0; bodyBatches.length = 0;
+  resetSkinFrame();
 }
 // Editor placement of the creature: facing +x, centred over the podium.
 function edPlacement(des, t) {
@@ -7725,20 +8907,14 @@ function edPlacement(des, t) {
 function edDesignX(des, t, hl, extra) {
   const pl = edPlacement(des, t);
   const X = Object.assign({
-    R: 1, t, seed: 0.5, syncSkin: true,
+    R: 1, t, seed: 0.5, sync: true, quality: 1, yaw: 0, meshFar: true,
     toW: (l) => [l[0], l[1] + pl.cy, l[2]],
+    toL: (w) => [w[0], w[1] - pl.cy, w[2]],
     dirW: (v) => v,
     gaitPhase: t * 0.9, tailAmp: 0.3, flexAmp: 0.12, tailSwing: 0,
     flap: Math.sin(t * 1.9) * 0.22, chomp: 0.1 + 0.1 * Math.sin(t * 1.3), grip: 0.2 + 0.2 * Math.sin(t * 0.9),
     blink: (pi) => (((t * 0.23 + pi * 0.137) % 1) < 0.03 ? 1 : 0),
     hl,
-    pushBody(mesh, cols) {
-      let arr = bodyByMesh.get(mesh);
-      if (!arr) { arr = []; bodyByMesh.set(mesh, arr); }
-      arr.push(0, pl.cy, 0, 0, 1, cols.base[0], cols.base[1], cols.base[2],
-               cols.coat[0], cols.coat[1], cols.coat[2], cols.detail[0], cols.detail[1], cols.detail[2], cols.pat, 0, cols.wave[0], cols.wave[1], cols.wave[2], 0);
-      bodyCount++;
-    },
   }, extra || {});
   return { X, pl };
 }
@@ -8162,9 +9338,19 @@ function renderEditor(tSec) {
   // design, with a ghost of whatever is being dragged in
   let des = ED.des;
   const gh = ED.ghost;
-  if (gh) {
-    des = Object.assign({}, ED.des, { parts: ED.des.parts.slice(), limbs: ED.des.limbs.slice(), _rev: -1 });
-    des._geo = null;
+  // The ghost is its own design object, kept while the drop target is unchanged so
+  // its skin bakes once; until then it shows the last skin it had.
+  const ghSig = gh ? ED.des._rev + '|' + gh.kind + '|' + (gh.id || '') + '|' + (gh.limb ? ED.des.limbs.indexOf(gh.limb) : -1) + '|' +
+    JSON.stringify(gh.parts || gh.limbs || null, (k, v) => (k[0] === '_' ? undefined : typeof v === 'number' ? Math.round(v * 40) / 40 : v)) : null;
+  if (!gh) ED._ghostDes = null;
+  if (gh && ED._ghostDes && ED._ghostDes._sig === ghSig) des = ED._ghostDes;
+  else if (gh) {
+    const gm = ED._ghostDes && ED._ghostDes._mesh;
+    const prevMesh = gm && gm.gpu && !gm.shared ? gm : ED.des._mesh;
+    des = Object.assign({}, ED.des, { parts: ED.des.parts.slice(), limbs: ED.des.limbs.slice(), _rev: 1 });
+    des._geo = null; des._job = null; des._queued = 0; des._want = 0; des._sig = ghSig;
+    des._mesh = prevMesh ? Object.assign({}, prevMesh, { key: 0, shared: true }) : null;
+    ED._ghostDes = des;
     if (gh.kind === 'surface') {
       for (const p of gh.parts) des.parts.push(p);
     } else if (gh.kind === 'limb') {
@@ -8239,9 +9425,7 @@ async function edMakeThumbs() {
     let view = [0.55, 0.32, 0.78];
     if (j.plan != null) {
       const d = C.defaultDesign(j.plan);
-      const { X } = edDesignX(d, 0.6, null, { toW: (l) => [l[0], l[1], l[2]], blink: () => 0,
-        pushBody(mesh, cb) { let arr = bodyByMesh.get(mesh); if (!arr) { arr = []; bodyByMesh.set(mesh, arr); }
-          arr.push(0, 0, 0, 0, 1, cb.base[0], cb.base[1], cb.base[2], cb.coat[0], cb.coat[1], cb.coat[2], cb.detail[0], cb.detail[1], cb.detail[2], cb.pat, 0, cb.wave[0], cb.wave[1], cb.wave[2], 0); } });
+      const { X } = edDesignX(d, 0.6, null, { toW: (l) => [l[0], l[1], l[2]], toL: (w) => [w[0], w[1], w[2]], blink: () => 0, sync: 'now', quality: 0 });
       drawDesign(d, X);
       view = [0.62, 0.30, 0.74];
     } else {
@@ -9272,6 +10456,7 @@ window.__G3D = {
   absorbFrom: (prey) => absorbPartFrom(prey),
   get ED() { return ED; }, get PROG() { return PROG; },
   openEditor: (m) => openEditor(m), closeEditor: (a) => closeEditor(a),
+  meshDbg: { designGeo, creaturePrims, meshPrims, get skinDraws() { return skinDraws.length; }, get boneN() { return boneN; }, get pool() { return meshPool ? meshPool.length : (meshPoolBroken ? -1 : 0); } },
   edAddPart: (id, hit) => edAddPart(id, hit), edAddLimb: (id, hit) => edAddLimb(id, hit), edSetTip: (l, id) => edSetTip(l, id),
   edBodyHit: (x, y) => edBodyHit(x, y), edProject: (p) => edProject(p), edPick: (x, y) => edPick(x, y),
   limbWorld: (l) => limbWorld(l), partWorld: (p) => partWorld(p), onKill: (c) => edOnKill(c),
