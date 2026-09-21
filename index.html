@@ -42,7 +42,7 @@
     background:#04100e;padding:40px;text-align:center;font-size:14px;line-height:1.7}
   #err code{color:var(--warn)}
   /* control panel: same controls as the 2.5D build, laid over the 3D view */
-  #panel{position:fixed;right:0;top:0;bottom:0;width:318px;overflow-y:auto;z-index:12;
+  #panel{position:fixed;right:0;top:0;bottom:0;width:440px;max-width:100vw;overflow-y:auto;z-index:12;
     background:rgba(4,14,13,.90);border-left:1px solid var(--line);backdrop-filter:blur(9px);
     padding:12px;display:flex;flex-direction:column;gap:10px;font-size:12px;}
   #panel.hidden{display:none}
@@ -60,12 +60,14 @@
   #panel .field{display:flex;flex-wrap:wrap;gap:6px;align-items:center;color:var(--dim);font-size:11px;margin-top:8px}
   #panel .field input[type=number]{width:74px;background:#05100e;border:1px solid var(--line);color:var(--ink);
     border-radius:5px;padding:3px 5px;font-family:inherit;font-size:11.5px}
-  #panel button{width:100%;margin-top:9px;font-family:inherit;font-size:12px;background:#0a201d;color:var(--cyan);
+  #panel button{width:100%;margin-top:12px;font-family:inherit;font-size:14px;font-weight:600;background:#0a201d;color:var(--cyan);
     border:1px solid var(--line);border-radius:7px;padding:7px;cursor:pointer}
   #panel button:hover{background:#0f2d29}
+  #panel button{padding:11px!important}
+  #panel .stat{font-size:13px}
   #panel .stat{display:flex;justify-content:space-between;padding:2px 0;color:var(--dim)}
   #panel .stat b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
-  #ptab{position:fixed;right:326px;top:12px;z-index:13;background:rgba(6,18,17,.85);border:1px solid var(--line);
+  #ptab{position:fixed;right:450px;top:12px;z-index:13;background:rgba(6,18,17,.85);border:1px solid var(--line);
     color:var(--cyan);border-radius:7px;padding:5px 9px;font:600 11px 'IBM Plex Mono',monospace;cursor:pointer}
   #ptab.closed{right:12px}
   #picker{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);z-index:14;display:none;
@@ -109,6 +111,52 @@
   #cross:before,#cross:after{content:'';position:absolute;background:#cfe9e4}
   #cross:before{left:7px;top:0;width:2px;height:16px}
   #cross:after{top:7px;left:0;height:2px;width:16px}
+
+  /* ---------- control panel restyle (larger, readable sliders) ---------- */
+  #panel{--trk:#0b2522;--fill:#35e0d8;}
+  #panel .popbox{border:1px solid #2f7d74;border-radius:10px;padding:12px 12px 10px;margin:0 0 14px;
+    background:linear-gradient(180deg,rgba(53,224,216,.12),rgba(53,224,216,.03));}
+  #panel .pop-h{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+  #panel .pop-h span{font-size:15px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#35e0d8}
+  #panel .pop-h em{font-style:normal;font-size:11px;color:var(--dim)}
+  #panel .pop-row{display:flex;align-items:center;gap:14px}
+  #panel .pop-row input[type=range]{flex:1;min-width:0;margin:0}
+  #panel .pop-row input[type=number]{width:112px;flex:0 0 112px;font:700 28px/1 'IBM Plex Mono',monospace;text-align:center;
+    color:#e8fbf8;background:#04100e;border:1px solid #2f7d74;border-radius:8px;padding:8px 4px;}
+  #panel .pop-row input[type=number]:focus{outline:none;border-color:#35e0d8;box-shadow:0 0 0 3px rgba(53,224,216,.2)}
+  #panel .toggles{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 14px}
+  #panel .toggles label{display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;
+    background:rgba(4,16,14,.6);font-size:13px;line-height:1.25;color:var(--ink);cursor:pointer;transition:border-color .12s,background .12s}
+  #panel .toggles label:hover{border-color:#2f7d74;background:rgba(53,224,216,.06)}
+  #panel .toggles input[type=checkbox]{width:18px;height:18px;flex:0 0 18px;margin:0;accent-color:#35e0d8;cursor:pointer}
+  #panel .ctl{display:block;margin:0 0 10px;padding:11px 12px 10px;border:1px solid var(--line);border-radius:10px;
+    background:rgba(4,16,14,.55);color:var(--ink);font-size:13px}
+  #panel .ctl:hover{border-color:#2f7d74}
+  #panel .ctl-h{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:9px}
+  #panel .ctl-n{font-size:14px;font-weight:600;color:var(--ink);letter-spacing:.02em}
+  #panel .ctl-h b{display:inline-block;min-width:64px;text-align:center;font-size:14px;font-weight:700;color:#04100e;
+    background:#35e0d8;border-radius:6px;padding:3px 8px;font-variant-numeric:tabular-nums}
+  #panel .ctl-d{margin-top:8px;font-size:11.5px;line-height:1.45;color:var(--dim)}
+  #panel input[type=range]{-webkit-appearance:none;appearance:none;display:block;width:100%;height:28px;margin:0;
+    background:transparent;cursor:pointer;accent-color:#35e0d8;--p:50%}
+  #panel input[type=range]:focus{outline:none}
+  #panel input[type=range]::-webkit-slider-runnable-track{height:12px;border-radius:6px;border:1px solid #1d4a44;
+    background:linear-gradient(90deg,var(--fill) 0,var(--fill) var(--p),var(--trk) var(--p),var(--trk) 100%)}
+  #panel input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:26px;height:26px;margin-top:-8px;
+    border-radius:50%;background:#e8fbf8;border:3px solid #35e0d8;box-shadow:0 0 0 4px rgba(53,224,216,.15),0 2px 6px rgba(0,0,0,.5)}
+  #panel input[type=range]:hover::-webkit-slider-thumb,#panel input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 7px rgba(53,224,216,.25),0 2px 6px rgba(0,0,0,.5)}
+  #panel input[type=range]::-moz-range-track{height:12px;border-radius:6px;border:1px solid #1d4a44;background:var(--trk)}
+  #panel input[type=range]::-moz-range-progress{height:12px;border-radius:6px;background:var(--fill)}
+  #panel input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#e8fbf8;border:3px solid #35e0d8;
+    box-shadow:0 0 0 4px rgba(53,224,216,.15)}
+  #panel .field{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin-top:10px;font-size:13px;color:var(--dim)}
+  #panel .field input[type=number],#panel .field select{font-size:13px;padding:6px 8px;border-radius:6px}
+  #panel .field input[type=number]{width:100px}
+  #panel .field label{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px}
+  #panel .field input[type=checkbox]{width:16px;height:16px;accent-color:#35e0d8}
+  #panel h2{font-size:12px!important;letter-spacing:.16em!important;color:#35e0d8!important;margin-bottom:12px!important}
+  #panel .card.brief p{font-size:13.5px;line-height:1.6}
+  @media (prefers-reduced-motion:reduce){#panel .toggles label{transition:none}}
 </style>
 </head>
 <body>
@@ -144,6 +192,11 @@
 
   <div class="card">
     <h2>control panel</h2>
+    <div class="popbox" title="number of founder animals placed on the island. Takes effect on reset.">
+        <div class="pop-h"><span>start population</span><em>applies on reset</em></div>
+        <div class="pop-row"><input id="startPopR" type="range" min="2" max="500" step="1" value="50" aria-label="start population slider"><input id="startPop" type="number" min="2" max="2000" value="50" aria-label="start population"></div>
+        <div class="ctl-d">founders placed on the island. Slider covers 2 to 500; type up to 2000.</div>
+      </div>
     <div class="toggles">
       <label><input type="checkbox" id="f_brains" checked> neural brains</label>
       <label><input type="checkbox" id="f_day"> day / night</label>
@@ -152,23 +205,22 @@
       <label><input type="checkbox" id="f_climate" checked> climate drift</label>
       <label title="off = asexual budding"><input type="checkbox" id="f_sex" checked> sexual repro</label>
     </div>
-    <div class="ctl" title="chance each gene mutates per birth. Live.">mutation rate <b id="mutv">0.60</b><input id="mut" type="range" min="0.1" max="1" step="0.01" value="0.6"></div>
-    <div class="ctl" title="how fast biological time runs against wall time. Live.">time scale <b id="tscalev">0.120</b><input id="tscale" type="range" min="0.01" max="1" step="0.01" value="0.12"></div>
-    <div class="ctl" title="plant spawn attempts per biological second. Live.">plant regrowth <b id="plantv">40</b><input id="plant" type="range" min="5" max="900" step="5" value="40"></div>
-    <div class="ctl" title="energy in one plant before biome multipliers. Live.">plant energy <b id="pev">30</b><input id="pe" type="range" min="5" max="120" step="5" value="30"></div>
-    <div class="ctl" title="length of one day/night cycle. Live.">day length <b id="daylv">6</b><input id="dayl" type="range" min="1" max="40" step="1" value="6"></div>
-    <div class="ctl" title="length of one year, which drives seasons. Live.">season length <b id="yearlv">70</b><input id="yearl" type="range" min="10" max="300" step="10" value="70"></div>
-    <div class="ctl" title="how long a corpse lies there. Live, applies to new corpses.">corpse lifespan <b id="clifev">12</b><input id="clife" type="range" min="2" max="60" step="1" value="12"></div>
-    <div class="ctl" title="multiplier on corpse energy. Live, applies to new corpses.">corpse yield <b id="cyv">1.0</b><input id="cy" type="range" min="0.2" max="4" step="0.1" value="1"></div>
-    <div class="ctl" title="biological seconds to run the world before you enter it. 0 = you witness the very first generation. Takes effect on reset.">pre-run <b id="prerunv">0</b><input id="prerun" type="range" min="0" max="300" step="10" value="0"></div>
-    <div class="ctl" title="how strongly food clusters into thickets and bare ground. Takes effect on reset.">food patchiness <b id="fpv">0.70</b><input id="fp" type="range" min="0" max="1" step="0.05" value="0.7"></div>
-    <div class="ctl" title="how far founders are pre-mutated apart. Takes effect on reset.">founder diversity <b id="fdv">0.00</b><input id="fd" type="range" min="0" max="1" step="0.05" value="0"></div>
-    <div class="ctl" title="how tall mountains and ridges rise, and how rough the general terrain is. 1 = default. Takes effect on reset.">height variation <b id="trv">1.00</b><input id="trelief" type="range" min="0.3" max="2.2" step="0.05" value="1"></div>
-    <div class="ctl" title="how deep the open ocean and inland lakes cut below the waterline. 1 = default. Takes effect on reset.">water depth <b id="twv">1.00</b><input id="twater" type="range" min="0.3" max="2.5" step="0.05" value="1"></div>
-    <div class="ctl" title="fraction of eligible plants that render as full trees vs low ground cover. 1 = default. Live.">tree density <b id="ttv">1.00</b><input id="ttree" type="range" min="0.2" max="2.5" step="0.05" value="1"></div>
-    <div class="ctl" title="how large or small climate-driven biome regions (forest, plains, desert, tundra...) are. Higher = more, smaller patches. 1 = default. Takes effect on reset.">region density <b id="trgv">1.00</b><input id="tregion" type="range" min="0.4" max="2.5" step="0.05" value="1"></div>
-    <div class="field">start pop <input id="startPop" type="number" min="2" max="2000" value="10">
-      start plants <input id="startPlants" type="number" min="0" max="40000" value="500"></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">mutation rate</span><b id="mutv">0.60</b></div><input id="mut" type="range" min="0.1" max="1" step="0.01" value="0.6"><div class="ctl-d">chance each gene mutates per birth. Live.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">time scale</span><b id="tscalev">0.120</b></div><input id="tscale" type="range" min="0.01" max="1" step="0.01" value="0.12"><div class="ctl-d">how fast biological time runs against wall time. Live.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">plant regrowth</span><b id="plantv">40</b></div><input id="plant" type="range" min="5" max="900" step="5" value="40"><div class="ctl-d">plant spawn attempts per biological second. Live.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">plant energy</span><b id="pev">30</b></div><input id="pe" type="range" min="5" max="120" step="5" value="30"><div class="ctl-d">energy in one plant before biome multipliers. Live.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">day length</span><b id="daylv">6</b></div><input id="dayl" type="range" min="1" max="40" step="1" value="6"><div class="ctl-d">length of one day/night cycle. Live.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">season length</span><b id="yearlv">70</b></div><input id="yearl" type="range" min="10" max="300" step="10" value="70"><div class="ctl-d">length of one year, which drives seasons. Live.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">corpse lifespan</span><b id="clifev">12</b></div><input id="clife" type="range" min="2" max="60" step="1" value="12"><div class="ctl-d">how long a corpse lies there. Live, applies to new corpses.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">corpse yield</span><b id="cyv">1.0</b></div><input id="cy" type="range" min="0.2" max="4" step="0.1" value="1"><div class="ctl-d">multiplier on corpse energy. Live, applies to new corpses.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">pre-run</span><b id="prerunv">0</b></div><input id="prerun" type="range" min="0" max="300" step="10" value="0"><div class="ctl-d">biological seconds to run the world before you enter it. 0 = you witness the very first generation. Takes effect on reset.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">food patchiness</span><b id="fpv">0.70</b></div><input id="fp" type="range" min="0" max="1" step="0.05" value="0.7"><div class="ctl-d">how strongly food clusters into thickets and bare ground. Takes effect on reset.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">founder diversity</span><b id="fdv">0.00</b></div><input id="fd" type="range" min="0" max="1" step="0.05" value="0"><div class="ctl-d">how far founders are pre-mutated apart. Takes effect on reset.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">height variation</span><b id="trv">1.00</b></div><input id="trelief" type="range" min="0.3" max="2.2" step="0.05" value="1"><div class="ctl-d">how tall mountains and ridges rise, and how rough the general terrain is. 1 = default. Takes effect on reset.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">water depth</span><b id="twv">1.00</b></div><input id="twater" type="range" min="0.3" max="2.5" step="0.05" value="1"><div class="ctl-d">how deep the open ocean and inland lakes cut below the waterline. 1 = default. Takes effect on reset.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">tree density</span><b id="ttv">1.00</b></div><input id="ttree" type="range" min="0.2" max="2.5" step="0.05" value="1"><div class="ctl-d">fraction of eligible plants that render as full trees vs low ground cover. 1 = default. Live.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">region density</span><b id="trgv">1.00</b></div><input id="tregion" type="range" min="0.4" max="2.5" step="0.05" value="1"><div class="ctl-d">how large or small climate-driven biome regions (forest, plains, desert, tundra...) are. Higher = more, smaller patches. 1 = default. Takes effect on reset.</div></div>
+    <div class="field">start plants <input id="startPlants" type="number" min="0" max="40000" value="500"></div>
     <div class="field">seed <input id="seed" type="number" min="1" max="4294967295" value="2024">
       <label title="off = a new random world each reset"><input type="checkbox" id="seedLock"> lock</label></div>
     <button id="reset">reset world</button>
@@ -189,7 +241,7 @@
      Kill something and you absorb one part of its genome into your own body plan.
      When you die you are reborn as a newborn of your nearest surviving kin.</p>
   <div class="keys">
-    <b>WASD</b> move &nbsp;·&nbsp; <b>mouse</b> look &nbsp;·&nbsp; <b>shift</b> sprint (burns energy)<br>
+    <b>WASD</b> move &nbsp;·&nbsp; <b>drag</b> look &nbsp;·&nbsp; <b>shift</b> sprint (burns energy)<br>
     <b>scroll</b> zoom out to third person &nbsp;·&nbsp; <b>C</b> toggle view<br>
     <b>left click</b> / <b>F</b> attack &nbsp;·&nbsp; <b>M</b> mate &nbsp;·&nbsp; <b>E</b> eat<br>
     inner ring = your attack reach (<span style="color:#f04c38">red</span> target,
@@ -197,9 +249,9 @@
     outer ring = predators nearby, at their real bearing<br>
     <b>space</b> jump &nbsp;·&nbsp; <b>space + W</b> or <b>shift</b> sprint<br>
     fliers: <b>space</b> climb, <b>ctrl</b> dive &nbsp;·&nbsp; hover the minimap to enlarge it<br>
-    <b>drag</b> to look without capturing the mouse<br>
+    <b>drag</b> on the world to look (mouse stays free) &nbsp;·&nbsp; <b>L</b> lock mouse for FPS look<br>
     <b>Tab</b> controls panel<br>
-    <b>V</b> detach camera &nbsp;·&nbsp; <b>[</b> <b>]</b> sim speed &nbsp;·&nbsp; <b>Esc</b> release mouse
+    <b>V</b> detach camera &nbsp;·&nbsp; <b>[</b> <b>]</b> sim speed &nbsp;·&nbsp; <b>Esc</b> / <b>L</b> release mouse
   </div>
   <div class="arch">
     <div class="alab">choose what you are born as</div>
@@ -5096,7 +5148,7 @@ function panelWarmup() {
 function panelOpts() {
   const num = (id, d) => { const el = $(id); const v = el ? parseFloat(el.value) : NaN; return isFinite(v) ? v : d; };
   return {
-    startPop: clamp(num('startPop', 10) | 0, 2, 2000),
+    startPop: clamp(num('startPop', 50) | 0, 2, 2000),
     startPlants: clamp(num('startPlants', 500) | 0, 0, 40000),
     mutationRate: num('mut', 0.6), plantRate: num('plant', 40),
     timeScale: num('tscale', 0.12), plantEnergy: num('pe', 30),
@@ -5190,6 +5242,8 @@ function bindPanel() {
   const pan0 = $('panel');
   if (pan0) pan0.addEventListener('mouseup', () => {
     const a = document.activeElement;
+    // never steal focus from a box you are typing into (start pop, seed...)
+    if (a && a.tagName === 'INPUT' && !/^(range|checkbox|radio|button|submit)$/i.test(a.type || 'text')) return;
     if (a && a !== document.body && a.blur) a.blur();
   });
   const rst = $('reset'); if (rst) rst.addEventListener('click', () => { rebuildWorld(); });
@@ -5201,6 +5255,7 @@ function bindPanel() {
     tab.textContent = open ? 'hide' : 'controls';
   };
   if (tab) tab.addEventListener('click', () => setOpen(pan.classList.contains('hidden')));
+  if (pan) setOpen(!pan.classList.contains('hidden'));   // label matches the initial state
   // the panel must never swallow gameplay input
   if (pan) pan.addEventListener('keydown', e => e.stopPropagation());
 }
@@ -5281,6 +5336,10 @@ function bindInput() {
     }
     if (player.picker && k >= '0' && k <= '4') { choosePicked(+k); e.preventDefault(); return; }
     if (k === 'escape' && player.picker) { player.picker = null; renderPicker(); return; }
+    if (k === 'l' && started) {
+      if (pointerLocked) { document.exitPointerLock && document.exitPointerLock(); }
+      else if (canvas.requestPointerLock) { try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (_) {} }
+    }
     if (k === 'f') tryAttack();
     if (k === 'm') tryMate();
     if (k === 'e') tryEat();
@@ -5341,13 +5400,16 @@ function bindInput() {
   });
   canvas.addEventListener('contextmenu', (e) => { if (pointerLocked) e.preventDefault(); });
   const startEl = $('start');
-  const beginPlay = () => { started = true; startEl.style.display = 'none'; canvas.requestPointerLock && canvas.requestPointerLock(); };
+  // No automatic pointer lock: the cursor stays free so the control panel is always
+  // reachable. Drag on the world to look. L opts in to mouse-lock, Esc or L releases it.
+  const beginPlay = () => { started = true; startEl.style.display = 'none'; };
   startEl.addEventListener('click', (e) => {
     const btn = e.target && e.target.closest ? e.target.closest('[data-arch]') : null;
     if (btn) { e.stopPropagation(); becomeArchetype(btn.getAttribute('data-arch')); beginPlay(); return; }
     beginPlay();
   });
   addEventListener('wheel', (e) => {
+    if (e.target !== canvas) return;               // let the control panel scroll normally
     if (player.spectator) return;
     e.preventDefault();
     const wasFirst = player.dist <= 0;
@@ -5514,6 +5576,40 @@ window.__G3D = {
   HEIGHT_SCALE, WORLD_W, WORLD_H,
 };
 window.__G3D.boot = init();
+})();
+</script>
+
+<script>
+/* control panel UI: track fill + start-population slider/box sync. UI only, no sim logic. */
+(function () {
+  'use strict';
+  function fill(el) {
+    var lo = parseFloat(el.min), hi = parseFloat(el.max), v = parseFloat(el.value);
+    if (!isFinite(lo)) lo = 0; if (!isFinite(hi)) hi = 100; if (!isFinite(v)) v = lo;
+    var p = hi > lo ? (Math.min(hi, Math.max(lo, v)) - lo) / (hi - lo) * 100 : 0;
+    el.style.setProperty('--p', p.toFixed(2) + '%');
+  }
+  function all() { var r = document.querySelectorAll('input[type=range]'); for (var i = 0; i < r.length; i++) fill(r[i]); }
+  document.addEventListener('input', function (e) { if (e.target && e.target.type === 'range') fill(e.target); }, true);
+  var box = document.getElementById('startPop'), sl = document.getElementById('startPopR');
+  if (box && sl) {
+    sl.addEventListener('input', function () { box.value = sl.value; });
+    var fromBox = function () {
+      var v = parseInt(box.value, 10);
+      if (!isFinite(v)) return;                       // leave slider alone while the box is empty mid-edit
+      sl.value = String(Math.min(500, Math.max(2, v)));
+      fill(sl);
+    };
+    box.addEventListener('input', fromBox);
+    box.addEventListener('change', function () {    // clamp the typed value on commit
+      var v = parseInt(box.value, 10);
+      box.value = String(isFinite(v) ? Math.min(2000, Math.max(2, v)) : 50);
+      fromBox();
+    });
+    fromBox();
+  }
+  all();
+  window.addEventListener('load', function () { if (box && sl) { var v = parseInt(box.value, 10); if (isFinite(v)) sl.value = String(Math.min(500, Math.max(2, v))); } all(); });
 })();
 </script>
 </body>
