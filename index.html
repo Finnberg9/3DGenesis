@@ -480,6 +480,7 @@
     </svg>
     <h1 id="mmBig">NEW GAME</h1></div>
     <nav id="mmNav"></nav>
+    <audio id="mmMusic" src="menu.mp3" loop preload="auto"></audio>
   </div>
   <div id="mmFoot"><div id="mmDesc"></div><div class="mmhint">move <b>&#8593;</b> <b>&#8595;</b> &nbsp; choose <b>Enter</b> &nbsp; back <b>Esc</b></div></div>
   <div id="mmPage"></div>
@@ -12968,6 +12969,8 @@ function menuFresh(then) {
 }
 function menuStart() {
   started = true;
+  const mus = document.getElementById('mmMusic');
+  if (mus) { const f = setInterval(() => { mus.volume = Math.max(0, mus.volume - 0.03); if (mus.volume <= 0.001) { mus.pause(); clearInterval(f); } }, 60); }
   const st = document.getElementById('start');
   if (st) st.style.display = 'none';
   menuPage(null);
@@ -13588,6 +13591,7 @@ function bindInput() {
     if (btn) { e.stopPropagation(); becomeArchetype(btn.getAttribute('data-arch')); beginPlay(); return; }
   });
   menuBind();
+  { const m = document.getElementById('mmMusic'); if (m) { m.volume = 0.45; const go = () => { m.play().catch(() => {}); removeEventListener('pointerdown', go); removeEventListener('keydown', go); }; m.play().catch(() => { addEventListener('pointerdown', go); addEventListener('keydown', go); }); } }
   const rb = $('resetbtn');
   if (rb) rb.addEventListener('click', (e) => { e.stopPropagation(); resetWorldClick(); });
   ssInit();
