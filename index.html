@@ -238,6 +238,10 @@
   .edst b { color: #fff; font-weight: 600; font-variant-numeric: tabular-nums; }
   .edst.big { font-size: 14px; color: #8ef3ea; border-bottom: 1px solid rgba(140,190,210,.25); padding-bottom: 6px; margin-bottom: 4px; }
   .edst i { font-style: normal; font-size: 11px; margin-left: 6px; } .edst i.up { color: #9cff8a; } .edst i.dn { color: #ff9a86; }
+  .edmoves { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+  .edmoves span { color: #8ef3ea; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; margin-right: 4px; }
+  .edmoves button { font: inherit; font-size: 13px; padding: 5px 10px; border-radius: 9px; cursor: pointer; color: #eafffb;
+    background: #123a52; border: 1px solid #3a8aa4; } .edmoves button:hover { background: #1b5673; border-color: #7fe7dc; }
   .edwarn { margin-top: 8px; font-size: 12px; color: #ffc98a; line-height: 1.45; } .edwarn div { margin-top: 4px; }
   #edInsp { position: absolute; left: 12px; top: 12px; width: 330px; padding: 12px 14px; border-radius: 16px; display: none;
     background: linear-gradient(180deg, rgba(20,52,82,.94), rgba(8,26,44,.95)); border: 1px solid #2f6f8c; }
@@ -319,7 +323,7 @@
       </div>
     <div class="toggles">
       <label><input type="checkbox" id="f_brains" checked> neural brains</label>
-      <label><input type="checkbox" id="f_day"> day / night</label>
+      <label><input type="checkbox" id="f_day" checked> day / night</label>
       <label><input type="checkbox" id="f_season" checked> seasons</label>
       <label><input type="checkbox" id="f_tox" checked> toxins</label>
       <label><input type="checkbox" id="f_climate" checked> climate drift</label>
@@ -329,7 +333,7 @@
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">time scale</span><b id="tscalev">0.120</b></div><input id="tscale" type="range" min="0.01" max="1" step="0.01" value="0.12"><div class="ctl-d">how fast biological time runs against wall time. Live.</div></div>
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">plant regrowth</span><b id="plantv">40</b></div><input id="plant" type="range" min="5" max="900" step="5" value="40"><div class="ctl-d">plant spawn attempts per biological second. Live.</div></div>
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">plant energy</span><b id="pev">30</b></div><input id="pe" type="range" min="5" max="120" step="5" value="30"><div class="ctl-d">energy in one plant before biome multipliers. Live.</div></div>
-    <div class="ctl"><div class="ctl-h"><span class="ctl-n">day length</span><b id="daylv">6</b></div><input id="dayl" type="range" min="1" max="40" step="1" value="6"><div class="ctl-d">length of one day/night cycle. Live.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">day length</span><b id="daylv">18</b></div><input id="dayl" type="range" min="1" max="40" step="1" value="18"><div class="ctl-d">length of one day/night cycle. Live.</div></div>
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">season length</span><b id="yearlv">70</b></div><input id="yearl" type="range" min="10" max="300" step="10" value="70"><div class="ctl-d">length of one year, which drives seasons. Live.</div></div>
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">corpse lifespan</span><b id="clifev">12</b></div><input id="clife" type="range" min="2" max="60" step="1" value="12"><div class="ctl-d">how long a corpse lies there. Live, applies to new corpses.</div></div>
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">corpse yield</span><b id="cyv">1.0</b></div><input id="cy" type="range" min="0.2" max="4" step="0.1" value="1"><div class="ctl-d">multiplier on corpse energy. Live, applies to new corpses.</div></div>
@@ -363,7 +367,7 @@
   <div class="keys">
     <b>WASD</b> move &nbsp;·&nbsp; <b>drag</b> look &nbsp;·&nbsp; <b>shift</b> sprint (burns energy)<br>
     <b>scroll</b> zoom out to third person &nbsp;·&nbsp; <b>C</b> toggle view<br>
-    <b>left click</b> / <b>F</b> attack &nbsp;·&nbsp; <b>M</b> mate &nbsp;·&nbsp; <b>E</b> eat<br>
+    <b>left click</b> / <b>F</b> attack &nbsp;·&nbsp; <b>X</b> switch attack &nbsp;·&nbsp; <b>M</b> mate &nbsp;·&nbsp; <b>E</b> eat<br>
     inner ring = your attack reach (<span style="color:#f04c38">red</span> target,
     <span style="color:#35e0d8">cyan</span> mate)<br>
     outer ring = predators nearby, at their real bearing<br>
@@ -1178,6 +1182,7 @@
     if (designed) {
       const X = genome.dx, gm = growMean;
       ph.designed = 1;
+      ph.upkeep *= 0.8;   // designed bodies carry many small decorative parts; keep them as viable as evolved ones
       ph.bodyRX = ph.radius * (X.a || rt); ph.bodyRY = ph.radius * (X.b || 1 / rt);
       ph.standH = ph.radius * (X.stand || (0.55 + 0.62 * LL));
       ph.attack += (X.atk || 0) * gm;
@@ -1189,7 +1194,7 @@
       ph.dClaw = (X.claw || 0) > 0 ? 1 : 0;
       ph.dSweep = (X.sweep || 0) > 0 ? 1 : 0;
       ph.dGrab = X.grab || 0;
-      ph.dLegs = X.legs || 0; ph.dArms = X.arms || 0;
+      ph.dLegs = X.legs || 0; ph.dArms = X.arms || 0; ph.dSpring = X.spring || 0;
     }
     ph.canFly = ph.speedAir > 0 ? 1 : 0;
     // Real fins unlock the deep-water niche: below this threshold the deep is a
@@ -1315,7 +1320,15 @@
     // ------------------------------------------------------------------ fBm
     // Octave grid resolution scales WITH world size, so feature size is fixed in
     // world units: a bigger map is more terrain, never stretched terrain.
-    const sx = w / BASE_W, sy = h / BASE_H;
+    // featureScale > 1 makes every landform proportionally wider (a bigger map
+    // with bigger mountains rather than more of the same small hills)
+    const FS = clamp(numOr(terrainOpts.featureScale, 1), 0.5, 4);
+    const HS = Math.max(1, numOr(terrainOpts.heightScale, 420));        // elevation 0..1 -> world units
+    const MAX_TAN = clamp(numOr(terrainOpts.maxSlope, 1), 0.2, 4);      // walkable slope limit (1 = 45 deg)
+    const CLIFF_TAN = clamp(numOr(terrainOpts.cliffSlope, 4.5), MAX_TAN, 12);
+    const sx = w / (BASE_W * FS), sy = h / (BASE_H * FS);
+    // general lowland roughness, relative to the mountains (1 = original)
+    const BASE_REL = clamp(numOr(terrainOpts.baseRelief, 1), 0.1, 2);
     const OCT = [[6, 4, 1.00], [11, 7, 0.52], [21, 14, 0.27], [43, 28, 0.14], [85, 55, 0.07]];
     const oct = []; let ampSum = 0;
     for (let k = 0; k < OCT.length; k++) {
@@ -1447,6 +1460,18 @@
       r: D * 0.082, up: 0.56, p0: rng() * TAU, p1: rng() * TAU,   // v9.4: a real second peak
     };
 
+    // a range of lesser mountains and big hills scattered over the interior
+    const hills = [];
+    const nHills = 4 + ((rng() * 4) | 0);
+    for (let i = 0; i < nHills; i++) {
+      for (let k = 0; k < 40; k++) {
+        const ha = rng() * TAU, hr = 0.15 + rng() * 0.6;
+        const hx = isle.cx + Math.cos(ha) * isle.rx * hr, hy = isle.cy + Math.sin(ha) * isle.ry * hr;
+        if (islandMask(hx, hy) < 0.9) continue;
+        hills.push({ x: hx, y: hy, r: D * (0.035 + rng() * 0.05), up: 0.12 + rng() * 0.26, p0: rng() * TAU, pw: 1.3 + rng() * 0.8 });
+        break;
+      }
+    }
     // inland lakes (small, with a divable centre) kept clear of the massif
     const lakes = [];
     for (let i = 0; i < 2; i++) {
@@ -1492,7 +1517,7 @@
       // height-variation slider scales relief ABOVE the flat 0.300 base band
       // (mountains, ridges, general roughness) -- sea level and shoreline
       // shape are untouched, only how much the land rises does.
-      let e = 0.300 + base * 0.560 * reliefMul;  // land-biased base band
+      let e = 0.300 + base * 0.560 * reliefMul * BASE_REL;  // land-biased base band
       // lakes
       for (let i = 0; i < lakes.length; i++) { const lk = lakes[i]; e -= lk.depth * fall(Math.hypot(x - lk.x, y - lk.y) / lk.r); }
       // massif -- fall() alone saturates near mt.up across a WIDE inner radius,
@@ -1510,6 +1535,11 @@
       let rug2 = 1 + 0.20 * Math.sin(5 * m2a + mt2.p0) + 0.12 * Math.sin(3 * m2a + mt2.p1);
       if (rug2 < 0.35) rug2 = 0.35;
       e += mt2.up * reliefMul * Math.pow(fall((Math.hypot(m2x, m2y) / mt2.r) * rug2), 1.5) * m;
+      for (let i = 0; i < hills.length; i++) {
+        const hl = hills[i], hdx = x - hl.x, hdy = y - hl.y;
+        const hrug = 1 + 0.15 * Math.sin(3 * Math.atan2(hdy, hdx) + hl.p0);
+        e += hl.up * reliefMul * Math.pow(fall((Math.hypot(hdx, hdy) / hl.r) * hrug), hl.pw) * m;
+      }
       // ridges (distance to a line segment)
       for (let i = 0; i < ridges.length; i++) {
         const rg = ridges[i], px = x - rg.x, py = y - rg.y;
@@ -1519,6 +1549,8 @@
       }
       // blend to the local sea floor across the shelf -> beach, shallows, deep
       e = OF + (e - OF) * m;
+      // soft ceiling: summits taper toward 1 instead of being sliced into flat mesas
+      if (e > 0.78) e = 1 - 0.22 * Math.exp(-(e - 0.78) / 0.22);
       return clamp(e, 0, 1);
     }
 
@@ -1558,10 +1590,50 @@
     const hg = new Float32Array(HX * HY);
     const bg = new Uint8Array(HX * HY);   // categorical: nearest lookup, no lerp
     const mg = new Float32Array(HX * HY); // moisture, for decoration variety
+    for (let j = 0; j < HY; j++) for (let i = 0; i < HX; i++) hg[j * HX + i] = rawHeight(i * CELL, j * CELL);
+    // ---- slope limit. Any two neighbouring cells may differ by at most
+    // tan(limit) * distance. Peaks are cut down and pits filled (two chamfer
+    // sweeps each, which is exact for this 8-neighbour metric) so nothing a
+    // walker meets is steeper than 45 degrees -- except CLIFF cells: bands of
+    // exposed rock on ridgelines and high ground, where the limit is much
+    // steeper and the terrain renders as bare rock faces.
+    const cliff = new Uint8Array(HX * HY);
+    for (let j = 0; j < HY; j++) for (let i = 0; i < HX; i++) {
+      const k = j * HX + i, px = i * CELL, py = j * CELL, e = hg[k];
+      if (e > LV.sand + 0.06 && ridgedAt(rdgA, px, py) > 0.82 && ridgedAt(valA, px, py) < 0.5) cliff[k] = 1;
+    }
+    {
+      const dA = CELL * MAX_TAN / HS, dC = CELL * CLIFF_TAN / HS;
+      const lim = (a, b, diag) => ((cliff[a] && cliff[b]) ? dC : dA) * (diag ? 1.4142 : 1);
+      const N8 = [[-1, 0, 0], [0, -1, 0], [-1, -1, 1], [1, -1, 1]];
+      for (let pass = 0; pass < 2; pass++) {
+        // cut peaks: h <= min(neighbour + limit)
+        for (let j = 0; j < HY; j++) for (let i = 0; i < HX; i++) {
+          const k = j * HX + i; let v = hg[k];
+          for (const [di, dj, dg] of N8) { const ii = i + di, jj = j + dj; if (ii < 0 || jj < 0 || ii >= HX) continue; const q = jj * HX + ii; const c = hg[q] + lim(k, q, dg); if (c < v) v = c; }
+          hg[k] = v;
+        }
+        for (let j = HY - 1; j >= 0; j--) for (let i = HX - 1; i >= 0; i--) {
+          const k = j * HX + i; let v = hg[k];
+          for (const [di, dj, dg] of N8) { const ii = i - di, jj = j - dj; if (ii < 0 || jj >= HY || ii >= HX) continue; const q = jj * HX + ii; const c = hg[q] + lim(k, q, dg); if (c < v) v = c; }
+          hg[k] = v;
+        }
+        // fill pits: h >= max(neighbour - limit)
+        for (let j = 0; j < HY; j++) for (let i = 0; i < HX; i++) {
+          const k = j * HX + i; let v = hg[k];
+          for (const [di, dj, dg] of N8) { const ii = i + di, jj = j + dj; if (ii < 0 || jj < 0 || ii >= HX) continue; const q = jj * HX + ii; const c = hg[q] - lim(k, q, dg); if (c > v) v = c; }
+          hg[k] = v;
+        }
+        for (let j = HY - 1; j >= 0; j--) for (let i = HX - 1; i >= 0; i--) {
+          const k = j * HX + i; let v = hg[k];
+          for (const [di, dj, dg] of N8) { const ii = i - di, jj = j - dj; if (ii < 0 || jj >= HY || ii >= HX) continue; const q = jj * HX + ii; const c = hg[q] - lim(k, q, dg); if (c > v) v = c; }
+          hg[k] = v;
+        }
+      }
+    }
     for (let j = 0; j < HY; j++) for (let i = 0; i < HX; i++) {
       const px = i * CELL, py = j * CELL, k = j * HX + i;
-      const e = rawHeight(px, py);
-      hg[k] = e; bg[k] = classify(px, py, e); mg[k] = moisture(px, py);
+      bg[k] = classify(px, py, hg[k]); mg[k] = moisture(px, py);
     }
     // ---- distance-to-deep-water field (chamfer transform on the same grid).
     // Land animals steer by this gradient, which is isotropic: the v6 build
@@ -1644,6 +1716,7 @@
         }
       },
       ELEV, hMax, levelOf, tileSize: TS, LTX, LTY, maxStep: MAXSTEP,
+      heightScale: HS, cliffAt(x, y) { return cliff[cellIdx(x, y)]; },
       level(x, y) {
         let i = Math.floor(x / TS), j = Math.floor(y / TS);
         if (i < 0) i = 0; else if (i > LTX - 1) i = LTX - 1;
@@ -1807,9 +1880,62 @@
   // one straight into a trunk that this same function already resolved them
   // out of a moment earlier. Both call sites go through here so they can never
   // drift out of sync with each other.
+  // ---- static forest ------------------------------------------------------
+  // Trees are part of the land, generated once from the terrain: a jittered
+  // grid, thinned by biome density, moisture and slope, with the species chosen
+  // by biome. Kinds: 0 emergent giant, 1 canopy broadleaf, 2 palm, 3 understory
+  // tree, 4 conifer, 5 acacia, 6 cactus, 7 mangrove, 8 tree fern.
+  const FOREST_DENS = { forest: 0.8, marsh: 0.5, taiga: 0.6, plains: 0.09, savanna: 0.08, beach: 0.14,
+                        desert: 0.03, tundra: 0.04, rock: 0.02, scree: 0, snow: 0, shallow: 0.05, deep: 0 };
+  const FOREST_CELL = 64;
+  const TREE_R = [16, 9, 4, 4.5, 6, 6, 5, 5, 3];      // trunk collision radius at scale 1
+  function buildForest(terrain, w, h, density) {
+    const trees = [];
+    const hsh = (i, j, s) => { let v = ((i * 73856093) ^ (j * 19349663) ^ (s * 83492791)) >>> 0; v = Math.imul(v ^ (v >>> 15), 2246822519) >>> 0; v = Math.imul(v ^ (v >>> 13), 3266489917) >>> 0; return ((v ^ (v >>> 16)) >>> 0) / 4294967296; };
+    const HS = terrain.heightScale || 420;
+    const nx = Math.ceil(w / FOREST_CELL), ny = Math.ceil(h / FOREST_CELL);
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+      const x = (i + 0.15 + hsh(i, j, 1) * 0.7) * FOREST_CELL, y = (j + 0.15 + hsh(i, j, 2) * 0.7) * FOREST_CELL;
+      if (x < 8 || y < 8 || x > w - 8 || y > h - 8) continue;
+      const b = terrain.biomeAt(x, y);
+      let dens = (FOREST_DENS[b] || 0) * density;
+      if (!dens) continue;
+      const m = terrain.moistureAt(x, y);
+      dens *= 0.55 + 0.9 * m;
+      // no trees on steep ground or cliffs
+      const e0 = terrain.height(x, y), ex = terrain.height(x + 16, y), ez = terrain.height(x, y + 16);
+      const slope = Math.hypot(ex - e0, ez - e0) * HS / 16;
+      if (slope > 0.8 || terrain.cliffAt(x, y)) continue;
+      if (hsh(i, j, 3) > dens) continue;
+      const r = hsh(i, j, 4), sc = 0.75 + hsh(i, j, 5) * 0.6;
+      let kind;
+      if (b === 'forest') kind = r < 0.07 ? 0 : r < 0.62 ? 1 : r < 0.78 ? 2 : r < 0.9 ? 3 : 8;
+      else if (b === 'marsh' || b === 'shallow') kind = r < 0.6 ? 7 : r < 0.8 ? 2 : 1;
+      else if (b === 'taiga' || b === 'tundra') kind = 4;
+      else if (b === 'beach') kind = 2;
+      else if (b === 'savanna') kind = r < 0.8 ? 5 : 3;
+      else if (b === 'desert') kind = 6;
+      else if (b === 'rock') kind = r < 0.5 ? 4 : 3;
+      else kind = r < 0.45 ? 1 : r < 0.75 ? 3 : 5;
+      trees.push({ x, y, kind, s: sc, rot: hsh(i, j, 6) * 6.2832, v: (hsh(i, j, 7) * 3) | 0, trunkR: TREE_R[kind] * sc, isTree: true, forest: true });
+    }
+    const grid = makeGrid(w, h, 110);
+    for (const t of trees) grid.insert(t);
+    return { trees, grid };
+  }
+  function trunkClearance(p) {
+    const r = Math.min(p.bodyRX || p.radius || 3, p.bodyRY || p.radius || 3, p.radius || 3);
+    return Math.max(0.8, r * 0.5);    // 0.55 is the drawn body scale; a little give on top
+  }
   function pushOutOfTrees(pGrid, x, y, cr) {
     if (!pGrid) return null;
     let hit = null, hitD2 = Infinity, hitMinD = 0;
+    const F = pGrid._forest;
+    if (F) F.grid.around(x, y, (pl) => {
+      const dx = x - pl.x, dy = y - pl.y, d2 = dx * dx + dy * dy;
+      const minD = cr + pl.trunkR;
+      if (d2 < minD * minD && d2 < hitD2) { hitD2 = d2; hit = pl; hitMinD = minD; }
+    });
     pGrid.around(x, y, (pl) => {
       if (!pl.trunkR) return;
       const dx = x - pl.x, dy = y - pl.y, d2 = dx * dx + dy * dy;
@@ -1833,10 +1959,12 @@
     const elevSteps = 16 + Math.round(rng() * 74);
     const terrain = makeTerrain(w, h, rng, elevSteps, opts.tileSize, {
       reliefMul: opts.terrainRelief, waterDepthMul: opts.waterDepthMul, regionDensityMul: opts.regionDensity,
+      featureScale: opts.featureScale, heightScale: opts.heightScale, maxSlope: opts.maxSlope, baseRelief: opts.baseRelief,
     });
     // Everything density-related is expressed per BASE_W x BASE_H and multiplied
     // by areaScale, so enlarging the map does not silently starve the ecosystem.
     const areaScale = (w * h) / (BASE_W * BASE_H);
+    const PLANT_AREA = clamp(numOr(opts.plantArea, 1), 0.1, 1);
     // v8.5: climate drift descriptor -- periods/phases drawn ONCE here (so the
     // climate cycle is deterministic per seed, exactly like the terrain and
     // every founder genome), then purely time-driven every tick afterward
@@ -1853,11 +1981,11 @@
       temp: 0, moist: 0,
     };
     const world = {
-      w, h, seed, rng, terrain, t: 0, areaScale,
-      maxPlants: Math.max(200, Math.round(CAPS.PLANTS * areaScale)),
+      w, h, seed, rng, terrain, t: 0, areaScale, plantArea: PLANT_AREA,
+      maxPlants: Math.max(200, Math.round(CAPS.PLANTS * areaScale * PLANT_AREA)),
       // hard ceiling on submerged flora + a live count, so the unreachable
       // sea-floor larder can never soak up the whole regrowth budget
-      maxDeepPlants: Math.max(60, Math.round(CAPS.PLANTS * areaScale * 0.16)),
+      maxDeepPlants: Math.max(60, Math.round(CAPS.PLANTS * areaScale * PLANT_AREA * 0.16)),
       deepPlants: 0,
       // v9.4: two-octave value-noise fertility field, drawn once from the world
       // rng so it is fixed per seed like the terrain. Returns a multiplier on
@@ -1942,6 +2070,8 @@
       for (let i = 0; i < B.length; i++) B[i] = rng();
       world.fertLat = { a: A, b: B, cellA: Math.max(240, w / 26), cellB: Math.max(90, w / 84) };
     }
+    world.forest = buildForest(terrain, w, h, world.params.treeDensity || 1);
+    world.pGrid._forest = world.forest;
     // Seed the flora to a real starting density (attempt-capped): the biome
     // acceptance test rejects most candidates, so a fixed attempt count would
     // start the world in a famine.
@@ -1976,6 +2106,8 @@
     const _frounds = _fdiv > 0 ? 1 + ((_fdiv * 4) | 0) : 0;
     for (let i = 0; i < world.params.startPop; i++) {
       let g = seedHerbivore(world, rng);
+      g.design = DESIGN_API.randomDesign(rng, { diversity: Math.max(0.25, _fdiv), diet: rng() < 0.12 ? 'carn' : 'herb' });
+      DESIGN_API.compileDesign(g);
       for (let m = 0; m < _frounds; m++) g = mutate(world, g, rng, _fdiv);
       const col = colonies[(rng() * K) | 0];
       let x = clamp(col[0] + gauss(rng) * 160, 1, w - 1), y = clamp(col[1] + gauss(rng) * 160, 1, h - 1);
@@ -2114,7 +2246,7 @@
     // a given tree is always the same tree.
     let hs = ((x * 7919) ^ (y * 104729)) >>> 0; hs = (hs ^ (hs >>> 13)) >>> 0;
     const roll = (hs >>> 20) % 100, j = (hs % 1000) / 1000;
-    const isTree = roll < (TREE_ODDS[biome] || 6) * (world.params.treeDensity || 1);
+    const isTree = world.forest ? false : roll < (TREE_ODDS[biome] || 6) * (world.params.treeDensity || 1);
     const eScale = clamp(e / Math.max(1, world.params.plantEnergy), 0.6, 3.2);
     return {
       x, y, deep,
@@ -2322,7 +2454,7 @@
 
     // density-dependent plant regrowth: local carrying capacity => patchiness &
     // grazing recovery (herbivores locally deplete; patches regrow). No objective.
-    const want = params.plantRate * plantMul * bdt * world.areaScale; // per-area rate
+    const want = params.plantRate * plantMul * bdt * world.areaScale * (world.plantArea || 1); // per-area rate
     let whole = Math.floor(want); if (rng() < want - whole) whole++;
     for (let i = 0; i < whole; i++) {
       if (world.plants.length >= world.maxPlants) break;
@@ -2613,7 +2745,7 @@
         const blocked = (bx, by) => {
           if (terrain.isDeep(bx, by)) return !p.canSwim;
           if (terrain.isWater(bx, by)) return false;        // you swim, you do not climb
-          return terrain.level(bx, by) - lv0 > terrain.maxStep;
+          return terrain.level(bx, by) - lv0 > terrain.maxStep + (c.jumpLv || 0);
         };
         if (blocked(nx, ny)) {
           c.stuck = (c.stuck || 0) + 1;
@@ -2632,7 +2764,7 @@
       // separate() below, which catches creature-creature pushes that would
       // otherwise shove someone back into a trunk this already resolved.
       if (!p.canFly) {
-        const pushed = pushOutOfTrees(pGrid, nx, ny, p.bodyRX || p.radius || 3);
+        const pushed = pushOutOfTrees(pGrid, nx, ny, trunkClearance(p));
         if (pushed) { nx = pushed[0]; ny = pushed[1]; }
       }
       c.x = nx; c.y = ny;
@@ -2718,7 +2850,7 @@
       for (let i = 0; i < world.creatures.length; i++) {
         const c = world.creatures[i];
         if (!c.alive || c.ph.canFly) continue;
-        const pushed = pushOutOfTrees(pGrid, c.x, c.y, c.ph.bodyRX || c.ph.radius || 3);
+        const pushed = pushOutOfTrees(pGrid, c.x, c.y, trunkClearance(c.ph));
         if (pushed) { c.x = clamp(pushed[0], 1, w - 1); c.y = clamp(pushed[1], 1, h - 1); }
       }
     }
@@ -2969,6 +3101,7 @@
     l_leg:      { t: 'LIMB', w: 1.0, cost: 2, limb: 1 },
     l_thick:    { t: 'LIMB', w: 1.3, cost: 3, def: 2, limb: 1 },
     l_thin:     { t: 'LIMB', w: 0.75, cost: 1, limb: 1 },
+    l_spring:   { t: 'LIMB', w: 1.1, cost: 3, limb: 1, spring: 1, spd: 0.03 },
     t_paw:      { t: 'TIP', w: 0.3, cost: 1, spd: 0.03, tip: 1 },
     t_hoof:     { t: 'TIP', w: 0.3, cost: 1, spd: 0.06, tip: 1 },
     t_talon:    { t: 'TIP', w: 0.3, cost: 1, atk: 3, tip: 1 },
@@ -3279,7 +3412,7 @@
       const key = type + '|' + (mode || '');
       (groups[key] || (groups[key] = { type, mode: mode || null, sizes: [] })).sizes.push(size);
     };
-    const dx = { atk: 0, def: 0, reach: 0, sense: 0, spd: 0, fin: 0, grab: 0, sweep: 0, claw: 0, legs: 0, arms: 0 };
+    const dx = { atk: 0, def: 0, reach: 0, sense: 0, spd: 0, fin: 0, grab: 0, sweep: 0, claw: 0, legs: 0, arms: 0, spring: 0 };
     const extra = (s, scale) => {
       if (!s) return;
       dx.atk += (s.atk || 0) * scale; dx.def += (s.def || 0) * scale; dx.reach += (s.reach || 0) * scale;
@@ -3302,7 +3435,7 @@
       const lenF = clamp((o.L1 + o.L2) / 1.6, 0.35, 2.2);
       add(o.leg ? 'LEG' : 'ARM', s.w * lenF * (0.7 + 0.3 * th));
       extra(s, 1);
-      if (o.leg) dx.legs++; else dx.arms++;
+      if (o.leg) { dx.legs++; if (s.spring) dx.spring++; } else dx.arms++;
       if (o.lb.tip && ITEM_SIM[o.lb.tip.id]) {
         const ts = ITEM_SIM[o.lb.tip.id];
         const tsz = clamp(numOr(o.lb.tip.s, 1), 0.4, 2.5);
@@ -3369,6 +3502,9 @@
       }
       reseatDesign(d);
     }
+    // rare diet switch, and now and then a new ornament
+    if (rng() < r * 0.012 && DESIGN_API.swapMouth) DESIGN_API.swapMouth(d, rng);
+    if ((d.parts || []).length < 30 && rng() < r * 0.012 && DESIGN_API.addOrnaments) DESIGN_API.addOrnaments(d, rng, 1);
     const parts = d.parts || [];
     // rare loss of one non-mouth part (and its mirror twin)
     if (parts.length > 2 && rng() < r * 0.03) {
@@ -3421,17 +3557,23 @@
     const D = 4;
     return raySkin(sk, tx + dx * D, ty + dy * D, tz + dz * D, -dx, -dy, -dz, D * 2);
   }
-  function defaultDesign(planIdx) {
+  // Skin covering per plan: 0 smooth, 1 scales, 2 feathers, 3 fur, 4 armour plates.
+  const PLAN_SKIN = [1, 3, 1, 1, 3, 4, 1, 2, 4, 0];
+  // opt (all optional): body {len,girth,neck,tail}; eye / mouth / tip(id)->id overrides.
+  function defaultDesign(planIdx, opt) {
+    opt = opt || {};
     const pi = clamp(planIdx | 0, 0, PLANS.length - 1);
     const pc = PLAN_COLORS[pi];
-    const d = { v: 1, plan: pi, body: { len: 1, girth: 1, neck: 1, tail: 1 },
-                col: { base: pc.base.slice(), coat: pc.coat.slice(), detail: pc.detail.slice(), pat: pc.pat },
+    const bd = Object.assign({ len: 1, girth: 1, neck: 1, tail: 1 }, opt.body || {});
+    const d = { v: 1, plan: pi, body: bd,
+                col: { base: pc.base.slice(), coat: pc.coat.slice(), detail: pc.detail.slice(), pat: pc.pat, skin: PLAN_SKIN[pi] },
                 parts: [], limbs: [] };
     const sk = buildDesignSkeleton(d);
     const P = sk.plan, B = sk.balls;
     const head = B[sk.headIdx], snout = B[sk.headIdx + 1];
     let mkey = 1;
     const put = (id, tx, ty, tz, nx, ny, nz, s, mirror) => {
+      if (opt.map) { id = opt.map(id); if (!id) return null; }
       const h = surfaceAt(sk, tx, ty, tz, nx, ny, nz);
       if (!h) return null;
       const pt = { id, b: 0, o: [0, 0, 0], n: [0, 1, 0], spin: 0, s: s || 1, c: null, m: 0 };
@@ -3457,15 +3599,17 @@
     // limbs: foot given in body space; knee bend given as an offset from the
     // straight hip-to-foot midpoint
     const limb = (id, tx, ty, tz, fx, fy, fz, kx, ky, kz, tip, th) => {
+      if (opt.mapLimb) { const nid = opt.mapLimb(id); if (nid === 'l_spring' && id !== nid) { kx -= 0.5; } id = nid; }
       const h = surfaceAt(sk, tx, ty, tz, 0, -0.55, Math.sign(tz) || 0);
       if (!h) return;
       const root = h.p;
       const f = [fx - root[0], fy - root[1], fz - root[2]];
       const k = [f[0] * 0.5 + kx, f[1] * 0.5 + ky, f[2] * 0.5 + kz];
       const key = mkey++;
+      const tipId = tip && opt.map ? opt.map(tip) : tip;
       const mk = (sgn) => {
         const lb = { id, b: 0, o: [0, 0, 0], n: [0, -1, 0], k: [k[0], k[1], k[2] * sgn], f: [f[0], f[1], f[2] * sgn],
-                     th: th || 1, c: null, tip: tip ? { id: tip, c: null, s: 1 } : null, m: key };
+                     th: th || 1, c: null, tip: tipId ? { id: tipId, c: null, s: 1 } : null, m: key };
         const rp = [root[0], root[1], root[2] * sgn], rn = [h.n[0], h.n[1], h.n[2] * sgn];
         setAnchor(sk, lb, rp, rn, nearestBall(sk, rp[0], rp[1], rp[2], false));
         d.limbs.push(lb);
@@ -3552,6 +3696,139 @@
     }
     return d;
   }
+  // ---------------------------------------------------------- random designs
+  // Every animal on the island is a designed body: founders are drawn from the
+  // same ten plans and part vocabulary the editor uses, with random proportions,
+  // eyes, mouths, feet, ornaments, colours and skin, so wild animals and your
+  // own creature are built, rendered and animated the same way.
+  function hsv(h, sat, v) {
+    h = ((h % 1) + 1) % 1;
+    const i = Math.floor(h * 6), f = h * 6 - i, p = v * (1 - sat), q = v * (1 - f * sat), t = v * (1 - (1 - f) * sat);
+    return [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][i % 6];
+  }
+  function pickW(rng, list) {
+    let tot = 0; for (const e of list) tot += e[1];
+    let r = rng() * tot;
+    for (const e of list) { r -= e[1]; if (r <= 0) return e[0]; }
+    return list[list.length - 1][0];
+  }
+  const FOUNDER_PLANS = [[0, 3], [1, 1.5], [2, 1.5], [3, 1.5], [4, 1], [5, 1.2], [7, 1.2], [8, 1.5], [9, 1.2]];
+  function randomColours(rng, pi) {
+    // mostly earthy and natural, now and then something vivid
+    const vivid = rng() < 0.22;
+    const h = vivid ? rng() : pickW(rng, [[0.07, 3], [0.1, 2], [0.13, 2], [0.25, 2], [0.33, 1.5], [0.02, 1], [0.55, 1], [0.6, 0.7], [0.8, 0.5]]) + (rng() - 0.5) * 0.06;
+    const sat = vivid ? 0.55 + rng() * 0.35 : 0.3 + rng() * 0.35;
+    const val = 0.42 + rng() * 0.4;
+    const base = hsv(h, sat, val);
+    const coat = hsv(h + (rng() - 0.5) * 0.08, sat * (0.25 + rng() * 0.3), Math.min(0.97, val + 0.25 + rng() * 0.15));
+    const dh = rng() < 0.3 ? h + 0.5 : h + (rng() - 0.5) * 0.1;
+    const detail = hsv(dh, Math.min(1, sat * (0.8 + rng() * 0.5)), val * (0.35 + rng() * 0.35));
+    const pat = pickW(rng, [[0, 1.4], [1, 1.2], [2, 1.2], [3, 0.8], [4, 1], [5, 0.7]]);
+    const skin = rng() < 0.7 ? PLAN_SKIN[pi] : pickW(rng, [[0, 0.6], [1, 1.2], [2, 0.6], [3, 1], [4, 0.6]]);
+    return { base, coat, detail, pat, skin };
+  }
+  // ornaments a wild animal may carry
+  function addOrnaments(d, rng, n) {
+    const sk = buildDesignSkeleton(d);
+    const B = sk.balls, head = B[sk.headIdx], snout = B[sk.headIdx + 1];
+    const a = sk.a, b = sk.b, hr = head.r;
+    let mkey = 1000 + ((rng() * 1e6) | 0);
+    const put = (id, tx, ty, tz, nx, ny, nz, s, mirror) => {
+      const h = surfaceAt(sk, tx, ty, tz, nx, ny, nz);
+      if (!h) return;
+      const pt = { id, b: 0, o: [0, 0, 0], n: [0, 1, 0], spin: 0, s: s || 1, c: null, m: 0 };
+      setAnchor(sk, pt, h.p, h.n, h.b);
+      d.parts.push(pt);
+      if (mirror && Math.abs(h.p[2]) > 0.08) {
+        const key = mkey++; pt.m = key;
+        const tw = JSON.parse(JSON.stringify(pt));
+        const hp = [h.p[0], h.p[1], -h.p[2]], hn = [h.n[0], h.n[1], -h.n[2]];
+        setAnchor(sk, tw, hp, hn, nearestBall(sk, hp[0], hp[1], hp[2], true));
+        tw.m = key; d.parts.push(tw);
+      }
+    };
+    const has = (t) => d.parts.some(p => ITEM_SIM[p.id] && ITEM_SIM[p.id].t === t);
+    for (let i = 0; i < n; i++) {
+      const kind = pickW(rng, [['dorsal', 3], ['horns', 2.2], ['nose', 0.8], ['crest', 1], ['frill', 0.7], ['tailclub', 0.5], ['fin', 0.6], ['knobs', 0.8], ['antenna', 0.5]]);
+      const sz = 0.75 + rng() * 0.5;
+      if (kind === 'dorsal') {
+        const id = pickW(rng, [['s_spike', 3], ['s_plate', 2], ['s_quills', 1.2]]);
+        const cnt = 2 + ((rng() * 3) | 0);
+        for (let j = 0; j < cnt; j++) {
+          const u = 0.45 - j * (0.9 / Math.max(1, cnt - 1)) * (0.7 + rng() * 0.2);
+          put(id, a * u, b * 1.4, 0, 0, 1, 0, sz * (1 - Math.abs(u) * 0.4), false);
+        }
+      } else if (kind === 'horns' && !has('HORN')) {
+        const id = pickW(rng, [['h_straight', 2], ['h_curved', 2], ['h_ram', 1], ['h_antler', 1], ['h_tusk', 0.6]]);
+        if (id === 'h_tusk') put(id, snout.x + snout.r * 0.4, snout.y - snout.r * 0.4, snout.r * 0.6, 0.5, -0.4, 0.8, sz * 0.8, true);
+        else put(id, head.x - hr * 0.1, head.y + hr, hr * 0.35, -0.25, 1, 0.35, sz * 0.7, true);
+      } else if (kind === 'nose' && !has('HORN')) {
+        put('h_rhino', snout.x + snout.r * 0.2, snout.y + snout.r, 0, 0.35, 1, 0, sz * 0.8, false);
+      } else if (kind === 'crest') {
+        put('d_crest', head.x - hr * 0.2, head.y + hr * 1.2, 0, -0.2, 1, 0, sz, false);
+      } else if (kind === 'frill') {
+        put('d_frill', head.x - hr * 0.9, head.y + hr * 0.4, 0, -1, 0.5, 0, sz, false);
+      } else if (kind === 'tailclub') {
+        if (sk.tailLen > 0.05) { const bi = sk.tailStart + sk.plan.ts - 1; d.parts.push({ id: 's_club', b: bi, o: [-1, 0, 0], n: [-1, 0, 0], spin: 0, s: sz * 0.8, c: null, m: 0 }); }
+      } else if (kind === 'fin') {
+        put('f_dorsal', -a * 0.05, b * 1.3, 0, 0, 1, 0, sz * 0.8, false);
+      } else if (kind === 'knobs') {
+        put('s_knob', a * (rng() - 0.5) * 0.8, b * 0.6, b * 0.8, 0, 0.6, 0.8, sz * 0.8, true);
+      } else if (kind === 'antenna' && !d.parts.some(p => p.id === 'd_antenna')) {
+        put('d_antenna', head.x + hr * 0.2, head.y + hr, hr * 0.3, 0.3, 1, 0.3, sz * 0.8, true);
+      }
+    }
+  }
+  function randomDesign(rng, opt) {
+    opt = opt || {};
+    const div = clamp(numOr(opt.diversity, 0.5), 0, 1);
+    const pi = opt.plan != null ? opt.plan : pickW(rng, opt.water ? FOUNDER_PLANS.concat([[6, 2]]) : FOUNDER_PLANS);
+    const R = BODY_RANGE, span = 0.25 + div * 0.55;
+    const pick = (k, c) => clamp(c + (rng() - 0.5) * span * (R[k][1] - R[k][0]) * 0.7, R[k][0], R[k][1]);
+    const body = { len: pick('len', 1), girth: pick('girth', 1), neck: pick('neck', 1), tail: pick('tail', 1) };
+    const carn = opt.diet === 'carn';
+    const eye = pi === 4 || pi === 5 ? pickW(rng, [['e_bug', 2], ['e_round', 1], ['e_cluster', 1]])
+              : pi === 9 ? pickW(rng, [['e_stalk', 2], ['e_round', 1], ['e_big', 0.5]])
+              : pickW(rng, [['e_round', 3], ['e_slit', 2.2], ['e_big', 0.8], ['e_stalk', 0.25]]);
+    const mouth = carn ? pickW(rng, [['m_jaws', 3], ['m_maw', 1]]) : pickW(rng, [['m_beak', 2], ['m_grazer', 3], ['m_trunk', 0.35]]);
+    const tipFor = (id) => {
+      if (id === 't_paw' || id === 't_hoof') return carn ? pickW(rng, [['t_paw', 2], ['t_claw', 1.5], ['t_talon', 1]]) : pickW(rng, [['t_paw', 2], ['t_hoof', 2], ['t_pad', 1]]);
+      if (id === 't_claw') return carn ? pickW(rng, [['t_claw', 2], ['t_pincer', 1], ['t_hand', 1]]) : pickW(rng, [['t_hand', 2], ['t_paw', 1], ['t_claw', 0.5]]);
+      if (id === 't_talon') return pickW(rng, [['t_talon', 2], ['t_paw', 1]]);
+      return id;
+    };
+    const map = (id) => {
+      const s = ITEM_SIM[id];
+      if (!s) return id;
+      if (s.t === 'EYE' && id !== 'd_antenna') return eye;
+      if (s.t === 'MOUTH') return mouth;
+      if (s.t === 'TIP') return tipFor(id);
+      if (s.t === 'HORN' && rng() < 0.4) return null;
+      return id;
+    };
+    const spring = (pi === 0 || pi === 2 || pi === 7) && rng() < 0.14;
+    const d = defaultDesign(pi, { body, map, mapLimb: (id) => (spring && id === 'l_leg' ? 'l_spring' : id) });
+    reseatDesign(d);
+    d.col = randomColours(rng, pi);
+    const nOrn = Math.floor(rng() * (1 + div * 3.2));
+    if (nOrn) addOrnaments(d, rng, nOrn);
+    // limb proportions
+    for (const lb of d.limbs) { const k = 0.9 + rng() * 0.25 * (0.5 + div); lb.k = lb.k.map(v => v * k); lb.f = lb.f.map(v => v * k); lb.th = clamp(numOr(lb.th, 1) * (0.85 + rng() * 0.35), 0.5, 2); }
+    for (const pt of d.parts) if (ITEM_SIM[pt.id] && ITEM_SIM[pt.id].t === 'EYE') pt.s = clamp(numOr(pt.s, 1) * (0.8 + rng() * 0.35), 0.3, 3);
+    return d;
+  }
+  // mouth swap used by mutation, so diets can still evolve in designed lineages
+  function swapMouth(d, rng) {
+    const pt = (d.parts || []).find(p => ITEM_SIM[p.id] && ITEM_SIM[p.id].t === 'MOUTH');
+    if (!pt) return false;
+    const mode = ITEM_SIM[pt.id].mode;
+    pt.id = mode === 'carn' ? pickW(rng, [['m_grazer', 2], ['m_beak', 1], ['m_hook', 1]]) : pickW(rng, [['m_jaws', 3], ['m_maw', 1], ['m_hook', 0.6]]);
+    return true;
+  }
+  DESIGN_API.randomDesign = randomDesign;
+  DESIGN_API.addOrnaments = addOrnaments;
+  DESIGN_API.swapMouth = swapMouth;
+  DESIGN_API.PLAN_SKIN = PLAN_SKIN;
   DESIGN_API.defaultDesign = defaultDesign;
   DESIGN_API.PLAN_COLORS = PLAN_COLORS;
   DESIGN_API.surfaceAt = surfaceAt;
@@ -3584,16 +3861,16 @@ function fatal(why) { $('err').style.display = 'flex'; $('err-why').textContent 
 if (!C) { fatal('GenesisCore did not load.'); return; }
 
 // ------------------------------------------------------------- config
-const WORLD_W = 12800, WORLD_H = 8000, TILE = 48;
-const HEIGHT_SCALE = 420;    // sim elevation (0..1, unitless) -> world Y units
+const WORLD_W = 25600, WORLD_H = 16000, TILE = 48;
+const HEIGHT_SCALE = 2000;    // sim elevation (0..1, unitless) -> world Y units
                              // chosen so one climbable elevation level is ~1/3 of eye
                              // height; taller relief makes ground level unreadable
-const GRID_STEP = 16;        // terrain mesh sample spacing, world units.
+const GRID_STEP = 24;        // terrain mesh sample spacing, world units.
                              // At 20 the facets were larger than the animals
                              // standing on them and read as smooth blobs.
-const FAR = 5200;            // far plane, also the fog horizon
-const NEAR = 0.6;
-const FOG_DENSITY = 1 / 2600;
+const FAR = 11000;           // far plane, also the fog horizon
+const NEAR = 1.0;
+const FOG_DENSITY = 1 / 5200;
 const LOD_FULL = 900;        // draw every body cell inside this radius
 const LOD_TORSO = 2600;      // torso cells only out to here
 const MAX_INST = 90000;      // hard ceiling on per-frame creature cell instances
@@ -3923,7 +4200,7 @@ function makeCone(seg) {
 let dev, ctx, fmt, canvas, depthTex, msaaTex, world, terrain;
 const SAMPLES = 4;   // MSAA; the jagged silhouettes were the single worst artefact
 let gBuf, gArr = new Float32Array(32);          // 128-byte globals block
-let terrainPipe, instPipe, waterPipe, bodyPipe, unlitPipe, tubePipe, overPipe, skinPipe, skinBind, skinInstVB, bindG;
+let terrainPipe, instPipe, waterPipe, bodyPipe, unlitPipe, tubePipe, overPipe, skinPipe, skinBind, skinInstVB, folPipe, folBind, bindG;
 let bodyInstVB;
 const BINST_FLOATS = 20;                    // pos3 yaw scale base3 coat3 detail3 pattern pad wave3 pad
 const MAX_BODY_INST = 1200;
@@ -4133,7 +4410,7 @@ const WGSL_SKIN = WGSL_COMMON + `
 struct VO { @builtin(position) pos: vec4<f32>, @location(0) nrm: vec3<f32>,
             @location(1) wpos: vec3<f32>, @location(2) opos: vec3<f32>, @location(3) onrm: vec3<f32>,
             @location(4) base: vec3<f32>, @location(5) coat: vec3<f32>, @location(6) detail: vec3<f32>,
-            @location(7) misc: vec4<f32>, @location(8) vcol: vec3<f32> };
+            @location(7) misc: vec4<f32>, @location(8) vcol: vec3<f32>, @location(9) scl: f32 };
 @vertex fn vs(@location(0) p: vec3<f32>, @location(1) n: vec3<f32>, @location(2) ao: f32,
               @location(3) bn: vec2<f32>, @location(4) bw: f32, @location(5) vc: vec3<f32>, @location(6) paint: f32,
               @location(7) iPos: vec3<f32>, @location(8) iYaw: f32, @location(9) iScl: f32,
@@ -4157,7 +4434,7 @@ struct VO { @builtin(position) pos: vec4<f32>, @location(0) nrm: vec3<f32>,
   let rn = vec3<f32>(nn.x * c - nn.z * s, nn.y, nn.x * s + nn.z * c);
   var o: VO; o.pos = g.viewProj * vec4<f32>(w, 1.0);
   o.nrm = rn; o.wpos = w; o.opos = p; o.onrm = n;
-  o.base = iBase; o.coat = iCoat; o.detail = iDetail; o.misc = vec4<f32>(iPat, ao, paint, hl); o.vcol = vc;
+  o.base = iBase; o.coat = iCoat; o.detail = iDetail; o.misc = vec4<f32>(iPat, ao, paint, hl); o.vcol = vc; o.scl = iScl;
   return o;
 }
 fn hash3(p: vec3<f32>) -> f32 {
@@ -4190,9 +4467,50 @@ fn worley(p: vec3<f32>) -> vec2<f32> {
   } } }
   return vec2<f32>(sqrt(d1), sqrt(d2));
 }
+// nearest cell point: distances plus the offset to the nearest point and its id
+struct Wv { d1: f32, d2: f32, off: vec3<f32>, id: f32 };
+fn worleyV(p: vec3<f32>) -> Wv {
+  let i = floor(p); let f = fract(p);
+  var w: Wv; w.d1 = 9.0; w.d2 = 9.0; w.off = vec3<f32>(0.0); w.id = 0.0;
+  for (var z = -1; z <= 1; z++) { for (var y = -1; y <= 1; y++) { for (var x = -1; x <= 1; x++) {
+    let o = vec3<f32>(f32(x), f32(y), f32(z));
+    let c = i + o;
+    let r = o + vec3<f32>(hash3(c), hash3(c + 17.1), hash3(c + 41.7)) * 0.8 + 0.1 - f;
+    let d = dot(r, r);
+    if (d < w.d1) { w.d2 = w.d1; w.d1 = d; w.off = r; w.id = hash3(c + 5.3); } else if (d < w.d2) { w.d2 = d; }
+  } } }
+  w.d1 = sqrt(w.d1); w.d2 = sqrt(w.d2);
+  return w;
+}
+// Overlapping shingles (scales or feathers) on a cylindrical parameterisation
+// around the body axis: u runs head(+) to tail(-), v around the body. Rows nearer
+// the head lie on top, so every piece overlaps the root of the one behind it.
+// Returns (height, rim distance, id).
+fn shingle(u: f32, v: f32, rad: f32) -> vec3<f32> {
+  let r0 = floor(u);
+  for (var k = 1; k >= -1; k--) {
+    let r = r0 + f32(k);
+    let odd = fract(r * 0.5) > 0.25;
+    let off = select(0.0, 0.5, odd);
+    let cv0 = floor(v - off + 0.5) + off;
+    var bd = 9.0; var bc = vec2<f32>(0.0);
+    for (var j = -1; j <= 1; j++) {
+      let c = vec2<f32>(r + 0.5 - 0.45, cv0 + f32(j));
+      let d = length(vec2<f32>(u - c.x, v - c.y)) / rad;
+      if (d < bd) { bd = d; bc = c; }
+    }
+    if (bd < 1.0) {
+      let t = clamp(0.5 - (u - bc.x) / rad * 0.5, 0.0, 1.0);    // 0 at the covered root, 1 at the free rim
+      return vec3<f32>(t * 0.75 + (1.0 - bd * bd) * 0.35, 1.0 - bd, hash3(vec3<f32>(bc, 3.7)));
+    }
+  }
+  return vec3<f32>(0.0, 0.0, 0.5);
+}
 @fragment fn fs(i: VO) -> @location(0) vec4<f32> {
   let p = i.opos; let n = normalize(i.onrm);
-  let pat = i.misc.x;
+  let pk = i.misc.x;
+  let skin = floor(pk / 16.0 + 0.001);
+  let pat = pk - skin * 16.0;
   let edge = fbm(p * 2.2) - 0.5;
   // coat: countershaded underside with a soft, noisy boundary
   let coatW = smoothstep(-0.12, 0.42, -n.y + edge * 0.45) * 0.95;
@@ -4214,25 +4532,662 @@ fn worley(p: vec3<f32>) -> vec2<f32> {
   }
   var painted = mix(i.base, i.detail, m * (1.0 - coatW));
   painted = mix(painted, i.coat, coatW);
-  // subtle mottling so a flat colour still reads as living skin
   painted *= 0.93 + 0.12 * fbm(p * 7.0);
   var col = mix(i.vcol, painted, clamp(i.misc.z, 0.0, 1.0));
-  // leathery micro relief: perturb the shading normal with a small noise vector
-  let bp = p * 26.0;
-  let bump = vec3<f32>(vnoise(bp) - 0.5, vnoise(bp + 19.3) - 0.5, vnoise(bp + 37.1) - 0.5);
-  let N = normalize(i.nrm + bump * 0.22);
-  let ao = pow(clamp(i.misc.y, 0.0, 1.0), 1.15);
+
+  // ---- skin covering: a height field in rest space, turned into a normal
+  // perturbation with screen-space derivatives (so it follows the posed skin)
+  var h = 0.0; var tone = 1.0; var amp = 0.0; var gloss = 1.0; var fuzz = 0.0;
+  let belly = clamp(-n.y, 0.0, 1.0);
+  let arc = atan2(p.z, p.y) * max(0.15, length(p.yz));
+  if (skin > 0.5 && skin < 1.5) {          // scales: small overlapping reptile scales, finer on the belly
+    let sf = mix(10.0, 15.0, belly);
+    let sh = shingle(p.x * sf, arc * sf, 0.74);
+    h = sh.x;
+    tone = mix(0.78, 1.0, smoothstep(0.0, 0.25, sh.y)) * (0.95 + 0.1 * sh.z);
+    amp = 0.12 / sf; gloss = 1.1;
+  } else if (skin > 1.5 && skin < 2.5) {   // feathers: long shingles lying toward the tail
+    let sh = shingle(p.x * 4.2 + fbm(p * 2.0) * 0.4, arc * 6.5, 0.78);
+    h = sh.x;
+    let barbs = 0.5 + 0.5 * sin(arc * 60.0 + p.x * 8.0);
+    tone = mix(0.72, 1.08, sh.x) * (0.9 + 0.2 * sh.z) * (0.95 + 0.06 * barbs);
+    amp = 0.035; gloss = 0.55; fuzz = 0.25;
+  } else if (skin > 2.5 && skin < 3.5) {   // fur: fine strands combed back, fuzzy silhouette
+    let q = vec3<f32>(p.x * 10.0 + fbm(p * 4.0) * 1.5, p.y * 55.0, p.z * 55.0);
+    h = vnoise(q) * 0.7 + vnoise(q * 2.3 + 7.0) * 0.3;
+    tone = 0.9 + 0.16 * h;
+    amp = 0.012; gloss = 0.25; fuzz = 0.55;
+  } else if (skin > 3.5) {                 // armour plates: big flat plates with deep seams
+    let w = worleyV(p * mix(5.5, 9.0, belly));
+    let e = w.d2 - w.d1;
+    h = smoothstep(0.0, 0.1, e) * (1.0 - 0.15 * w.d1);
+    tone = mix(0.6, 1.0, smoothstep(0.0, 0.07, e)) * (0.9 + 0.2 * w.id);
+    amp = 0.1; gloss = 2.2;
+  } else {                                 // smooth, leathery micro relief
+    h = fbm(p * 26.0) * 0.5;
+    amp = 0.012; gloss = 1.0;
+  }
+  col *= tone;
+  var N = normalize(i.nrm);
+  let hh = h * amp * i.scl;
+  let dpx = dpdx(i.wpos); let dpy = dpdy(i.wpos);
+  let dhx = dpdx(hh); let dhy = dpdy(hh);
+  let r1 = cross(dpy, N); let r2 = cross(N, dpx);
+  let det = dot(dpx, r1);
+  if (abs(det) > 1e-12) {
+    let grad = sign(det) * (dhx * r1 + dhy * r2);
+    N = normalize(abs(det) * N - grad);
+  }
+  let ao = pow(clamp(i.misc.y, 0.0, 1.0), 1.15) * mix(0.8, 1.0, h);
   col = col * i.misc.w;
   var lit = shade(col * (0.35 + 0.65 * ao), N, i.wpos);
-  // soft sheen and a warm light-bleed on the terminator, like thin skin
   let L = normalize(g.lightDir.xyz);
   let V = normalize(g.camPos.xyz - i.wpos);
   let H = normalize(L + V);
-  lit += vec3<f32>(1.0, 0.97, 0.9) * pow(max(dot(N, H), 0.0), 40.0) * 0.12 * g.params.z * ao;
+  lit += vec3<f32>(1.0, 0.97, 0.9) * pow(max(dot(N, H), 0.0), 20.0 + 30.0 * gloss) * 0.1 * gloss * g.params.z * ao;
   let wrap = clamp(1.0 - abs(dot(N, L)), 0.0, 1.0);
-  lit += col * vec3<f32>(0.22, 0.08, 0.05) * wrap * wrap * 0.35 * g.params.z;
+  lit += col * vec3<f32>(0.22, 0.08, 0.05) * wrap * wrap * 0.3 * g.params.z;
+  // fur and down catch light on the silhouette
+  let rim = pow(1.0 - clamp(dot(normalize(i.nrm), V), 0.0, 1.0), 2.5);
+  lit += col * rim * fuzz * (0.4 + 0.6 * g.params.z);
   return vec4<f32>(lit, 1.0);
 }`;
+// Foliage: instanced tree and ground-cover meshes. Wind sways each vertex by
+// its baked sway weight; leaves are two-sided, let light through from behind,
+// and dissolve (dithered) when they come right up against the camera so the
+// canopy never blinds you.
+const WGSL_FOLIAGE = WGSL_COMMON + `
+struct VO { @builtin(position) pos: vec4<f32>, @location(0) nrm: vec3<f32>, @location(1) wpos: vec3<f32>,
+            @location(2) col: vec3<f32>, @location(3) leaf: f32 };
+@vertex fn vs(@location(0) p: vec3<f32>, @location(1) n: vec3<f32>, @location(2) c: vec3<f32>,
+              @location(3) sway: f32, @location(4) leaf: f32,
+              @location(5) iPos: vec3<f32>, @location(6) iYaw: f32, @location(7) iScl: f32, @location(8) iTint: vec3<f32>) -> VO {
+  let s = sin(iYaw); let co = cos(iYaw);
+  let q = p * iScl;
+  var w = vec3<f32>(q.x * co - q.z * s, q.y, q.x * s + q.z * co) + iPos;
+  let t = g.params.x;
+  let ph = iPos.x * 0.011 + iPos.z * 0.017;
+  let gust = 0.65 + 0.35 * sin(t * 0.23 + ph * 0.3);
+  let a = (sin(t * 0.95 + ph + q.y * 0.004) * 0.7 + sin(t * 2.6 + ph * 2.1 + p.x * 0.35 + p.z * 0.3) * 0.3 * leaf) * gust;
+  w.x += a * sway * iScl * 0.8;
+  w.z += cos(t * 0.73 + ph * 1.3) * sway * iScl * 0.45 * gust;
+  var o: VO;
+  o.pos = g.viewProj * vec4<f32>(w, 1.0);
+  o.nrm = vec3<f32>(n.x * co - n.z * s, n.y, n.x * s + n.z * co);
+  o.wpos = w; o.col = c * iTint; o.leaf = leaf;
+  return o;
+}
+@fragment fn fs(i: VO, @builtin(front_facing) ff: bool) -> @location(0) vec4<f32> {
+  let d = distance(i.wpos, g.camPos.xyz);
+  let hs = fract(sin(dot(i.pos.xy, vec2<f32>(12.9898, 78.233))) * 43758.5453);
+  if (g.camPos.w < 0.5) {
+    if (i.leaf > 0.5 && d < 30.0 && hs > (d - 8.0) / 22.0) { discard; }
+    if (d < 22.0 && hs > (d - 6.0) / 16.0) { discard; }
+  } else if (d < 4.0 && hs > (d - 1.5) / 2.5) { discard; }   // editor: plants right at the lens
+  var N = normalize(i.nrm);
+  if (!ff && i.leaf > 0.5) { N = -N; }
+  var lit = shade(i.col, N, i.wpos);
+  if (i.leaf > 0.5) {
+    // light through the leaf from behind
+    let L = normalize(g.lightDir.xyz);
+    let V = normalize(g.camPos.xyz - i.wpos);
+    let tr = pow(clamp(dot(-V, L), 0.0, 1.0), 3.0) * 0.35 + clamp(-dot(N, L), 0.0, 1.0) * 0.22;
+    let f = clamp(1.0 - exp(-(d * g.params.y) * (d * g.params.y)), 0.0, 1.0);
+    lit += i.col * vec3<f32>(0.9, 1.1, 0.5) * tr * g.params.z * (1.0 - f);
+  }
+  return vec4<f32>(lit, 1.0);
+}`;
+
+// =====================================================================
+// FOREST AND GROUND COVER
+// Trees are real meshes built once at start-up: tapered bark tubes with
+// buttress roots, forking limbs, crowns made of hundreds of individual leaf
+// blades, palm fronds, conifer skirts and hanging lianas. Several variants per
+// kind and three levels of detail. They are drawn instanced from the static
+// forest the simulation generates (so what you see is what you bump into),
+// with wind sway in the vertex shader. Ground cover (tall grass, ferns, reeds,
+// shrubs) is scattered procedurally around the camera.
+// Units: world units. A grown animal is roughly 8-15 tall; the canopy stands at
+// 200-280 and emergent giants reach past 400.
+// =====================================================================
+const FOL_VF = 11;           // pos3 nrm3 col3 sway1 leaf1
+const FOL_IF = 8;            // pos3 yaw1 scale1 tint3
+const FOL_MAX_INST = 60000;
+function folRng(seed) {
+  let a = seed >>> 0;
+  return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+function folMB() { return { v: [], i: [], n: 0 }; }
+function folV(m, p, nr, c, sway, leaf) { m.v.push(p[0], p[1], p[2], nr[0], nr[1], nr[2], c[0], c[1], c[2], sway, leaf); return m.n++; }
+const fadd = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const fsub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const fmul = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
+const fdot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const fcross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const fnorm = (a) => { const l = Math.hypot(a[0], a[1], a[2]); return l > 1e-9 ? [a[0] / l, a[1] / l, a[2] / l] : [0, 1, 0]; };
+const fcol = (c, k) => [Math.min(1, c[0] * k), Math.min(1, c[1] * k), Math.min(1, c[2] * k)];
+// sway amplitude grows with height (the base never moves)
+const fsw = (y, H, k) => k * Math.pow(Math.max(0, y) / Math.max(1, H), 1.6);
+
+// Tapered tube along a polyline. pts: points, rad: radii, sides.
+function folTube(m, pts, rad, sides, col, H, swayK, aoFloor) {
+  const n = pts.length;
+  let prevN = null;
+  const rings = [];
+  for (let k = 0; k < n; k++) {
+    const t = fnorm(k === 0 ? fsub(pts[1], pts[0]) : k === n - 1 ? fsub(pts[n - 1], pts[n - 2]) : fsub(pts[k + 1], pts[k - 1]));
+    let nr = prevN ? fsub(prevN, fmul(t, fdot(prevN, t))) : fcross(t, Math.abs(t[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0]);
+    nr = fnorm(nr); prevN = nr;
+    const bn = fcross(t, nr);
+    const ring = [];
+    for (let s = 0; s < sides; s++) {
+      const a = s / sides * Math.PI * 2;
+      const d = fadd(fmul(nr, Math.cos(a)), fmul(bn, Math.sin(a)));
+      const p = fadd(pts[k], fmul(d, rad[k]));
+      const ao = aoFloor != null ? aoFloor + (1 - aoFloor) * Math.min(1, p[1] / 40) : 1;
+      const bark = 0.9 + 0.2 * ((s * 7 + k * 3) % 5) / 5;
+      ring.push(folV(m, p, d, fcol(col, ao * bark), fsw(p[1], H, swayK), 0));
+    }
+    rings.push(ring);
+  }
+  for (let k = 0; k < n - 1; k++) for (let s = 0; s < sides; s++) {
+    const a = rings[k][s], b = rings[k][(s + 1) % sides], c = rings[k + 1][s], d = rings[k + 1][(s + 1) % sides];
+    m.i.push(a, c, b, b, c, d);
+  }
+  // cap the tip
+  const tip = pts[n - 1], last = rings[n - 1];
+  const tv = folV(m, tip, fnorm(fsub(pts[n - 1], pts[n - 2])), col, fsw(tip[1], H, swayK), 0);
+  for (let s = 0; s < sides; s++) m.i.push(last[s], tv, last[(s + 1) % sides]);
+}
+// A curved limb from a to b with a sag/rise, as a short tube
+function folLimb(m, a, b, r0, r1, bend, sides, col, H, swayK) {
+  const pts = [], rad = [];
+  const N = 4;
+  for (let k = 0; k <= N; k++) {
+    const u = k / N;
+    const p = fadd(fadd(a, fmul(fsub(b, a), u)), [0, Math.sin(u * Math.PI) * bend, 0]);
+    pts.push(p); rad.push(r0 + (r1 - r0) * u);
+  }
+  folTube(m, pts, rad, sides, col, H, swayK, null);
+}
+// Buttress roots: thin curved plates flaring from the trunk into the ground
+function folButtress(m, trunkR, hTop, reach, nFins, thick, col, rnd, H) {
+  for (let f = 0; f < nFins; f++) {
+    const a = (f / nFins + rnd() * 0.12) * Math.PI * 2;
+    const dir = [Math.cos(a), 0, Math.sin(a)], perp = [-Math.sin(a), 0, Math.cos(a)];
+    const R = reach * (0.7 + rnd() * 0.5), Ht = hTop * (0.75 + rnd() * 0.4);
+    const S = 6, sideV = [[], []];
+    for (let k = 0; k <= S; k++) {
+      const u = k / S;
+      const out = trunkR * 0.8 + R * u;
+      const y = Ht * Math.pow(1 - u, 2.2);
+      const th = thick * (1 - u * 0.7);
+      for (let sd = 0; sd < 2; sd++) {
+        const sg = sd ? 1 : -1;
+        const top = fadd(fadd(fmul(dir, out), fmul(perp, th * sg)), [0, y, 0]);
+        const bot = fadd(fadd(fmul(dir, out * 0.97), fmul(perp, th * sg)), [0, -3, 0]);
+        const nrm = fnorm(fadd(fmul(perp, sg), [0, 0.15, 0]));
+        const ao = 0.55 + 0.45 * Math.min(1, y / 30);
+        sideV[sd].push([folV(m, top, nrm, fcol(col, ao), 0, 0), folV(m, bot, nrm, fcol(col, 0.5), 0, 0)]);
+      }
+      // ridge along the top edge
+    }
+    for (let sd = 0; sd < 2; sd++) for (let k = 0; k < S; k++) {
+      const [t0, b0] = sideV[sd][k], [t1, b1] = sideV[sd][k + 1];
+      if (sd) m.i.push(t0, b0, t1, t1, b0, b1); else m.i.push(t0, t1, b0, t1, b1, b0);
+    }
+    for (let k = 0; k < S; k++) {   // top edge strip joining the two faces
+      const a0 = sideV[0][k][0], a1 = sideV[0][k + 1][0], c0 = sideV[1][k][0], c1 = sideV[1][k + 1][0];
+      m.i.push(a0, c0, a1, a1, c0, c1);
+    }
+  }
+}
+// One leaf blade: a folded diamond/oval card, two-sided (the pipeline does not cull)
+function folLeaf(m, c, nrm, tg, L, W, col, sway) {
+  const bt = fnorm(fcross(nrm, tg));
+  const base = fsub(c, fmul(tg, L * 0.5)), tip = fadd(c, fmul(tg, L * 0.5));
+  const mid = fadd(c, fmul(tg, -L * 0.05));
+  const s1 = fsub(fadd(mid, fmul(bt, W * 0.5)), fmul(nrm, W * 0.18));
+  const s2 = fsub(fsub(mid, fmul(bt, W * 0.5)), fmul(nrm, W * 0.18));
+  const cDark = fcol(col, 0.82), cTip = fcol(col, 1.08);
+  const i0 = folV(m, base, nrm, cDark, sway * 0.8, 1), i1 = folV(m, s1, fnorm(fadd(nrm, fmul(bt, 0.35))), col, sway, 1);
+  const i2 = folV(m, tip, nrm, cTip, sway * 1.15, 1), i3 = folV(m, s2, fnorm(fsub(nrm, fmul(bt, 0.35))), col, sway, 1);
+  m.i.push(i0, i1, i2, i0, i2, i3);
+}
+// A clump of foliage: many blades inside a squashed ellipsoid, darker inside
+function folCluster(m, c, R, flat, count, col, rnd, H, swayK, leafL) {
+  for (let k = 0; k < count; k++) {
+    const u = rnd() * 2 - 1, th = rnd() * Math.PI * 2;
+    const sr = Math.sqrt(1 - u * u);
+    const dir = [sr * Math.cos(th), u, sr * Math.sin(th)];
+    const rr = R * (0.45 + 0.55 * Math.sqrt(rnd()));
+    const p = fadd(c, [dir[0] * rr, dir[1] * rr * flat, dir[2] * rr]);
+    const nrm = fnorm(fadd(dir, [0, 0.9, 0]));
+    const tg = fnorm(fadd(fcross(nrm, [rnd() - 0.5, rnd() - 0.5, rnd() - 0.5]), fmul(dir, 0.6)));
+    const depth = rr / R;
+    const shade = (0.45 + 0.55 * depth) * (0.75 + 0.25 * (dir[1] * 0.5 + 0.5));
+    const hue = [col[0] * (0.85 + rnd() * 0.3), col[1] * (0.88 + rnd() * 0.24), col[2] * (0.85 + rnd() * 0.3)];
+    const L = leafL * (0.7 + rnd() * 0.6);
+    folLeaf(m, p, nrm, tg, L, L * (0.42 + rnd() * 0.2), fcol(hue, shade), fsw(p[1], H, swayK) + L * 0.08);
+  }
+}
+// Low-detail crown: a lumpy blob
+function folBlob(m, c, R, flat, col, rnd, H, swayK, seg) {
+  const nu = seg || 7, nv = Math.max(3, (seg || 7) - 3);
+  const idx = [];
+  for (let j = 0; j <= nv; j++) {
+    const row = [];
+    const v = j / nv, phi = v * Math.PI;
+    const bumps = [];
+    for (let i = 0; i < nu; i++) bumps.push((j === 0 || j === nv) ? 1 : 0.72 + 0.5 * rnd());
+    for (let i = 0; i <= nu; i++) {
+      const th = (i % nu) / nu * Math.PI * 2;
+      const d = [Math.sin(phi) * Math.cos(th), Math.cos(phi), Math.sin(phi) * Math.sin(th)];
+      const bump = bumps[i % nu];
+      const p = fadd(c, [d[0] * R * bump, d[1] * R * flat * bump, d[2] * R * bump]);
+      const sh = 0.6 + 0.4 * (d[1] * 0.5 + 0.5);
+      row.push(folV(m, p, d, fcol(col, sh), fsw(p[1], H, swayK), 1));
+    }
+    idx.push(row);
+  }
+  for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) {
+    const a = idx[j][i], b = idx[j][i + 1], c2 = idx[j + 1][i], d = idx[j + 1][i + 1];
+    m.i.push(a, b, c2, b, d, c2);
+  }
+}
+// A liana hanging from a point, swinging, with a few leaves
+function folVine(m, top, len, rnd, H, lod) {
+  const pts = [], rad = [];
+  const N = lod ? 3 : 7;
+  const wx = (rnd() - 0.5) * 6, wz = (rnd() - 0.5) * 6;
+  for (let k = 0; k <= N; k++) {
+    const u = k / N;
+    pts.push([top[0] + wx * Math.sin(u * 3.1), top[1] - len * u, top[2] + wz * Math.sin(u * 2.3)]);
+    rad.push(0.9 * (1 - u * 0.5));
+  }
+  const base = m.n;
+  folTube(m, pts, rad, lod ? 3 : 4, [0.30, 0.27, 0.16], H, 0, null);
+  // vines swing: override sway so it grows DOWN the vine from its anchor
+  for (let v = base; v < m.n; v++) { const y = m.v[v * FOL_VF + 1]; m.v[v * FOL_VF + 9] = fsw(top[1], H, 3) + (top[1] - y) * 0.06; }
+  if (!lod) for (let k = 0; k < 7; k++) {
+    const u = 0.15 + rnd() * 0.85, p = [top[0] + wx * Math.sin(u * 3.1), top[1] - len * u, top[2] + wz * Math.sin(u * 2.3)];
+    const nrm = fnorm([rnd() - 0.5, 0.3, rnd() - 0.5]);
+    folLeaf(m, fadd(p, fmul(nrm, 1.5)), nrm, fnorm([rnd() - 0.5, -0.4, rnd() - 0.5]), 5, 2.6, [0.20 + rnd() * 0.06, 0.40 + rnd() * 0.08, 0.14], fsw(top[1], H, 3) + len * u * 0.06);
+  }
+}
+// A palm frond: arching spine with paired leaflets hanging from it
+function folFrond(m, base, dir, len, rise, droop, col, rnd, H, swayK, lod) {
+  const side = fnorm(fcross(dir, [0, 1, 0]));
+  const P = (u) => fadd(fadd(base, fmul(dir, len * u)), [0, (rise * u - droop * u * u) * len, 0]);
+  const N = lod === 2 ? 3 : lod ? 5 : 12;
+  const spine = [], rad = [];
+  for (let k = 0; k <= N; k++) { spine.push(P(k / N)); rad.push(0.6 * (1 - k / N) + 0.1); }
+  if (!lod) folTube(m, spine, rad, 3, [0.36, 0.40, 0.18], H, swayK, null);
+  for (let k = 1; k <= N; k++) {
+    const u = k / N, p = P(u), q = P(Math.max(0, u - 1 / N));
+    const t = fnorm(fsub(p, q));
+    const ll = len * 0.34 * Math.sin(Math.PI * Math.min(1, u * 0.95 + 0.08)) * (lod ? 1.4 : 1);
+    for (const sg of [1, -1]) {
+      const out = fnorm(fadd(fmul(side, sg), [0, -0.55, 0]));
+      const c = fadd(p, fmul(out, ll * 0.5));
+      const nrm = fnorm(fcross(t, out)); const nr = nrm[1] < 0 ? fmul(nrm, -1) : nrm;
+      folLeaf(m, c, nr, out, ll, ll * (lod ? 0.5 : 0.22), fcol(col, 0.85 + 0.25 * u), fsw(c[1], H, swayK) + len * u * 0.05);
+    }
+  }
+}
+
+// ---- tree archetypes ----------------------------------------------------------------
+const LEAF_GREEN = [[0.16, 0.36, 0.12], [0.20, 0.42, 0.14], [0.13, 0.32, 0.13], [0.24, 0.44, 0.12]];
+const BARK_A = [0.40, 0.33, 0.25], BARK_B = [0.55, 0.50, 0.42], BARK_C = [0.30, 0.24, 0.18];
+function buildTreeMesh(kind, variant, lod) {
+  const rnd = folRng(1000 + kind * 97 + variant * 13 + 7);
+  const m = folMB();
+  const leafCol = LEAF_GREEN[(kind + variant) % LEAF_GREEN.length];
+  const nLeaf = (n) => Math.max(4, Math.round(n * [1, 0.4, 0][lod]));
+  const leafL = (l) => l * [1, 1.9, 1][lod];
+  const sides = [8, 5, 3][lod];
+  // far LOD: every crown is merged into one lumpy blob drawn at the end
+  const farCrowns = [];
+  const crown = (c, R, flat, count, col, H, sw, L) => {
+    if (lod === 2) farCrowns.push({ c, R, flat, col, sw });
+    else folCluster(m, c, R, flat, nLeaf(count), col, rnd, H, sw, leafL(L));
+  };
+  const LIMB = lod === 2 ? () => {} : folLimb;
+  const trunk = (H, r0, r1, lean, col, bendAmp) => {
+    const pts = [], rad = [];
+    const N = lod === 2 ? 2 : lod ? 4 : 8;
+    const la = rnd() * Math.PI * 2;
+    for (let k = 0; k <= N; k++) {
+      const u = k / N;
+      pts.push([Math.cos(la) * lean * H * u * u + Math.sin(u * 5 + la) * bendAmp, H * u - 2, Math.sin(la) * lean * H * u * u + Math.cos(u * 4 + la) * bendAmp]);
+      rad.push(r0 + (r1 - r0) * Math.pow(u, 0.7));
+    }
+    folTube(m, pts, rad, sides, col, H, 0.02 * H, 0.45);
+    return pts;
+  };
+  let H = 100;
+  switch (kind) {
+    case 0: {   // emergent giant: buttressed pillar with an umbrella crown far above the canopy
+      H = 360 + variant * 45 + rnd() * 40;
+      const tp = trunk(H * 0.84, 10, 4.2, 0.02, BARK_B, 2);
+      if (lod < 2) folButtress(m, 10, 42, 34, lod ? 4 : 7, 1.8, BARK_B, rnd, H);
+      const top = tp[tp.length - 1];
+      const nb = 6 + (variant % 2);
+      for (let b = 0; b < nb; b++) {
+        const a = b / nb * Math.PI * 2 + rnd() * 0.4, reach = 55 + rnd() * 35;
+        const start = fadd(top, [0, -18 - rnd() * 25, 0]);
+        const end = [top[0] + Math.cos(a) * reach, top[1] + 12 + rnd() * 26, top[2] + Math.sin(a) * reach];
+        LIMB(m, start, end, 3.4, 1.2, 8, lod ? 3 : 5, BARK_B, H, 0.02 * H);
+        crown(fadd(end, [0, 10, 0]), 30 + rnd() * 10, 0.5, 110, leafCol, H, 0.03 * H, 8);
+        if (rnd() < 0.5) crown(fadd(fmul(fadd(start, end), 0.5), [0, 14, 0]), 20, 0.55, 50, leafCol, H, 0.03 * H, 7);
+        if (lod < 2) for (let v = 0; v < 3; v++) folVine(m, fadd(fmul(fadd(start, fmul(fsub(end, start), 0.3 + rnd() * 0.6)), 1), [0, -2, 0]), 80 + rnd() * 170, rnd, H, lod);
+      }
+      crown(fadd(top, [0, 22, 0]), 34, 0.45, 110, leafCol, H, 0.03 * H, 8);
+      break;
+    }
+    case 1: {   // canopy broadleaf: forked limbs, several dense crowns, lianas
+      H = 190 + variant * 35 + rnd() * 30;
+      const tp = trunk(H * 0.62, 6, 3.2, 0.05, variant === 1 ? BARK_A : BARK_C, 3);
+      if (lod < 2) folButtress(m, 6, 20, 16, lod ? 3 : 5, 1.2, variant === 1 ? BARK_A : BARK_C, rnd, H);
+      const fork = tp[tp.length - 1];
+      const nl = 3 + (variant % 2);
+      for (let b = 0; b < nl; b++) {
+        const a = b / nl * Math.PI * 2 + rnd() * 0.6, reach = 30 + rnd() * 26;
+        const end = [fork[0] + Math.cos(a) * reach, H * (0.8 + rnd() * 0.12), fork[2] + Math.sin(a) * reach];
+        LIMB(m, fork, end, 2.8, 1.1, 6, lod ? 3 : 5, BARK_A, H, 0.02 * H);
+        crown(end, 26 + rnd() * 8, 0.62, 95, leafCol, H, 0.03 * H, 7);
+        crown(fadd(end, [(rnd() - 0.5) * 24, -10, (rnd() - 0.5) * 24]), 16, 0.7, 40, fcol(leafCol, 0.9), H, 0.03 * H, 6);
+        if (lod < 2 && rnd() < 0.8) folVine(m, fadd(end, [0, -8, 0]), 60 + rnd() * 110, rnd, H, lod);
+      }
+      crown([fork[0], H * 0.93, fork[2]], 30, 0.55, 100, leafCol, H, 0.03 * H, 7);
+      // epiphyte clumps along the trunk
+      if (lod === 0) for (let e = 0; e < 3; e++) { const y = H * (0.25 + rnd() * 0.35); crown([Math.cos(e * 2.1) * 6.5, y, Math.sin(e * 2.1) * 6.5], 5, 0.7, 14, [0.28, 0.46, 0.16], H, 0.01 * H, 3.5); }
+      break;
+    }
+    case 2: {   // palm: slender curved stem, crown of arching fronds
+      H = 95 + variant * 22 + rnd() * 20;
+      const la = rnd() * Math.PI * 2, lean = 0.12 + rnd() * 0.12;
+      const pts = [], rad = [];
+      const N = lod ? 4 : 10;
+      for (let k = 0; k <= N; k++) { const u = k / N; pts.push([Math.cos(la) * lean * H * u * u, H * u - 1, Math.sin(la) * lean * H * u * u]); rad.push(2.3 - 0.8 * u); }
+      folTube(m, pts, rad, lod ? 4 : 6, BARK_B, H, 0.05 * H, 0.6);
+      const top = pts[N];
+      const nf = lod === 2 ? 4 : 12 + variant * 2;
+      for (let f = 0; f < nf; f++) {
+        const a = f / nf * Math.PI * 2 + rnd() * 0.3;
+        const dir = fnorm([Math.cos(a), 0, Math.sin(a)]);
+        folFrond(m, top, dir, 34 + rnd() * 14, 0.55 + rnd() * 0.3, 1.1 + rnd() * 0.4, fcol(leafCol, 1.1), rnd, H, 0.06 * H, lod);
+      }
+      if (lod < 2) for (let k = 0; k < 5; k++) folLeaf(m, fadd(top, [(rnd() - 0.5) * 3, 2, (rnd() - 0.5) * 3]), [0, 1, 0], fnorm([rnd() - 0.5, 1, rnd() - 0.5]), 14, 3, [0.3, 0.46, 0.16], 0.06 * H);
+      break;
+    }
+    case 3: {   // understory tree: short, broad-leaved, lopsided crown
+      H = 46 + variant * 14 + rnd() * 14;
+      const tp = trunk(H * 0.6, 2.4, 1.3, 0.12, BARK_A, 1.5);
+      const top = tp[tp.length - 1];
+      for (let k = 0; k < 4; k++) {
+        const c = fadd(top, [(rnd() - 0.5) * 22, H * 0.25 + rnd() * 10, (rnd() - 0.5) * 22]);
+        LIMB(m, top, c, 1.1, 0.5, 2, 3, BARK_A, H, 0.02 * H);
+        crown(c, 11 + rnd() * 5, 0.7, 45, fcol(leafCol, 1.1), H, 0.05 * H, 6.5);
+      }
+      break;
+    }
+    case 4: {   // conifer: straight trunk, drooping tiered skirts of needles
+      H = 150 + variant * 30 + rnd() * 30;
+      const tp = trunk(H, 4.5, 0.6, 0.01, BARK_C, 0.5);
+      const tiers = lod === 2 ? 5 : 11;
+      const dark = [0.08, 0.24, 0.14];
+      for (let k = 0; k < tiers; k++) {
+        const u = k / tiers, y = H * (0.18 + u * 0.8), rr = 34 * (1 - u * 0.85) + 4;
+        if (lod === 2) { if (k % 3 === 0) folBlob(m, [0, y + rr * 0.3, 0], rr * 1.1, 0.8, dark, rnd, H, 0.02 * H, 5); continue; }
+        const nsp = lod ? 6 : 11;
+        for (let s = 0; s < nsp; s++) {
+          const a = s / nsp * Math.PI * 2 + k * 0.5 + rnd() * 0.3;
+          const out = fnorm([Math.cos(a), -0.35 - u * 0.2, Math.sin(a)]);
+          const c = fadd([0, y, 0], fmul(out, rr * 0.5));
+          const up = fnorm(fcross(out, fcross([0, 1, 0], out)));
+          folLeaf(m, c, up, out, rr, rr * 0.5, fcol(dark, 0.85 + rnd() * 0.3), fsw(c[1], H, 0.03 * H));
+          if (!lod) folLeaf(m, fadd(c, [0, -1, 0]), fnorm(fcross(out, up)), out, rr * 0.8, rr * 0.28, fcol(dark, 0.75), fsw(c[1], H, 0.03 * H));
+        }
+      }
+      break;
+    }
+    case 5: {   // acacia: leaning forked trunk, wide flat-topped crown
+      H = 78 + variant * 16 + rnd() * 12;
+      const tp = trunk(H * 0.55, 3.2, 1.8, 0.15, BARK_A, 1);
+      const fork = tp[tp.length - 1];
+      for (let b = 0; b < 4; b++) {
+        const a = b / 4 * Math.PI * 2 + rnd() * 0.8, reach = 20 + rnd() * 18;
+        const end = [fork[0] + Math.cos(a) * reach, H * (0.88 + rnd() * 0.08), fork[2] + Math.sin(a) * reach];
+        LIMB(m, fork, end, 1.8, 0.8, 3, 4, BARK_A, H, 0.02 * H);
+        crown(end, 20 + rnd() * 6, 0.26, 75, [0.30, 0.42, 0.14], H, 0.02 * H, 4.5);
+      }
+      break;
+    }
+    case 6: {   // cactus
+      H = 38 + variant * 10;
+      const green = [0.22, 0.42, 0.24];
+      folTube(m, [[0, -1, 0], [0, H * 0.5, 0], [0, H, 0]], [3.4, 3.2, 2.6], lod ? 6 : 10, green, H, 0, 0.7);
+      for (const sg of [1, -1]) {
+        const y0 = H * (0.35 + rnd() * 0.2), out = 6 + rnd() * 3;
+        folTube(m, [[0, y0, 0], [sg * out, y0 + 1, 0], [sg * out, y0 + 12 + rnd() * 8, 0]], [2, 1.9, 1.6], lod ? 5 : 8, green, H, 0, null);
+      }
+      break;
+    }
+    case 7: {   // mangrove: crown on a tangle of arching stilt roots
+      H = 70 + variant * 14 + rnd() * 10;
+      const tp = trunk(H * 0.7, 2.8, 1.8, 0.05, BARK_C, 1);
+      if (lod < 2) for (let r = 0; r < (lod ? 5 : 9); r++) {
+        const a = r / 9 * Math.PI * 2 + rnd() * 0.5, R = 16 + rnd() * 10;
+        LIMB(m, [0, 18 + rnd() * 10, 0], [Math.cos(a) * R, -2, Math.sin(a) * R], 1.2, 0.8, 9, 3, BARK_C, H, 0);
+      }
+      const top = tp[tp.length - 1];
+      for (let k = 0; k < 4; k++) crown(fadd(top, [(rnd() - 0.5) * 26, 10 + rnd() * 8, (rnd() - 0.5) * 26]), 15 + rnd() * 5, 0.6, 55, [0.15, 0.36, 0.20], H, 0.03 * H, 5.5);
+      break;
+    }
+    case 8: {   // tree fern
+      H = 34 + variant * 10 + rnd() * 8;
+      folTube(m, [[0, -1, 0], [0.5, H * 0.5, 0.3], [1, H, 0.5]], [1.8, 1.5, 1.3], lod ? 4 : 6, [0.26, 0.20, 0.14], H, 0.03 * H, 0.6);
+      const nf = lod === 2 ? 4 : 11;
+      for (let f = 0; f < nf; f++) {
+        const a = f / nf * Math.PI * 2 + rnd() * 0.3;
+        folFrond(m, [1, H, 0.5], fnorm([Math.cos(a), 0, Math.sin(a)]), 20 + rnd() * 6, 0.9, 1.4, [0.20, 0.44, 0.14], rnd, H, 0.06 * H, lod);
+      }
+      break;
+    }
+  }
+  if (farCrowns.length) {
+    let cx = 0, cy = 0, cz = 0;
+    for (const f of farCrowns) { cx += f.c[0]; cy += f.c[1]; cz += f.c[2]; }
+    cx /= farCrowns.length; cy /= farCrowns.length; cz /= farCrowns.length;
+    let R = 0, fl = 0;
+    for (const f of farCrowns) { R = Math.max(R, Math.hypot(f.c[0] - cx, f.c[2] - cz) + f.R); fl += f.flat; }
+    fl /= farCrowns.length;
+    const ys = farCrowns.map(f => f.c[1]); const ySpan = Math.max(...ys) - Math.min(...ys);
+    folBlob(m, [cx, cy, cz], R * 0.9, Math.max(fl, (ySpan * 0.5 + 20) / Math.max(1, R)), farCrowns[0].col, rnd, H, farCrowns[0].sw, 9);
+  }
+  return { m, H };
+}
+// ---- ground cover ---------------------------------------------------------------------
+function folGrass(m, rnd, n, hMin, hMax, colBase, colTip, W) {
+  for (let b = 0; b < n; b++) {
+    const a = rnd() * Math.PI * 2, r = rnd() * 3.2;
+    const x0 = Math.cos(a) * r, z0 = Math.sin(a) * r;
+    const h = hMin + rnd() * (hMax - hMin);
+    const lean = [Math.cos(a) * (0.2 + rnd() * 0.4), 0, Math.sin(a) * (0.2 + rnd() * 0.4)];
+    const side = fnorm([-Math.sin(a + 1.2), 0, Math.cos(a + 1.2)]);
+    const w = (W || 0.7) * (0.7 + rnd() * 0.6);
+    const S = 3;
+    const prev = [];
+    for (let k = 0; k <= S; k++) {
+      const u = k / S;
+      const c = [x0 + lean[0] * h * u * u, h * u, z0 + lean[2] * h * u * u];
+      const nrm = fnorm(fcross(side, [lean[0], 1, lean[2]]));
+      const col = [colBase[0] + (colTip[0] - colBase[0]) * u, colBase[1] + (colTip[1] - colBase[1]) * u, colBase[2] + (colTip[2] - colBase[2]) * u];
+      const ww = w * (1 - u * 0.85);
+      if (k < S) prev.push([folV(m, fadd(c, fmul(side, ww)), nrm, col, u * u * 2.2, 1), folV(m, fsub(c, fmul(side, ww)), nrm, col, u * u * 2.2, 1)]);
+      else prev.push([folV(m, c, nrm, col, 2.2, 1)]);
+    }
+    for (let k = 0; k < S - 1; k++) { const [a0, b0] = prev[k], [a1, b1] = prev[k + 1]; m.i.push(a0, a1, b0, b0, a1, b1); }
+    const [a0, b0] = prev[S - 1], tip = prev[S][0];
+    m.i.push(a0, tip, b0);
+  }
+}
+function buildCoverMesh(kind, variant) {
+  const rnd = folRng(5000 + kind * 31 + variant * 7);
+  const m = folMB();
+  switch (kind) {
+    case 0: folGrass(m, rnd, 16, 4, 10, [0.14, 0.30, 0.08], [0.46, 0.62, 0.24]); break;          // tall green grass
+    case 1: folGrass(m, rnd, 16, 5, 12, [0.36, 0.34, 0.14], [0.86, 0.76, 0.42]); break;          // golden savanna grass
+    case 2: {                                                                                      // fern
+      const nf = 9;
+      for (let f = 0; f < nf; f++) {
+        const a = f / nf * Math.PI * 2 + rnd() * 0.4;
+        folFrond(m, [0, 1, 0], fnorm([Math.cos(a), 0, Math.sin(a)]), 6 + rnd() * 3, 1.0, 1.3, [0.18, 0.42, 0.13], rnd, 10, 0.4, 1);
+      }
+      break;
+    }
+    case 3: folGrass(m, rnd, 12, 10, 20, [0.22, 0.30, 0.12], [0.50, 0.56, 0.30], 0.45); break;    // reeds
+    case 4: folCluster(m, [0, 5, 0], 6, 0.7, 45, [0.18, 0.36, 0.14], rnd, 10, 0.3, 3.2); break;  // shrub
+    case 5: {                                                                                      // big-leaf understory plant
+      for (let k = 0; k < 7; k++) {
+        const a = k / 7 * Math.PI * 2 + rnd() * 0.5;
+        const out = fnorm([Math.cos(a), 0.5, Math.sin(a)]);
+        const c = fadd([0, 2, 0], fmul(out, 4));
+        folLeaf(m, c, fnorm(fadd(fcross(out, fcross([0, 1, 0], out)), [0, 0.4, 0])), out, 9, 5, [0.16 + rnd() * 0.05, 0.40 + rnd() * 0.06, 0.12], 0.8);
+      }
+      break;
+    }
+  }
+  return m;
+}
+
+// ---- GPU side ---------------------------------------------------------------------------
+const FOL = { ready: false, tree: [], cover: [], instBuf: null, inst: new Float32Array(FOL_MAX_INST * FOL_IF), batches: [], key: '', coverKey: '', count: 0, canopy: null };
+const TREE_VARIANTS = 3, COVER_KINDS = 6, COVER_VARIANTS = 2;
+function folUpload(m) {
+  const vd = new Float32Array(m.v), id = new Uint32Array(m.i);
+  const vb = dev.createBuffer({ size: Math.max(16, vd.byteLength), usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+  dev.queue.writeBuffer(vb, 0, vd);
+  const ib = dev.createBuffer({ size: Math.max(16, id.byteLength), usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST });
+  dev.queue.writeBuffer(ib, 0, id);
+  return { vb, ib, count: id.length, tris: id.length / 3 };
+}
+function folInit() {
+  if (FOL.ready) return;
+  const t0 = performance.now();
+  let tris = 0;
+  for (let k = 0; k < 9; k++) {
+    FOL.tree[k] = [];
+    for (let v = 0; v < TREE_VARIANTS; v++) {
+      FOL.tree[k][v] = [];
+      for (let l = 0; l < 3; l++) { const { m, H } = buildTreeMesh(k, v, l); const g = folUpload(m); g.H = H; FOL.tree[k][v][l] = g; tris += l === 0 ? g.tris : 0; }
+    }
+  }
+  for (let k = 0; k < COVER_KINDS; k++) { FOL.cover[k] = []; for (let v = 0; v < COVER_VARIANTS; v++) FOL.cover[k][v] = folUpload(buildCoverMesh(k, v)); }
+  FOL.instBuf = dev.createBuffer({ size: FOL.inst.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+  FOL.ready = true;
+  FOL.buildMs = performance.now() - t0; FOL.lod0Tris = tris;
+}
+// Which ground cover grows where, by biome: [kind, weight]...
+const COVER_BY_BIOME = {
+  forest: [[2, 0.55], [5, 0.3], [0, 0.35], [4, 0.2]], plains: [[0, 0.8], [4, 0.08]], savanna: [[1, 0.8], [4, 0.05]],
+  marsh: [[3, 0.8], [0, 0.3]], taiga: [[2, 0.3], [4, 0.2], [0, 0.2]], beach: [[1, 0.12]], tundra: [[0, 0.1]], shallow: [[3, 0.4]],
+};
+const COVER_R = 620, COVER_CELL = 15;
+const TREE_LOD0 = 650, TREE_LOD1 = 2000;
+// Rebuild the instance lists when the camera has moved or turned enough.
+function folUpdate(camX, camY, camZ, yaw) {
+  if (!FOL.ready || !world || !world.forest) return;
+  const key = Math.round(camX / 40) + ',' + Math.round(camZ / 40) + ',' + Math.round(yaw / 0.25) + ',' + Math.round(camY / 80);
+  if (key === FOL.key) return;
+  FOL.key = key;
+  const buckets = new Map();
+  const put = (mesh, x, y, z, rot, s, tint) => {
+    let b = buckets.get(mesh); if (!b) { b = []; buckets.set(mesh, b); }
+    b.push(x, y, z, rot, s, tint[0], tint[1], tint[2]);
+  };
+  const fx = Math.cos(yaw), fz = Math.sin(yaw);
+  const T = terrain;
+  for (const tr of world.forest.trees) {
+    const dx = tr.x - camX, dz = tr.y - camZ, d = Math.hypot(dx, dz);
+    if (d > FAR * 0.95) continue;
+    // behind the camera (with margin for the wide field of view and tall crowns)
+    if (d > 260 && (dx * fx + dz * fz) / d < -0.45) continue;
+    const lod = d < TREE_LOD0 ? 0 : d < TREE_LOD1 ? 1 : 2;
+    const g = FOL.tree[tr.kind][tr.v % TREE_VARIANTS][lod];
+    const hs = ((tr.x * 131) ^ (tr.y * 71)) & 1023;
+    const tint = [0.9 + (hs & 31) / 150, 0.92 + ((hs >> 5) & 31) / 160, 0.9 + ((hs >> 3) & 31) / 170];
+    put(g, tr.x, groundAt(tr.x, tr.y) - 1, tr.y, tr.rot, tr.s, tint);
+  }
+  // ground cover on a hashed grid around the camera
+  const c0 = Math.floor((camX - COVER_R) / COVER_CELL), c1 = Math.floor((camX + COVER_R) / COVER_CELL);
+  const r0 = Math.floor((camZ - COVER_R) / COVER_CELL), r1 = Math.floor((camZ + COVER_R) / COVER_CELL);
+  if (camY - groundAt(camX, camZ) < 900) for (let j = r0; j <= r1; j++) for (let i = c0; i <= c1; i++) {
+    let h = ((i * 73856093) ^ (j * 19349663)) >>> 0; h = Math.imul(h ^ (h >>> 15), 2246822519) >>> 0; h = (h ^ (h >>> 13)) >>> 0;
+    const x = (i + ((h & 255) / 256)) * COVER_CELL, z = (j + (((h >>> 8) & 255) / 256)) * COVER_CELL;
+    const dx = x - camX, dz = z - camZ;
+    if (dx * dx + dz * dz > COVER_R * COVER_R || x < 0 || z < 0 || x >= WORLD_W || z >= WORLD_H) continue;
+    const d = Math.hypot(dx, dz);
+    if (d > 60 && (dx * fx + dz * fz) / d < -0.5) continue;
+    const e = T.height(x, z);
+    if (e < T.LV.water - 0.004 && T.biomeAt(x, z) !== 'shallow' && T.biomeAt(x, z) !== 'marsh') continue;
+    const opts = COVER_BY_BIOME[T.biomeAt(x, z)];
+    if (!opts) continue;
+    let r = ((h >>> 16) & 1023) / 1024, kind = -1;
+    // thin out toward the edge of the radius so it does not end in a hard ring
+    const fade = 1 - Math.max(0, (d - COVER_R * 0.6) / (COVER_R * 0.4));
+    for (const [k, wgt] of opts) { if (r < wgt * fade) { kind = k; break; } r -= wgt * fade; }
+    if (kind < 0) continue;
+    const g = FOL.cover[kind][(h >>> 26) & 1];
+    const s = 0.7 + ((h >>> 20) & 63) / 70;
+    put(g, x, groundAt(x, z) - 0.3, z, ((h >>> 3) & 255) / 40, s, [1, 1, 1]);
+  }
+  // pack
+  let off = 0;
+  FOL.batches.length = 0;
+  for (const [mesh, arr] of buckets) {
+    const n = arr.length / FOL_IF;
+    if (off + n > FOL_MAX_INST) break;
+    FOL.inst.set(arr, off * FOL_IF);
+    FOL.batches.push({ mesh, first: off, count: n });
+    off += n;
+  }
+  FOL.count = off;
+  if (off) dev.queue.writeBuffer(FOL.instBuf, 0, FOL.inst, 0, off * FOL_IF);
+}
+function folDraw(pass) {
+  if (!FOL.ready || !FOL.batches.length) return;
+  pass.setPipeline(folPipe); pass.setBindGroup(0, folBind);
+  pass.setVertexBuffer(1, FOL.instBuf);
+  for (const b of FOL.batches) {
+    pass.setVertexBuffer(0, b.mesh.vb); pass.setIndexBuffer(b.mesh.ib, 'uint32');
+    pass.drawIndexed(b.mesh.count, b.count, 0, 0, b.first);
+  }
+}
+// Canopy shade on the forest floor: fraction of sky covered, on a coarse grid.
+function forestCanopyAt(x, z) {
+  const F = FOL.canopy;
+  if (!F) return 0;
+  const i = clamp(Math.floor(x / F.cell), 0, F.nx - 1), j = clamp(Math.floor(z / F.cell), 0, F.nz - 1);
+  return F.a[j * F.nx + i];
+}
+function buildCanopyMap() {
+  if (!world || !world.forest) return;
+  const cell = 32, nx = Math.ceil(WORLD_W / cell), nz = Math.ceil(WORLD_H / cell);
+  const a = new Float32Array(nx * nz);
+  const CR = [85, 55, 22, 18, 28, 36, 0, 30, 12];
+  for (const t of world.forest.trees) {
+    const R = CR[t.kind] * t.s; if (!R) continue;
+    const i0 = Math.max(0, Math.floor((t.x - R) / cell)), i1 = Math.min(nx - 1, Math.floor((t.x + R) / cell));
+    const j0 = Math.max(0, Math.floor((t.y - R) / cell)), j1 = Math.min(nz - 1, Math.floor((t.y + R) / cell));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const dx = (i + 0.5) * cell - t.x, dz = (j + 0.5) * cell - t.y, d = Math.hypot(dx, dz) / R;
+      if (d < 1) a[j * nx + i] = Math.min(1, a[j * nx + i] + 0.55 * (1 - d * d));
+    }
+  }
+  FOL.canopy = { a, nx, nz, cell };
+}
 
 // Unlit geometry with vertex colour (the editor's sky dome)
 const WGSL_UNLIT = WGSL_COMMON + `
@@ -4297,9 +5252,10 @@ function buildTerrain() {
     let n = ((i * 73856093) ^ (j * 19349663)) >>> 0;
     n = (n ^ (n >>> 13)) >>> 0;
     const jit = 1 + ((n % 1000) / 1000 - 0.5) * 0.13;
+    const shd = 1 - 0.45 * forestCanopyAt(wx, wz);
     verts[v++] = wx; verts[v++] = h * HEIGHT_SCALE; verts[v++] = wz;
     verts[v++] = gx / gl; verts[v++] = gy / gl; verts[v++] = gz / gl;
-    verts[v++] = r * jit; verts[v++] = g2 * jit; verts[v++] = b * jit;
+    verts[v++] = r * jit * shd; verts[v++] = g2 * jit * shd; verts[v++] = b * jit * shd;
   }
   const idx = new Uint32Array((nx - 1) * (nz - 1) * 6);
   let q = 0;
@@ -4333,7 +5289,7 @@ function groundAt(x, z) {
 
 function buildWater() {
   const y = terrain.LV.water * HEIGHT_SCALE;
-  const P = 4000; // overhang past the map edge so the sea meets the horizon
+  const P = 16000; // overhang past the map edge so the sea meets the horizon
   const q = new Float32Array([
     -P, y, -P,   WORLD_W + P, y, -P,   -P, y, WORLD_H + P,
     -P, y, WORLD_H + P,   WORLD_W + P, y, -P,   WORLD_W + P, y, WORLD_H + P,
@@ -4410,6 +5366,25 @@ function buildPipelines() {
     fragment: { module: im, entryPoint: 'fs', targets: [{ format: fmt }] },
     primitive: { topology: 'triangle-list', cullMode: 'back' },
     depthStencil: { format: 'depth24plus', depthWriteEnabled: false, depthCompare: 'always' }, multisample: MS,
+  });
+  const flm = dev.createShaderModule({ code: WGSL_FOLIAGE });
+  folPipe = dev.createRenderPipeline({
+    layout: 'auto',
+    vertex: { module: flm, entryPoint: 'vs', buffers: [
+      { arrayStride: FOL_VF * 4, attributes: [
+        { shaderLocation: 0, offset: 0,  format: 'float32x3' },
+        { shaderLocation: 1, offset: 12, format: 'float32x3' },
+        { shaderLocation: 2, offset: 24, format: 'float32x3' },
+        { shaderLocation: 3, offset: 36, format: 'float32'   },
+        { shaderLocation: 4, offset: 40, format: 'float32'   }] },
+      { arrayStride: FOL_IF * 4, stepMode: 'instance', attributes: [
+        { shaderLocation: 5, offset: 0,  format: 'float32x3' },
+        { shaderLocation: 6, offset: 12, format: 'float32'   },
+        { shaderLocation: 7, offset: 16, format: 'float32'   },
+        { shaderLocation: 8, offset: 20, format: 'float32x3' }] } ] },
+    fragment: { module: flm, entryPoint: 'fs', targets: [{ format: fmt }] },
+    primitive: { topology: 'triangle-list', cullMode: 'none' },
+    depthStencil: depthState, multisample: MS,
   });
   const skm = dev.createShaderModule({ code: WGSL_SKIN });
   skinPipe = dev.createRenderPipeline({
@@ -4513,6 +5488,7 @@ function buildPipelines() {
   plantVB  = dev.createBuffer({ size: plantData.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
 }
 function makeBindGroups() {
+  folBind = dev.createBindGroup({ layout: folPipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: gBuf } }] });
   skinBind = dev.createBindGroup({ layout: skinPipe.getBindGroupLayout(0), entries: [
     { binding: 0, resource: { buffer: gBuf } }, { binding: 1, resource: { buffer: boneBuf } }] });
   bindG = {
@@ -4615,7 +5591,12 @@ function tallyParts(ph) {
 function drawCreature(c, t, camDist) {
   const p = c.ph;
   if (c._strikeSeq !== c._seenStrike) {
-    if (c._seenStrike != null && c !== player.c) startAnim(c, bestMove(p, tallyParts(p)), 0.5);
+    if (c._seenStrike != null && c !== player.c) {
+      // wild animals mix their moves: mostly the strongest, sometimes another
+      const list = movesFor(p, tallyParts(p));
+      const mv = Math.random() < 0.55 ? bestMove(p, tallyParts(p)) : list[(Math.random() * list.length) | 0];
+      startAnim(c, mv, MOVE_DEF[mv].dur);
+    }
     c._seenStrike = c._strikeSeq;
   }
   const T = terrain, LVw = T.LV.water;
@@ -4685,6 +5666,7 @@ function drawCreature(c, t, camDist) {
       case 'slam':     rear = Math.max(0, -sgn) * R * 0.9 + Math.max(0, sgn) * -R * 0.35;
                        lungeX = sgn * R * 0.35; break;
       case 'claw':     armSwing = sgn; lungeX = sgn * R * 0.42; headThrust = sgn * R * 0.15; break;
+      case 'punch':    armSwing = sgn; lungeX = sgn * R * 0.35; break;
       case 'flinch':   lungeX = -Math.sin(an.k * Math.PI) * R * 0.55;
                        flinch = Math.sin(an.k * Math.PI); break;
       case 'mate':     nuzzle = Math.sin(an.k * Math.PI); headDip = -nuzzle * 0.5;
@@ -4711,7 +5693,7 @@ function drawCreature(c, t, camDist) {
     drawDesignedCreature(c, t, camDist, {
       R, wx, wz, dirW, bodyY, yaw, far, phase0, gaitAmt, armSwing, tailSwing, flinch,
       bite: an && (an.kind === 'bite' || an.kind === 'gore') ? Math.max(0, an.s) : 0,
-      hover: groundY - surf, swimming: inWater && !!p.canSwim, groundAt,
+      hover: groundY - surf, swimming: inWater && !!p.canSwim, groundAt, anim: an,
     });
     return;
   }
@@ -5686,6 +6668,7 @@ const VIS = {
   l_leg: { name: 'limb', cat: 'limbs', size: 1, col: 'base', kind: 'limb', thick: 1 },
   l_thick: { name: 'heavy limb', cat: 'limbs', size: 1, col: 'base', kind: 'limb', thick: 1.45 },
   l_thin: { name: 'slender limb', cat: 'limbs', size: 1, col: 'base', kind: 'limb', thick: 0.6 },
+  l_spring: { name: 'springing leg', cat: 'limbs', size: 1, col: 'base', kind: 'limb', thick: 1.15 },
   // ------------------------------------------------------ feet and hands
   // frame: y = along the limb (away from the ankle), x = body forward
   t_paw: { name: 'paw', cat: 'limbs', size: 0.26, col: 'base', kind: 'tip', draw(g, c) {
@@ -5891,32 +6874,33 @@ const VIS = {
 };
 // Shared eye: eyeball, iris and pupil turned toward where the body looks,
 // and an eyelid in the skin colour that blinks.
+// An animal eye: a mostly-iris eyeball seated in the skin (the lids are flesh,
+// see FLESH eyes), a domed iris, a round or slit pupil and a wet highlight.
+// Only a sliver of pale sclera shows, which keeps faces from looking human.
 function drawEye(g, c, e, k, style) {
-  const f = v3.norm(v3.add([0, 1, 0], v3.mul(g.fw, 0.7)));
-  const up = g.up;
-  const R = 1 * k;
-  const cy = 0.42 * k;
-  g.sp(0, cy, 0, 0, 1, 0, R, R, R, WHITE);
-  const irisP = v3.add([0, cy, 0], v3.mul(f, R * 0.74));
-  const irisR = style === 'goggle' ? 0.66 : 0.58;
-  g.sp(irisP[0], irisP[1], irisP[2], f[0], f[1], f[2], irisR * k, 0.3 * k, irisR * k, c, up[0], up[1], up[2]);
-  const pP = v3.add([0, cy, 0], v3.mul(f, R * 0.96));
-  if (style === 'slit') g.sp(pP[0], pP[1], pP[2], f[0], f[1], f[2], 0.1 * k, 0.12 * k, 0.5 * k, BLACKP, up[0], up[1], up[2]);
-  else g.sp(pP[0], pP[1], pP[2], f[0], f[1], f[2], 0.3 * k, 0.1 * k, 0.3 * k, BLACKP, up[0], up[1], up[2]);
-  const hl = v3.add(v3.add(pP, v3.mul(up, 0.28 * k)), v3.mul(f, 0.05));
-  if (!e.lod) g.ball(hl[0], hl[1], hl[2], 0.1 * k, WHITE);
-  // upper lid: a skin-coloured shell sitting above the eye, sliding down to blink
-  const lid = e.blink;
-  const lidC = v3.add([0, cy, 0], v3.mul(up, R * (0.62 - lid * 0.62)));
-  const lp = v3.add(lidC, v3.mul(f, -0.1 * k));
-  g.sp(lp[0], lp[1], lp[2], up[0], up[1], up[2], R * 1.08, R * (0.62 + lid * 0.5), R * 1.08, e.base, f[0], f[1], f[2]);
-  if (style === 'goggle') {
-    for (let i = 0; i < 10; i++) {
-      const a = i / 10 * 6.283, s2 = v3.cross(f, up);
-      const q = v3.add(v3.add([0, cy, 0], v3.mul(f, R * 0.55)), v3.add(v3.mul(up, Math.cos(a) * R * 0.86), v3.mul(s2, Math.sin(a) * R * 0.86)));
-      g.ball(q[0], q[1], q[2], 0.2 * k, e.base);
-    }
+  const f = v3.norm(v3.add([0, 1, 0], v3.mul(g.fw, 0.8)));
+  const up0 = v3.sub(g.up, v3.mul(f, v3.dot(g.up, f)));
+  const up = v3.len(up0) > 1e-3 ? v3.norm(up0) : [1, 0, 0];
+  const R = 0.9 * k, cy = 0.05 * k;
+  const C0 = [0, cy, 0];
+  g.sp(0, cy, 0, 0, 1, 0, R, R, R, [0.80, 0.74, 0.62]);
+  // iris dome hugging the ball
+  const irisR = style === 'goggle' ? 0.84 : 0.78;
+  const iP = v3.add(C0, v3.mul(f, R * 0.6));
+  g.sp(iP[0], iP[1], iP[2], f[0], f[1], f[2], irisR * R, 0.44 * R, irisR * R, colMul(c, 0.55), up[0], up[1], up[2]);
+  const iP2 = v3.add(C0, v3.mul(f, R * 0.66));
+  g.sp(iP2[0], iP2[1], iP2[2], f[0], f[1], f[2], irisR * R * 0.86, 0.4 * R, irisR * R * 0.86, c, up[0], up[1], up[2]);
+  // pupil
+  const pP = v3.add(C0, v3.mul(f, R * 0.8));
+  if (style === 'slit') g.sp(pP[0], pP[1], pP[2], f[0], f[1], f[2], 0.1 * R, 0.24 * R, 0.5 * R, BLACKP, up[0], up[1], up[2]);
+  else g.sp(pP[0], pP[1], pP[2], f[0], f[1], f[2], 0.36 * R, 0.24 * R, 0.36 * R, BLACKP, up[0], up[1], up[2]);
+  // wet highlight
+  if (!e.lod) {
+    const hl = v3.add(v3.add(C0, v3.mul(f, R * 1.0)), v3.add(v3.mul(up, 0.3 * R), v3.mul(v3.cross(f, up), 0.18 * R)));
+    g.ball(hl[0], hl[1], hl[2], 0.09 * R, WHITE);
   }
+  // blink: a skin lid closes over the eye
+  if (e.blink > 0) g.sp(0, cy, 0, f[0], f[1], f[2], R * 1.06, R * 1.06, R * 1.06, e.base, up[0], up[1], up[2]);
 }
 const VIS_CATS = [
   { id: 'body', label: 'body' }, { id: 'mouth', label: 'mouths' }, { id: 'eyes', label: 'eyes' },
@@ -6248,8 +7232,9 @@ function meshPrims(prims, quality) {
   if (!isFinite(minR)) minR = 0.1;
   const span = Math.max(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]);
   // a grid fine enough for the thinnest limb, bounded both ways
-  const maxCells = quality ? 124 : 72, minCells = quality ? 56 : 36;
-  let step = minR * (quality ? 0.5 : 0.8);
+  // quality 2: editor and your own body, 1: animals near you, 0: distant animals
+  const maxCells = [64, 96, 124][clamp(quality | 0, 0, 2)], minCells = [36, 48, 56][clamp(quality | 0, 0, 2)];
+  let step = minR * (quality >= 2 ? 0.5 : quality ? 0.6 : 0.8);
   step = Math.min(Math.max(step, span / maxCells), span / minCells);
   const pad = step * 2;
   const ox = bb[0] - pad, oy = bb[1] - pad, oz = bb[2] - pad;
@@ -6492,6 +7477,11 @@ function makeF(out, P, X, Y, Z, S, bone) {
   };
   return F;
 }
+// ---- skin coverings as earnable items -----------------------------------------
+const SKIN_ITEMS = ['k_smooth', 'k_scales', 'k_feathers', 'k_fur', 'k_plates'];
+const SKIN_NAMES = ['smooth skin', 'scales', 'feathers', 'fur', 'armour plates'];
+SKIN_ITEMS.forEach((id, i) => { VIS[id] = { name: SKIN_NAMES[i], cat: 'skin', size: 0.3, col: 'base', skin: i, draw(g, c) { g.ball(0, 0.5, 0, 0.5, c); } }; });
+function skinOf(d) { const c = d && d.col; return c && c.skin != null ? c.skin | 0 : (C.PLAN_SKIN ? C.PLAN_SKIN[(d && d.plan) | 0] : 0); }
 // ---- per-item flesh (fused into the skin) and hard pieces (drawn on top) ------
 // Items not listed draw entirely as hard pieces with their original VIS art.
 const HARD = {};
@@ -6500,7 +7490,6 @@ const FLESH = {};
 FLESH.m_beak = (F) => { F.e(0, 0.08, 0, 0, 1, 0, 1, 0, 0, 0.66, 0.34, 0.7, 0.28); };
 HARD.m_beak = (g, c, e) => {
   g.cn(0.16, 0.05, 0, -0.34, 1, 0, 0.52, 1.45, c);
-  g.ball(0.42, 0.62, 0.26, 0.07, BLACKP); g.ball(0.42, 0.62, -0.26, 0.07, BLACKP);
   const j = g.rotated(0, 0, 1, e.jaw);
   j.cn(-0.3, 0.05, 0, 0.06, 1, 0, 0.42, 0.95, colMul(c, 0.82));
 };
@@ -6565,10 +7554,27 @@ HARD.m_hook = (g, c, e) => {
   g.rotated(0, 0, 1, e.jaw).cn(-0.3, 0.05, 0, 0.1, 1, 0, 0.34, 0.8, colMul(c, 0.85));
 };
 // eyes: a fleshy socket fused into the skin, a glossy eyeball on top ----------
-const socket = (F, k) => { F.e(0, 0.12 * k, 0, 0, 1, 0, 1, 0, 0, 1.2 * k, 0.62 * k, 1.2 * k, 0.4 * k); };
-FLESH.e_round = (F) => socket(F, 1);
-FLESH.e_slit = (F) => socket(F, 1);
-FLESH.e_big = (F) => socket(F, 1.25);
+// socket and lids: a low seat under the eyeball and a ring of flesh around the
+// gaze axis, heavier on top like a brow, leaving an almond opening
+const socket = (F, k, e) => {
+  const fw = (e && e.fw) || [1, 0, 0], up = (e && e.up) || [0, 1, 0];
+  const f = v3.norm(v3.add([0, 1, 0], v3.mul(fw, 0.8)));
+  let u0 = v3.sub(up, v3.mul(f, v3.dot(up, f)));
+  u0 = v3.len(u0) > 1e-3 ? v3.norm(u0) : [1, 0, 0];
+  const s0 = v3.cross(f, u0);
+  const R = 0.9 * k, C0 = [0, 0.05 * k, 0];
+  F.e(0, -0.08 * k, 0, 0, 1, 0, 1, 0, 0, 1.05 * k, 0.5 * k, 1.05 * k, 0.4 * k);
+  for (let i = 0; i < 10; i++) {
+    const a = i / 10 * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
+    const top = 0.5 + 0.5 * ca;                        // 1 at the brow, 0 at the lower lid
+    const rr = R * (0.98 - 0.1 * top), along = R * (0.4 - 0.14 * top);
+    const q = v3.add(v3.add(C0, v3.mul(f, along)), v3.add(v3.mul(u0, ca * rr), v3.mul(s0, sa * rr)));
+    F.s(q[0], q[1], q[2], R * (0.2 + 0.16 * top), R * 0.4);
+  }
+};
+FLESH.e_round = (F, c, e) => socket(F, 1, e);
+FLESH.e_slit = (F, c, e) => socket(F, 1, e);
+FLESH.e_big = (F, c, e) => socket(F, 1.25, e);
 HARD.e_round = (g, c, e) => drawEye(g, c, e, 1, 'round');
 HARD.e_slit = (g, c, e) => drawEye(g, c, e, 1, 'slit');
 HARD.e_big = (g, c, e) => drawEye(g, c, e, 1.25, 'goggle');
@@ -6765,11 +7771,57 @@ const hardOf = (id) => HARD[id] || (VIS[id] && VIS[id].draw) || null;
 // The layout is kept stable across edits so a mesh that is a moment out of
 // date (while its replacement bakes) still binds to sensible bones.
 const TAIL_SLOTS = 12;
+// A foot/hand/claw's own rotation: spin about the limb axis, tilt about its side
+// axis. Mirrored twins turn the opposite way so a pair stays symmetric.
+function tipFrame(x, y, z, tip, side) {
+  const sp = (tip && tip.spin || 0) * side, tl = (tip && tip.tilt || 0);
+  if (sp) { x = v3.rot(x, y, sp); z = v3.rot(z, y, sp); }
+  if (tl) { const ax = v3.norm(z); x = v3.rot(x, ax, tl * side); y = v3.rot(y, ax, tl * side); }
+  return [x, y, z];
+}
 function boneLayout(G) {
   const nl = G.cls.limbs.length;
   const nt = G.sk.tailLen > 0.05 ? Math.min(TAIL_SLOTS, G.sk.plan.ts) : 0;
-  const limb0 = 2 + TAIL_SLOTS;
-  return { nl, jaw: 1, tail0: 2, nt, limb0, count: limb0 + 2 * nl };
+  const limb0 = 3 + TAIL_SLOTS;
+  return { nl, jaw: 1, head: 2, tail0: 3, nt, limb0, count: limb0 + 2 * nl };
+}
+// neck and head move together on one bone that pivots at the shoulders
+const isHeadBall = (B, i) => !!B[i] && (B[i].g === 'neck' || B[i].g === 'head');
+function headPivot(sk) {
+  if (sk._pivot) return sk._pivot;
+  const B = sk.balls, P = sk.plan;
+  let first = sk.headIdx;
+  for (let i = P.seg + 6; i < sk.headIdx; i++) if (B[i] && !B[i].hide) { first = i; break; }
+  let bi = 0, bd = Infinity;
+  for (let i = 0; i < P.seg; i++) { const d = Math.hypot(B[i].x - B[first].x, B[i].y - B[first].y, B[i].z - B[first].z); if (d < bd) { bd = d; bi = i; } }
+  return (sk._pivot = [B[bi].x, B[bi].y, 0]);
+}
+// ---- small affine kit: { R: row-major 3x3, t: [3] } -------------------------------
+function affRotZAbout(pivot, ang, move) {
+  const c = Math.cos(ang), s = Math.sin(ang);
+  const R = [c, -s, 0, s, c, 0, 0, 0, 1];
+  const t = [pivot[0] - (c * pivot[0] - s * pivot[1]) + move[0], pivot[1] - (s * pivot[0] + c * pivot[1]) + move[1], move[2]];
+  return { R, t };
+}
+function affAxisAbout(pivot, axis, ang) {
+  const [x, y, z] = v3.norm(axis), c = Math.cos(ang), s = Math.sin(ang), k = 1 - c;
+  const R = [k * x * x + c, k * x * y - s * z, k * x * z + s * y, k * x * y + s * z, k * y * y + c, k * y * z - s * x, k * x * z - s * y, k * y * z + s * x, k * z * z + c];
+  const t = [pivot[0] - (R[0] * pivot[0] + R[1] * pivot[1] + R[2] * pivot[2]), pivot[1] - (R[3] * pivot[0] + R[4] * pivot[1] + R[5] * pivot[2]), pivot[2] - (R[6] * pivot[0] + R[7] * pivot[1] + R[8] * pivot[2])];
+  return { R, t };
+}
+const affDir = (A, v) => [A.R[0] * v[0] + A.R[1] * v[1] + A.R[2] * v[2], A.R[3] * v[0] + A.R[4] * v[1] + A.R[5] * v[2], A.R[6] * v[0] + A.R[7] * v[1] + A.R[8] * v[2]];
+const affPt = (A, v) => v3.add(affDir(A, v), A.t);
+function affMul(A, B) {   // A after B
+  const R = new Array(9);
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) R[i * 3 + j] = A.R[i * 3] * B.R[j] + A.R[i * 3 + 1] * B.R[3 + j] + A.R[i * 3 + 2] * B.R[6 + j];
+  return { R, t: affPt(A, B.t) };
+}
+function boneAff(o, A, hl) {
+  const R = A.R;
+  boneData[o] = R[0]; boneData[o + 1] = R[3]; boneData[o + 2] = R[6]; boneData[o + 3] = 0;
+  boneData[o + 4] = R[1]; boneData[o + 5] = R[4]; boneData[o + 6] = R[7]; boneData[o + 7] = 0;
+  boneData[o + 8] = R[2]; boneData[o + 9] = R[5]; boneData[o + 10] = R[8]; boneData[o + 11] = 0;
+  boneData[o + 12] = A.t[0]; boneData[o + 13] = A.t[1]; boneData[o + 14] = A.t[2]; boneData[o + 15] = hl || 1;
 }
 // The mouth part the jaw bone hinges on (first mouth on the body)
 function mouthPart(des) { return (des.parts || []).find(p => C.ITEM_SIM[p.id] && C.ITEM_SIM[p.id].t === 'MOUTH') || null; }
@@ -6806,7 +7858,7 @@ function creaturePrims(des, G) {
   const sk = G.sk, B = sk.balls, L = boneLayout(G);
   const cols = des.col || { base: [0.5, 0.6, 0.5], coat: [0.9, 0.9, 0.8], detail: [0.2, 0.3, 0.2], pat: 0 };
   const out = [];
-  for (const q of sk.prims) out.push(Object.assign({}, q, { bone: 0, col: null }));
+  for (const q of sk.prims) out.push(Object.assign({}, q, { bone: isHeadBall(B, q.j) ? L.head : 0, col: null }));
   sk.tailPrims.forEach((q, j) => out.push(Object.assign({}, q, { bone: L.tail0 + j, col: null })));
   // limbs
   G.cls.limbs.forEach((o, li) => {
@@ -6822,7 +7874,8 @@ function creaturePrims(des, G) {
     if (L1 > 0.2) {
       const m = v3.lerp(root, knee, 0.36), ey = v3.norm(ud);
       let ex = v3.norm(v3.cross(ey, [0, 0, 1])); if (!isFinite(ex[0]) || v3.len(ex) < 0.5) ex = [1, 0, 0];
-      out.push({ t: 'e', ax: m[0], ay: m[1], az: m[2], ex, ey, ez: v3.cross(ex, ey), rx: r0 * 1.12, ry: L1 * 0.32, rz: r0 * 1.08, k: 0.08, bone: up, col });
+      const bulk = lb.id === 'l_spring' ? 1.55 : 1;   // springing legs carry a huge thigh
+      out.push({ t: 'e', ax: m[0], ay: m[1], az: m[2], ex, ey, ez: v3.cross(ex, ey), rx: r0 * 1.12 * bulk, ry: L1 * 0.32 * (bulk > 1 ? 1.2 : 1), rz: r0 * 1.08 * bulk, k: 0.08, bone: up, col });
     }
     if (lb.tip && FLESH[lb.tip.id]) {
       const tv = VIS[lb.tip.id];
@@ -6834,7 +7887,8 @@ function creaturePrims(des, G) {
       const zw = v3.mul(v3.cross(dir, xw), side);
       const S = tv.size * clamp(lb.tip.s || 1, 0.4, 2.5) * th;
       const tc = lb.tip.c || (Array.isArray(tv.col) ? tv.col : null);
-      const F = makeF(out, foot, xw, dir, zw, S, lo);
+      const [tx0, ty0, tz0] = tipFrame(xw, dir, zw, lb.tip, side);
+      const F = makeF(out, foot, tx0, ty0, tz0, S, lo);
       FLESH[lb.tip.id](F, tc, { base: cols.base });
     }
   });
@@ -6845,12 +7899,12 @@ function creaturePrims(des, G) {
     if (!fl) continue;
     const vis = VIS[pt.id];
     const { p, fr, bi } = partRest(G, pt);
-    const bone = B[bi].g === 'tail' ? L.tail0 + (bi - sk.tailStart) : 0;
+    const bone = B[bi].g === 'tail' ? L.tail0 + (bi - sk.tailStart) : isHeadBall(B, bi) ? L.head : 0;
     const S = vis.size * clamp(pt.s || 1, 0.3, 3);
     const c = pt.c || (Array.isArray(vis.col) ? vis.col : null);
     const F = makeF(out, p, fr.x, fr.y, fr.z, S, bone);
     if (pt === mouth) F.jawBone = L.jaw;
-    fl(F, c, { base: cols.base });
+    fl(F, c, { base: cols.base, fw: frameLocal(fr, [1, 0, 0]), up: frameLocal(fr, [0, 1, 0]) });
   }
   return out;
 }
@@ -6987,7 +8041,11 @@ function getDesignMesh(des, quality, sync) {
   if (fresh && m.q >= quality) { meshLRU.delete(des); meshLRU.add(des); return m.gpu; }
   if (sync === 'now') return buildDesignMeshNow(des, quality);
   if (sync && !(m && m.gpu)) { buildDesignMeshNow(des, 0); if (quality > 0) meshRequest(des, quality); return des._mesh.gpu; }
-  if (!(fresh && m.failed)) meshRequest(des, quality);
+  if (!(fresh && m.failed)) {
+    // nothing to show yet: bake a quick coarse skin first, then the requested one
+    if (!(m && m.gpu) && quality > 0 && !des._job && !des._queued) { meshRequest(des, 0); des._want = Math.max(des._want || 0, quality); }
+    else meshRequest(des, quality);
+  }
   return m && m.gpu ? m.gpu : null;
 }
 // main-thread fallback when workers are not available
@@ -7000,6 +8058,8 @@ function pumpDesignMeshes(budgetMs) {
     const m = des._mesh;
     if (m && m.key === designMeshKey(des) && m.q >= q) continue;
     buildDesignMeshNow(des, q);
+    const want = des._want || 0; des._want = 0;
+    if (want > q) { des._queued = want; meshBuildQueue.push(des); }
   }
 }
 
@@ -7102,6 +8162,9 @@ function drawDesign(des, X) {
                 : { root, knee, foot, rest: { root, knee, foot } };
   });
   const jawAng = (X.chomp || 0) * 0.42;
+  // head and neck pose: pitch about the shoulders plus a thrust (body units)
+  const hp = X.head || null;
+  const headA = hp ? affRotZAbout(headPivot(sk), hp.pitch || 0, [hp.fwd || 0, hp.lift || 0, 0]) : null;
   const nlB = Math.max(L.nl, (des._mesh && des._mesh.nl) || 0);
   const boneCount = L.limb0 + 2 * nlB;
   if (mesh && boneBuf && boneN + boneCount <= MAX_BONES && skinDraws.length < MAX_SKIN_INST) {
@@ -7122,13 +8185,18 @@ function drawDesign(des, X) {
       }
     }
     const mp = mouthPart(des);
-    if (mp) { const pr = partRest(G, mp); boneHinge((bb + L.jaw) * 16, pr.p, pr.fr.z, jawAng * pr.side, 1); }
-    else boneIdentity((bb + L.jaw) * 16, 1);
+    if (headA) boneAff((bb + L.head) * 16, headA, 1);
+    if (mp) {
+      const pr = partRest(G, mp);
+      let J = affAxisAbout(pr.p, pr.fr.z, jawAng * pr.side);
+      if (headA && isHeadBall(B, pr.bi)) J = affMul(headA, J);
+      boneAff((bb + L.jaw) * 16, J, 1);
+    } else if (headA) boneAff((bb + L.jaw) * 16, headA, 1);
     for (let li = L.nl; li < nlB; li++) { boneIdentity((bb + L.limb0 + 2 * li) * 16, 1); boneIdentity((bb + L.limb0 + 1 + 2 * li) * 16, 1); }
     boneN += boneCount;
     const inst = new Float32Array(BINST_FLOATS);
     const q = X.toW([0, 0, 0]);
-    inst.set([q[0], q[1], q[2], X.yaw || 0, R, base[0], base[1], base[2], coat[0], coat[1], coat[2], detail[0], detail[1], detail[2], col.pat | 0, X.selBody ? 1 : 0, wAmp, wPh, sk.a, bb]);
+    inst.set([q[0], q[1], q[2], X.yaw || 0, R, base[0], base[1], base[2], coat[0], coat[1], coat[2], detail[0], detail[1], detail[2], (col.pat | 0) + 16 * ((col.skin != null ? col.skin : (C.PLAN_SKIN ? C.PLAN_SKIN[des.plan | 0] : 0)) | 0), X.selBody ? 1 : 0, wAmp, wPh, sk.a, bb]);
     skinDraws.push({ mesh, inst });
   } else {
     // placeholder while the skin bakes: the same primitives as simple shapes
@@ -7170,6 +8238,8 @@ function drawDesign(des, X) {
       const yaw = tp[j] ? tp[j].yaw : 0;
       lp = v3.add(tp[j] ? tp[j].p : [k.x, k.y, k.z], rotYv(off, yaw));
       n = rotYv(n, yaw); fx = rotYv(fx, yaw); fz = rotYv(fz, yaw);
+    } else if (headA && isHeadBall(B, r0.bi)) {
+      lp = affPt(headA, lp); n = affDir(headA, n); fx = affDir(headA, fx); fz = affDir(headA, fz);
     }
     lp = wv(lp);
     const S = vis.size * clamp(pt.s || 1, 0.3, 3) * R;
@@ -7199,7 +8269,8 @@ function drawDesign(des, X) {
     const side = l.root[2] < -0.04 ? -1 : 1;
     const zw = v3.mul(v3.cross(dirW2, xw), side);
     const S = tv.size * clamp(lb.tip.s || 1, 0.4, 2.5) * th * R;
-    const g = makeG(fw, xw, dirW2, zw, S, [1, 0, 0], [0, -1, 0]);
+    const [tx1, ty1, tz1] = tipFrame(xw, dirW2, zw, lb.tip, side);
+    const g = makeG(fw, tx1, ty1, tz1, S, [1, 0, 0], [0, -1, 0]);
     let tc = itemColor(lb.tip.id, lb.tip.c, { base, coat, detail });
     if (hlOn(lb)) tc = colHi(tc);
     env.limb = lb.c || base;
@@ -7242,6 +8313,66 @@ function deadTypes(c) {
   for (let i = 1; i < cs.length; i++) if (!cs[i].alive && cn[i]) (s || (s = new Set())).add(cn[i].type);
   return s;
 }
+// ---- attack choreography ---------------------------------------------------------
+// an: { kind, k (0..1 through the move), s (strikeCurve: -0.4 wind-up .. 1 impact .. 0) }.
+// Returns the head pose, jaw opening and a per-limb override that lands the hit:
+// claw = raise and rake across, punch = cock back and drive out, headbutt/gore =
+// rear the head and ram it down and forward, bite = gape and lunge, sweep = the
+// tail whips (tailPose reads tailSwing). Shared by the world and the editor.
+function attackRig(G, an, leadSide, t, id, toW) {
+  const kind = an ? an.kind : null, s = an ? an.s : 0;
+  const wind = Math.max(0, -s) / 0.4, hit = Math.max(0, s);
+  let head = { pitch: Math.sin(t * 0.6 + id) * 0.035, fwd: 0, lift: 0 };
+  if (kind === 'headbutt' || kind === 'gore') head = { pitch: 0.26 * wind - 0.62 * hit, fwd: -0.14 * wind + 0.5 * hit, lift: 0.05 * wind - 0.12 * hit };
+  else if (kind === 'bite') head = { pitch: 0.2 * wind - 0.16 * hit, fwd: -0.2 * wind + 0.6 * hit, lift: 0.04 * wind - 0.05 * hit };
+  else if (kind === 'flinch') { const f = Math.sin(an.k * Math.PI); head = { pitch: 0.28 * f, fwd: -0.25 * f, lift: 0.05 * f }; }
+  else if (kind === 'mate') { const f = Math.sin(an.k * Math.PI); head = { pitch: -0.3 * f, fwd: 0.15 * f, lift: 0 }; }
+  const chomp = kind === 'bite' ? 0.2 + wind * 1.5 + hit * 0.3 * (1 - an.k) : null;
+  const hasArms = G.cls.limbs.some(o => !o.leg);
+  const nArms = G.cls.limbs.filter(o => !o.leg).length;
+  const ranks = legRanks(G);
+  const ease = (u) => u * u * (3 - 2 * u);
+  // rest -> wound-up pose -> impact pose -> rest, on the same timing as strikeCurve
+  const phasePose = (rest, P1, P2, amt) => {
+    const k = an.k;
+    let q;
+    if (k < 0.32) q = v3.lerp(rest, P1, ease(k / 0.32));
+    else if (k < 0.56) q = v3.lerp(P1, P2, ease((k - 0.32) / 0.24));
+    else q = v3.lerp(P2, rest, ease((k - 0.56) / 0.44));
+    return v3.lerp(rest, q, amt);
+  };
+  const strikeLimb = (o, root, target, poleL) => {
+    const k = solveKnee(root, target, o.L1, o.L2, poleL);
+    return { knee: toW(k.knee), foot: toW(k.foot) };
+  };
+  const limb = (o, root, foot) => {
+    if (!an) return null;
+    const zs = root[2] < 0 ? -1 : 1;
+    const Lr = o.L1 + o.L2;
+    if (!o.leg && (kind === 'claw' || kind === 'punch')) {
+      const amt = (zs === leadSide || nArms < 2) ? 1 : 0.3;
+      let tgt;
+      if (kind === 'claw') {
+        const up = [root[0] - 0.1 * Lr, root[1] + 0.7 * Lr, root[2] + 0.45 * Lr * zs];
+        const dn = [root[0] + 0.9 * Lr, root[1] - 0.2 * Lr, root[2] - 0.2 * Lr * zs];
+        tgt = phasePose(foot, up, dn, amt);
+      } else {
+        const back = [root[0] - 0.35 * Lr, root[1] + 0.05 * Lr, root[2] + 0.2 * Lr * zs];
+        const out = v3.add(root, v3.mul(v3.norm([1, -0.05, -0.12 * zs]), Lr * 0.98));
+        tgt = phasePose(foot, back, out, amt);
+      }
+      return strikeLimb(o, root, tgt, [-0.4, -1, 0.5 * zs]);
+    }
+    if (o.leg && (kind === 'claw' || kind === 'punch') && !hasArms && (ranks.get(o.lb) || 0) === 0 && zs === leadSide) {
+      // no arms: the leading front leg rears up and swipes (or stamps) forward
+      const up = [root[0] + 0.55 * Lr, root[1] - 0.2 * Lr, root[2] + 0.35 * Lr * zs];
+      const dn = [root[0] + 0.95 * Lr, root[1] - 0.8 * Lr, root[2] - 0.05 * Lr * zs];
+      return strikeLimb(o, root, phasePose(foot, up, dn, 1), [1, 0.2, 0.3 * zs]);
+    }
+    return null;
+  };
+  return { kind, head, chomp, limb, tailMul: kind === 'sweep' ? 1.6 : 1 };
+}
 function drawDesignedCreature(c, t, camDist, A) {
   const p = c.ph, des = c.genome.design;
   const G = designGeo(des);
@@ -7258,17 +8389,22 @@ function drawDesignedCreature(c, t, camDist, A) {
   const ranks = legRanks(G);
   const airborne = A.hover > Rw * 0.4;
   const walk = !airborne && !A.swimming;
+  const rig = attackRig(G, A.anim, ((c._strikeSeq || 0) & 1) ? 1 : -1, t, c.id, toW);
+  const head = rig.head, kind = rig.kind;
   const X = {
+    head,
     R: Rw, t, seed: c.id * 0.37, toW, toL, yaw: A.yaw, dirW: dW,
-    quality: isPlayer || camDist < 120 ? 1 : 0, sync: false, far: A.far, lod: camDist > 650 ? 2 : camDist > 420 ? 1 : 0,
-    hide: deadTypes(c), gaitPhase: A.phase0, tailSwing: A.tailSwing,
+    quality: isPlayer ? 2 : camDist < 420 ? 1 : 0, sync: false, meshFar: true, far: A.far, lod: camDist > 650 ? 2 : camDist > 420 ? 1 : 0,
+    hide: deadTypes(c), gaitPhase: A.phase0, tailSwing: A.tailSwing * rig.tailMul,
     tailAmp: 0.35 + 0.65 * A.gaitAmt, flexAmp: 0.10 + 0.22 * A.gaitAmt,
     flap: Math.sin(t * (airborne ? 6.5 : 3.4) + c.id) * (airborne ? 0.62 : (p.canFly ? 0.18 : 0.08)),
-    chomp: A.bite > 0 ? A.bite : 0.12 + 0.12 * Math.sin(t * 1.7 + c.id),
+    chomp: rig.chomp != null ? rig.chomp : A.bite > 0 ? A.bite : 0.12 + 0.12 * Math.sin(t * 1.7 + c.id),
     grip: clamp(c._grab || 0, 0, 1),
     tint: A.flinch > 0.01 ? [1, 0.25, 0.22] : null, tintK: A.flinch * 0.55,
     blink: (pi) => (((t * 0.29 + pi * 0.137 + c.id * 0.071) % 1) < 0.035 ? 1 : 0),
     limbPose(o, li, root, knee, foot) {
+      const ov = rig.limb(o, root, foot);
+      if (ov) return ov;
       if (!o.leg) {
         const sw = A.armSwing, gr = clamp(c._grab || 0, 0, 1);
         const idle = Math.sin(t * 1.3 + li) * 0.035;
@@ -7295,6 +8431,228 @@ function drawDesignedCreature(c, t, camDist, A) {
   drawDesign(des, X);
 }
 
+// =====================================================================
+// OBJECTIVES: a chain of goals that gives a life on the island a direction.
+// One goal is active at a time; finishing it pays out permanent genome space
+// and reveals the next. The chain runs from surviving your first days to
+// making your species rule the island.
+// =====================================================================
+const OBJ_REWARD = 2;          // genome space per completed goal (kept across worlds)
+const OBJS = { idx: 0, c: { eaten: 0, kills: 0, predKills: 0, bigKills: 0, nights: 0 }, startGen: 0, startUnlocked: 0, high: false, wasNight: false, doneAll: false, shown: -1 };
+function objSpeciesRank() {
+  const c = player.c; if (!c || !world) return { mine: 0, top: 0 };
+  const m = new Map();
+  for (const o of world.creatures) if (o.alive) m.set(o.speciesId, (m.get(o.speciesId) || 0) + 1);
+  let top = 0; for (const v of m.values()) top = Math.max(top, v);
+  return { mine: m.get(c.speciesId) || 0, top };
+}
+const OBJ_LIST = [
+  { title: 'Feed', text: 'Eat five times. Plants, fruit, or the dead.', goal: 5, val: () => OBJS.c.eaten },
+  { title: 'Grow', text: 'Survive long enough to reach full size.', goal: 1, val: () => (player.c ? clamp((player.c._growthAvg || 0) / 0.95, 0, 1) : 0) },
+  { title: 'First blood', text: 'Kill another animal.', goal: 1, val: () => OBJS.c.kills },
+  { title: 'Endure the dark', text: 'Live through a whole night.', goal: 1, val: () => OBJS.c.nights },
+  { title: 'Adapt', text: 'Take four new body parts from your kills.', goal: 4, val: () => PROG.unlocked.size - OBJS.startUnlocked },
+  { title: 'Continue the line', text: 'Mate, and live on as your offspring.', goal: 1, val: () => player.generation - OBJS.startGen },
+  { title: 'Above the canopy', text: 'Reach the bare rock high on a mountain.', goal: 1, val: () => (OBJS.high ? 1 : 0) },
+  { title: 'Hunt the hunter', text: 'Kill a meat eater.', goal: 1, val: () => OBJS.c.predKills },
+  { title: 'Giant slayer', text: 'Kill three animals heavier than you.', goal: 3, val: () => OBJS.c.bigKills },
+  { title: 'Dynasty', text: 'Reach the fifth generation of your line.', goal: 5, val: () => player.generation - OBJS.startGen },
+  { title: 'Apex', text: 'Make your species the most numerous on the island (at least 12 alive).', goal: 1,
+    val: () => { const r = objSpeciesRank(); return r.mine >= 12 && r.mine >= r.top ? 1 : Math.min(0.95, r.mine / Math.max(12, r.top)); } },
+];
+function objReset() {
+  OBJS.idx = 0; OBJS.c = { eaten: 0, kills: 0, predKills: 0, bigKills: 0, nights: 0 };
+  OBJS.startGen = player.generation || 0; OBJS.startUnlocked = PROG.unlocked.size; OBJS.high = false; OBJS.wasNight = false; OBJS.doneAll = false; OBJS.shown = -1;
+  objRender();
+}
+function objOnEat() { OBJS.c.eaten++; }
+function objOnKill(prey) {
+  OBJS.c.kills++;
+  if (prey && prey.ph && prey.ph.carnivory > 0.5) OBJS.c.predKills++;
+  if (prey && prey.ph && player.c && player.c.ph && prey.ph.mass > player.c.ph.mass) OBJS.c.bigKills++;
+}
+let objAcc = 0;
+function objTick(dt) {
+  objAcc += dt; if (objAcc < 0.4) return; objAcc = 0;
+  const c = player.c;
+  if (!c || !c.alive || !world || player.spectator) return;
+  if (OBJS.world !== world) { OBJS.world = world; objReset(); }
+  // world events watched here rather than hooked
+  const night = (world.light != null ? world.light : 1) < 0.22;
+  if (OBJS.wasNight && (world.light || 0) > 0.55) { OBJS.c.nights++; OBJS.wasNight = false; }
+  if (night) OBJS.wasNight = true;
+  if (!OBJS.high) { const e = terrain.height(c.x, c.y); if (e >= terrain.LV.rock || terrain.biomeAt(c.x, c.y) === 'scree' || terrain.biomeAt(c.x, c.y) === 'snow') OBJS.high = true; }
+  if (OBJS.doneAll) return;
+  const o = OBJ_LIST[OBJS.idx];
+  if (o.val() >= o.goal) {
+    PROG.bonus = (PROG.bonus || 0) + OBJ_REWARD; saveProgress();
+    toast('Goal complete: ' + o.title + '. +' + OBJ_REWARD + ' genome space.', 4200);
+    OBJS.idx++;
+    if (OBJS.idx >= OBJ_LIST.length) { OBJS.doneAll = true; OBJS.idx = OBJ_LIST.length - 1; toast('Your kind rules the island.', 6000); }
+  }
+  objRender();
+}
+function objRender() {
+  let el = document.getElementById('objective');
+  if (!el) {
+    el = document.createElement('div'); el.id = 'objective';
+    document.body.appendChild(el);
+    const st = document.createElement('style');
+    st.textContent = '#objective{position:fixed;top:14px;left:50%;transform:translateX(-50%);min-width:360px;max-width:560px;padding:10px 18px 12px;border-radius:14px;' +
+      'background:linear-gradient(180deg,rgba(8,20,18,.78),rgba(4,12,12,.82));border:1px solid rgba(120,170,140,.35);color:#d8efe4;font:14px ui-monospace,Menlo,Consolas,monospace;pointer-events:none;z-index:40;text-align:center}' +
+      '#objective .ot{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#9fd8b8}#objective .ox{margin-top:4px;font-size:15px}' +
+      '#objective .ob{margin:8px auto 0;height:6px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;max-width:320px}#objective .ob i{display:block;height:100%;background:linear-gradient(90deg,#6fbf8f,#d8f0a0)}' +
+      '#objective .on{margin-top:4px;font-size:12px;color:#9fb8ac}';
+    document.head.appendChild(st);
+  }
+  if (!started || !player.c || ED.open) { el.style.display = 'none'; return; }
+  const o = OBJ_LIST[OBJS.idx];
+  const v = clamp(o.val() / o.goal, 0, 1);
+  el.style.display = 'block';
+  el.innerHTML = OBJS.doneAll ? '<div class="ot">all goals complete</div><div class="ox">Your kind rules the island.</div>'
+    : `<div class="ot">goal ${OBJS.idx + 1} / ${OBJ_LIST.length} &middot; ${o.title}</div><div class="ox">${o.text}</div>` +
+      `<div class="ob"><i style="width:${(v * 100).toFixed(0)}%"></i></div>` +
+      (o.goal > 1 ? `<div class="on">${Math.min(o.goal, Math.floor(o.val()))} / ${o.goal}</div>` : '');
+}
+
+// =====================================================================
+// AMBIENT SOUND: everything is synthesised (no files). Wind in the canopy,
+// insects by day and crickets by night, distant calls you cannot place,
+// rustling in the undergrowth from animals you cannot see (panned to where
+// they are), and a heartbeat when something that eats meat is closing in.
+// N toggles sound. Audio starts on the first key press or click (browser rule).
+// =====================================================================
+const SND = { ctx: null, on: true, master: null, wind: null, windF: null, insect: null, noiseBuf: null, nextCall: 6, nextChirp: 0, nextRustle: 0, beatT: 0, threat: 0 };
+function sndInit() {
+  if (SND.ctx || !SND.on) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) { SND.on = false; return; }
+  try { SND.ctx = new AC(); } catch (e) { SND.on = false; return; }
+  const ctx = SND.ctx;
+  SND.master = ctx.createGain(); SND.master.gain.value = 0.55; SND.master.connect(ctx.destination);
+  // two seconds of noise, reused by every noisy voice
+  const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  let b0 = 0, b1 = 0;
+  for (let i = 0; i < d.length; i++) { const w = Math.random() * 2 - 1; b0 = 0.99 * b0 + w * 0.05; b1 = 0.6 * b1 + w * 0.4; d[i] = (b0 * 2 + b1) * 0.5; }
+  SND.noiseBuf = buf;
+  // wind: looping filtered noise, its loudness and pitch wandering
+  const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+  SND.windF = ctx.createBiquadFilter(); SND.windF.type = 'lowpass'; SND.windF.frequency.value = 380; SND.windF.Q.value = 0.7;
+  SND.wind = ctx.createGain(); SND.wind.gain.value = 0.0;
+  src.connect(SND.windF).connect(SND.wind).connect(SND.master); src.start();
+  // insects: a high band of noise that pulses
+  const s2 = ctx.createBufferSource(); s2.buffer = buf; s2.loop = true; s2.playbackRate.value = 1.3;
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 5200; bp.Q.value = 9;
+  SND.insect = ctx.createGain(); SND.insect.gain.value = 0;
+  s2.connect(bp).connect(SND.insect).connect(SND.master); s2.start();
+}
+function sndToggle() {
+  SND.on = !SND.on;
+  if (SND.ctx) { if (SND.on) SND.ctx.resume(); else SND.ctx.suspend(); }
+  else if (SND.on) sndInit();
+  toast('sound ' + (SND.on ? 'on' : 'off') + '  (N)', 1400);
+}
+function sndPan(dx, dz) {
+  // pan by where the source is relative to the way you are looking
+  const yaw = player.yaw || 0;
+  const side = -Math.sin(yaw) * dx + Math.cos(yaw) * dz;
+  const d = Math.hypot(dx, dz) || 1;
+  return clamp(side / d, -1, 1);
+}
+function sndVoice(build, pan, when) {
+  const ctx = SND.ctx; if (!ctx) return;
+  const p = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+  if (p) { p.pan.value = pan || 0; p.connect(SND.master); }
+  build(ctx, p || SND.master, when || ctx.currentTime);
+}
+function sndNoiseBurst(freq, q, dur, vol, pan, rate) {
+  sndVoice((ctx, out, t) => {
+    const s = ctx.createBufferSource(); s.buffer = SND.noiseBuf; s.playbackRate.value = rate || 1;
+    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + dur * 0.25); g.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+    s.connect(f).connect(g).connect(out); s.start(t, Math.random() * 1.5); s.stop(t + dur + 0.05);
+  }, pan);
+}
+// a far-off call: a falling, wavering tone through the trees
+function sndCall(pan, night) {
+  sndVoice((ctx, out, t) => {
+    const o = ctx.createOscillator(); o.type = 'sine';
+    const f0 = night ? 240 + Math.random() * 180 : 520 + Math.random() * 500;
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(f0 * (night ? 0.55 : 0.8), t + (night ? 2.2 : 0.6));
+    const vib = ctx.createOscillator(); vib.frequency.value = night ? 5.5 : 11; const vg = ctx.createGain(); vg.gain.value = f0 * 0.03;
+    vib.connect(vg).connect(o.frequency);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400;
+    const g = ctx.createGain(); const dur = night ? 2.6 : 0.8;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(night ? 0.05 : 0.03, t + 0.2); g.gain.exponentialRampToValueAtTime(0.0003, t + dur);
+    o.connect(lp).connect(g).connect(out); o.start(t); vib.start(t); o.stop(t + dur + 0.1); vib.stop(t + dur + 0.1);
+  }, pan);
+}
+function sndThump(vol) {
+  sndVoice((ctx, out, t) => {
+    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(62, t); o.frequency.exponentialRampToValueAtTime(38, t + 0.12);
+    const g = ctx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0005, t + 0.16);
+    o.connect(g).connect(out); o.start(t); o.stop(t + 0.2);
+  }, 0);
+}
+function sndHit() { if (SND.ctx && SND.on) { sndThump(0.35); sndNoiseBurst(900, 1.2, 0.18, 0.25, 0, 0.7); } }
+function sndTick(dt) {
+  if (!SND.ctx || !SND.on || !world) return;
+  const ctx = SND.ctx, t = ctx.currentTime;
+  const light = world.light != null ? world.light : 1;
+  const night = light < 0.3;
+  const c = player.c;
+  const cx = c ? c.x : player.camX, cz = c ? c.y : player.camZ;
+  const canopy = forestCanopyAt(cx, cz);
+  // wind rises with altitude and in the open, gusting slowly
+  const alt = clamp((player.camY - groundAt(cx, cz)) / 400, 0, 1);
+  const gust = 0.5 + 0.5 * Math.sin(performance.now() * 0.00021) * Math.sin(performance.now() * 0.00053);
+  SND.wind.gain.setTargetAtTime(0.05 + 0.12 * gust * (1 - canopy * 0.5) + 0.2 * alt, t, 0.8);
+  SND.windF.frequency.setTargetAtTime(260 + 500 * gust + 600 * alt, t, 0.8);
+  // insects by day (louder under the canopy), silence then crickets at night
+  const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.012);
+  SND.insect.gain.setTargetAtTime(night ? 0 : (0.004 + 0.014 * canopy) * (0.4 + 0.6 * pulse) * light, t, 0.15);
+  if (night && t > SND.nextChirp) {
+    SND.nextChirp = t + 0.35 + Math.random() * 0.9;
+    const pan = Math.random() * 2 - 1;
+    for (let k = 0; k < 3; k++) sndVoice((cx2, out, tt) => {
+      const o = cx2.createOscillator(); o.frequency.value = 4300 + Math.random() * 300;
+      const g = cx2.createGain(); g.gain.setValueAtTime(0, tt); g.gain.linearRampToValueAtTime(0.008, tt + 0.008); g.gain.linearRampToValueAtTime(0, tt + 0.035);
+      o.connect(g).connect(out); o.start(tt); o.stop(tt + 0.05);
+    }, pan, t + k * 0.06);
+  }
+  if (t > SND.nextCall) { SND.nextCall = t + (night ? 7 : 14) + Math.random() * (night ? 12 : 22); sndCall(Math.random() * 1.6 - 0.8, night); }
+  // unseen movement nearby, and anything hungry closing in
+  let threat = 0;
+  if (c && c.alive && t > SND.nextRustle) {
+    let best = null, bestScore = 0;
+    for (const o of world.creatures) {
+      if (o === c || !o.alive) continue;
+      const dx = o.x - c.x, dz = o.y - c.y, d = Math.hypot(dx, dz);
+      if (d > 220) continue;
+      const sp = Math.hypot(o.vx || 0, o.vy || 0);
+      if (o.ph.carnivory > 0.5 && (o.target === c || o.foe === c || (d < 140 && ((o.vx || 0) * -dx + (o.vy || 0) * -dz) > 0))) threat = Math.max(threat, 1 - d / 220);
+      const fx = Math.cos(player.yaw), fz = Math.sin(player.yaw);
+      const behind = (dx * fx + dz * fz) / (d || 1) < 0.3;
+      const cover = forestCanopyAt(o.x, o.y) + (['forest', 'marsh', 'savanna', 'plains'].includes(terrain.biomeAt(o.x, o.y)) ? 0.5 : 0);
+      const score = (sp > 3 ? 1 : 0.15) * (1 - d / 220) * (behind ? 1.4 : 0.7) * (0.4 + cover);
+      if (score > bestScore) { bestScore = score; best = o; }
+    }
+    if (best && bestScore > 0.12) {
+      const dx = best.x - c.x, dz = best.y - c.y;
+      sndNoiseBurst(1100 + Math.random() * 900, 1.4, 0.18 + Math.random() * 0.25, 0.05 + 0.12 * bestScore, sndPan(dx, dz), 0.8 + Math.random() * 0.5);
+    }
+    SND.nextRustle = t + 0.35 + Math.random() * 0.8;
+    SND.threat = threat;
+  }
+  // heartbeat when hunted
+  if (SND.threat > 0.15) {
+    SND.beatT -= dt;
+    if (SND.beatT <= 0) { const bpm = 70 + 60 * SND.threat; SND.beatT = 60 / bpm; sndThump(0.12 + 0.2 * SND.threat); setTimeout(() => sndThump(0.08 + 0.14 * SND.threat), 140); }
+  }
+}
+
 // ================================================================ player
 const player = {
   c: null, yaw: 0, pitch: -0.05, spectator: false, generation: 0, deaths: 0,
@@ -7308,11 +8666,11 @@ const PLAYER_SPEED = 1.65; // the body you steer moves faster than the sim's own
 // Flight. canFly previously only added a fixed hover offset, so a flier floated
 // at a constant height and could not gain any altitude. These give it a real
 // vertical axis with a climb rate paid for out of metabolism.
-const FLY_CLIMB = 190;     // world units / s while ascending
+const FLY_CLIMB = 320;     // world units / s while ascending
 const FLY_SINK = 62;       // passive sink when not actively climbing
 const FLY_DIVE = 240;      // held descent
-const FLY_CEIL = 620;      // ceiling above ground level
-const THIRD_MAX = 1200, THIRD_DEFAULT = 150, THIRD_SNAP = 26;  // below SNAP, snap to first person
+const FLY_CEIL = 1500;     // ceiling above ground level
+const THIRD_MAX = 1600, THIRD_DEFAULT = 150, THIRD_SNAP = 26;  // below SNAP, snap to first person
 function isFirstPerson() { return !player.spectator && player.dist <= 0; }
 const keys = Object.create(null);
 let pointerLocked = false, started = false;
@@ -7410,6 +8768,8 @@ function makeArchetypeGenome(kind) {
   const score = ARCHETYPES[kind];
   const draw = () => {
     let g = C.seedHerbivore(world, rng);
+    g.design = C.randomDesign(rng, { diversity: 0.7, diet: kind === 'hunter' ? 'carn' : 'herb' });
+    C.compileDesign(g);
     const rounds = 2 + ((rng() * 6) | 0);
     for (let m = 0; m < rounds; m++) g = C.mutate(world, g, rng, 0.5);
     if (kind === 'hunter') setDiet(g, 'carn');
@@ -7726,6 +9086,7 @@ const MOVE_DEF = {
   slam:     { label: 'body slam', dmg: 1.20, reach: 0.90, dur: 0.65 },
   claw:     { label: 'claw',      dmg: 1.00, reach: 1.00, dur: 0.50 },
   headbutt: { label: 'headbutt',  dmg: 0.65, reach: 0.80, dur: 0.50 },
+  punch:    { label: 'punch',     dmg: 0.90, reach: 1.00, dur: 0.42 },
 };
 function movesFor(p, n) {
   const out = [];
@@ -7735,8 +9096,22 @@ function movesFor(p, n) {
   if ((n.SPIKE || 0) > 0) out.push('slam');
   if (((n.LEG || 0) >= 2 && p.mass > 1.2) || p.dClaw) out.push('claw');
   if (p.dSweep && !out.includes('sweep')) out.push('sweep');
-  if (!out.length) out.push('headbutt');       // a baby has nothing else
+  if ((p.dArms || 0) > 0) out.push('punch');
+  if (!out.includes('headbutt')) out.push('headbutt');   // anything with a head can butt
   return out;
+}
+// the move the player has chosen (X cycles), falling back to the strongest
+function playerMove(p) {
+  const list = movesFor(p, tallyParts(p));
+  if (player.moveSel && list.includes(player.moveSel)) return player.moveSel;
+  return bestMove(p, tallyParts(p));
+}
+function cycleMove() {
+  const c = player.c; if (!c || !c.alive) return;
+  const list = movesFor(c.ph, tallyParts(c.ph));
+  const cur = playerMove(c.ph);
+  player.moveSel = list[(list.indexOf(cur) + 1) % list.length];
+  toast('attack: ' + MOVE_DEF[player.moveSel].label + '  (' + list.map(m => MOVE_DEF[m].label).join(' / ') + ')', 1800);
 }
 function bestMove(p, n) {
   const list = movesFor(p, n);
@@ -7832,7 +9207,7 @@ function tryEat() {
     const gain = bestC.e * (p.carrionDigest || 0.9);
     bestC.dead = true;
     c.energy = Math.min(p.storage, c.energy + gain);
-    toast('Ate carrion. +' + gain.toFixed(0) + ' energy.', 1800);
+    toast('Ate carrion. +' + gain.toFixed(0) + ' energy.', 1800); objOnEat();
     return;
   }
   if (bestP) {
@@ -7842,7 +9217,7 @@ function tryEat() {
     if (i >= 0) world.plants.splice(i, 1);
     if (bestP.deep) world.deepPlants = Math.max(0, world.deepPlants - 1);
     c.energy = Math.min(p.storage, c.energy + gain);
-    toast('Ate. +' + gain.toFixed(0) + ' energy.', 1400);
+    toast('Ate. +' + gain.toFixed(0) + ' energy.', 1400); objOnEat();
     return;
   }
   toast('Nothing to eat in reach.', 1100);
@@ -7853,7 +9228,7 @@ function tryAttack() {
   if (!c || !c.alive || (player.atkCD || 0) > 0) return;
   const p = c.ph;
   const nn = tallyParts(p);
-  const mv = bestMove(p, nn), MD = MOVE_DEF[mv];
+  const mv = playerMove(p), MD = MOVE_DEF[mv];
   player.atkCD = MD.dur + 0.10;
   startAnim(c, mv, MD.dur);
   const fx = Math.cos(player.yaw), fz = Math.sin(player.yaw);
@@ -7888,6 +9263,7 @@ function tryAttack() {
   if (dmg < floor) dmg = floor;
   // the thing you hit flinches, and remembers you
   startAnim(best, 'flinch', 0.35);
+  sndHit();
   best.energy -= dmg;
   C.onHit(best, c, dmg);
   c.energy -= (best.ph.counter || 0) * 0.5;
@@ -8011,9 +9387,23 @@ function updateJump(dt) {
   if (player.jumpY > 0 || player.jumpV > 0) {
     player.jumpV -= GRAV * dt;
     player.jumpY += player.jumpV * dt;
-    if (player.jumpY <= 0) { player.jumpY = 0; player.jumpV = 0; player.grounded = true; }
+    // terrain steps you can clear while in the air
+    const blockH = terrain.hMax * HEIGHT_SCALE / Math.max(1, terrain.ELEV);
+    player.c.jumpLv = Math.max(0, Math.floor(player.jumpY / Math.max(1, blockH)));
+    if (player.jumpY <= 0) { player.jumpY = 0; player.jumpV = 0; player.grounded = true; player.c.jumpLv = 0; }
     else player.grounded = false;
   } else player.grounded = true;
+}
+// How high this body can jump, in world units. The base hop clears about one
+// climb step; leg length (stand height relative to body size) adds to it, and
+// each springing leg multiplies it -- a full set clears several body heights.
+function jumpHeight(p) {
+  const base = JUMP_V0 * JUMP_V0 / (2 * GRAV) * 0.75;
+  const legRatio = clamp((p.standH || p.radius) / Math.max(0.5, p.radius) - 0.6, 0, 2.2);
+  const legs = p.dLegs || 0, spring = p.dSpring || 0;
+  const springFrac = legs ? clamp(spring / legs, 0, 1) : 0;
+  const size = Math.sqrt(Math.max(0.3, (p.radius || 4) / 4));
+  return base * size * (1 + 0.55 * legRatio) * (1 + 3.2 * springFrac);
 }
 function tryJump() {
   const c = player.c;
@@ -8024,7 +9414,7 @@ function tryJump() {
   }
   if (!player.grounded) return;
   const p = c.ph;
-  player.jumpV = JUMP_V0 * (0.75 + 0.35 * clamp((p.legLen || 1) * 0.6, 0, 1.2));
+  player.jumpV = Math.sqrt(2 * GRAV * jumpHeight(p));
   player.grounded = false;
   // a jump is muscular work, charged on biological time like the gait is
   const bdt = 0.25 * (world.params.timeScale != null ? world.params.timeScale : 0.01);
@@ -8151,22 +9541,30 @@ function renderFrame(t) {
   m4mul(projM, viewM, vpM);
 
   // sky/fog colour tracks the day/night cycle the core already simulates
-  const dayFog = [0.55, 0.68, 0.78], nightFog = [0.045, 0.075, 0.10];
+  // Under the canopy the air is green and close; at night it is nearly black
+  // and you see only what is near. Everything eases so walking out of a forest
+  // or into dusk feels like it, not like a switch.
+  const canHere = forestCanopyAt(player.camX, player.camZ);
+  player._can = (player._can == null ? canHere : player._can) + (canHere - (player._can || 0)) * Math.min(1, frameDt * 1.5);
+  const can = player._can;
+  const lt2 = Math.pow(clamp(lt, 0, 1), 1.4);
+  const dayFog = [0.55 - 0.2 * can, 0.66 - 0.16 * can, 0.72 - 0.34 * can], nightFog = [0.010, 0.016, 0.022];
   const fog = [
-    nightFog[0] + (dayFog[0] - nightFog[0]) * lt,
-    nightFog[1] + (dayFog[1] - nightFog[1]) * lt,
-    nightFog[2] + (dayFog[2] - nightFog[2]) * lt,
+    nightFog[0] + (dayFog[0] - nightFog[0]) * lt2,
+    nightFog[1] + (dayFog[1] - nightFog[1]) * lt2,
+    nightFog[2] + (dayFog[2] - nightFog[2]) * lt2,
   ];
   gArr.set(vpM, 0);
   gArr[16] = player.camX; gArr[17] = player.camY; gArr[18] = player.camZ; gArr[19] = 0;
   const sunA = (world.bt || 0) * 0.4;
   gArr[20] = Math.cos(sunA) * 0.45; gArr[21] = 0.72 + 0.28 * lt; gArr[22] = Math.sin(sunA) * 0.45; gArr[23] = 0;
   gArr[24] = fog[0]; gArr[25] = fog[1]; gArr[26] = fog[2]; gArr[27] = 1;
-  gArr[28] = t; gArr[29] = FOG_DENSITY; gArr[30] = 0.25 + 0.75 * lt; gArr[31] = terrain.LV.water * HEIGHT_SCALE;
+  gArr[28] = t; gArr[29] = FOG_DENSITY * (1 + 2.4 * can) * (1 + 3.2 * (1 - lt2)); gArr[30] = (0.1 + 0.9 * lt2) * (1 - 0.22 * can); gArr[31] = terrain.LV.water * HEIGHT_SCALE;
   dev.queue.writeBuffer(gBuf, 0, gArr);
 
   const nInst = buildCreatureInstances(player.camX, player.camZ, t);
   const nPlant = buildPlantInstances(player.camX, player.camZ, t);
+  folUpdate(player.camX, player.camY, player.camZ, player.yaw);
 
   const enc = dev.createCommandEncoder();
   const pass = enc.beginRenderPass({
@@ -8178,6 +9576,7 @@ function renderFrame(t) {
   pass.setPipeline(terrainPipe); pass.setBindGroup(0, bindG.terrain);
   pass.setVertexBuffer(0, terrVB); pass.setIndexBuffer(terrIB, 'uint32');
   pass.drawIndexed(terrCount);
+  folDraw(pass);
 
   pass.setPipeline(instPipe); pass.setBindGroup(0, bindG.inst);
   pass.setVertexBuffer(0, sphVB); pass.setIndexBuffer(sphIB, 'uint16');
@@ -8258,7 +9657,7 @@ function updateHUD() {
       const hits = Math.ceil(Math.max(0, tgt.energy) / Math.max(0.01, dmg));
       act.innerHTML = '<b>' + diet + '</b> mass ' + d.mass.toFixed(1) +
         ' &middot; def ' + d.defense.toFixed(0) + ' &middot; ~' + hits + ' hits to kill' +
-        '<div class="keys"><span class="hit">F</span> ' + MOVE_DEF[bestMove(mp, tallyParts(mp))].label + ' ' +
+        '<div class="keys"><span class="hit">F</span> ' + MOVE_DEF[playerMove(mp)].label + ' <span>X</span> switch ' +
         (why ? '<span style="opacity:.55">M mate: ' + why + '</span>'
              : '<span class="ok">M</span> ' + (mateDistance(me, tgt) > 9 ? 'mate (hybrid)' : 'mate')) +
         ' <span>E</span> eat</div>';
@@ -8295,7 +9694,7 @@ function panelOpts() {
     startPlants: clamp(num('startPlants', 500) | 0, 0, 40000),
     mutationRate: num('mut', 0.6), plantRate: num('plant', 40),
     timeScale: num('tscale', 0.12), plantEnergy: num('pe', 30),
-    dayLen: num('dayl', 6), yearLen: num('yearl', 70),
+    dayLen: num('dayl', 18), yearLen: num('yearl', 70),
     carrionLife: num('clife', 12), carrionYield: num('cy', 1),
     founderDiversity: num('fd', 0.4), foodPatchiness: num('fp', 0.7), flags: panelFlags(),
     terrainRelief: num('trelief', 1), waterDepthMul: num('twater', 1),
@@ -8330,8 +9729,9 @@ async function rebuildWorld() {
   if (terrIB) { terrIB.destroy(); terrIB = null; }
   if (waterVB) { waterVB.destroy(); waterVB = null; }
   terrH = null;
-  world = C.makeWorld(Object.assign({ w: WORLD_W, h: WORLD_H, tileSize: TILE, seed }, panelOpts()));
+  world = C.makeWorld(Object.assign({ w: WORLD_W, h: WORLD_H, tileSize: TILE, seed, featureScale: 2, heightScale: HEIGHT_SCALE, maxSlope: 1, baseRelief: 0.35, plantArea: 0.5 }, panelOpts()));
   terrain = world.terrain;
+  buildCanopyMap(); FOL.key = '';
   buildTerrain(); buildWater(); buildMinimap();
   await warmUp(panelWarmup());
   const dl = world.params.dayLen || 6;
@@ -8350,6 +9750,7 @@ async function rebuildWorld() {
   }
   updateHUD(); updateStats();
   lastT = 0; running = true; requestAnimationFrame(loop);
+  objReset();
   toast('New world, seed ' + seed + '. You are a newborn again.', 3600);
 }
 
@@ -8486,6 +9887,8 @@ function bindInput() {
       else if (canvas.requestPointerLock) { try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (_) {} }
     }
     if (k === 'f') tryAttack();
+    if (k === 'x') cycleMove();
+    if (k === 'n') sndToggle();
     if (k === 'm') tryMate();
     if (k === 'e') tryEat();
     if (k === ' ' && !player.spectator) tryJump();
@@ -8589,7 +9992,7 @@ function bindInput() {
 // above the podium. Rendered with the game's own pipelines; the simulation
 // is paused while it is open.
 // =====================================================================
-const ED_POD_R = 3.35;          // podium top radius (editor units: 1 = one body radius)
+const ED_POD_R = 6.5;           // radius of the clearing under the creature (editor units: 1 = one body radius)
 const ED_FOV = 0.78;
 let edEnv = null;               // { vb, ib, count, skyVB, skyIB, skyCount }
 function edNoise(a, s) {        // cheap smooth periodic noise on an angle
@@ -8599,92 +10002,57 @@ function buildEditorEnv() {
   const V = [], I = [];
   const vert = (x, y, z, nx, ny, nz, c) => { V.push(x, y, z, nx, ny, nz, c[0], c[1], c[2]); return V.length / 9 - 1; };
   const hsh = (i, j) => { let n = ((i * 73856093) ^ (j * 19349663)) >>> 0; n = (n ^ (n >>> 13)) >>> 0; return (n % 1000) / 1000; };
-  // ---- ground: polar grid, flat meadow rising to a ring of hills ---------
-  const GY = -1.12;
-  const rings = [3.55, 3.9, 4.6, 5.6, 7, 8.6, 10.5, 13, 16, 20, 25, 31, 38, 46, 55, 66, 78, 92, 108, 126, 150];
-  const SEG = 120;
+  // ---- the habitat: a clearing on a mossy forest floor, the ground rolling up
+  // into banks and roots toward the trees. The creature floats just above it.
+  const GY = 0;
+  const rings = [ED_POD_R, 7, 8, 9.5, 11, 13, 15.5, 18.5, 22, 26, 31, 37, 44, 52, 62, 74, 90, 110, 135, 165, 200];
+  const SEG = 128;
   const hAt = (r, a) => {
-    const hill = Math.max(0, Math.min(1, (r - 30) / 40));
-    const h = hill * hill * (10 + 16 * (0.5 + 0.5 * edNoise(a, 1.3))) + (r > 90 ? (r - 90) * 0.12 * (0.6 + 0.4 * edNoise(a, 4.1)) : 0);
-    const bump = r > 5 ? 0.12 * Math.sin(r * 0.9 + a * 5) * Math.min(1, (r - 5) / 6) : 0;
+    const bank = Math.max(0, Math.min(1, (r - 14) / 30));
+    const h = bank * bank * (3 + 7 * (0.5 + 0.5 * edNoise(a, 1.7))) + (r > 70 ? (r - 70) * 0.18 * (0.6 + 0.4 * edNoise(a, 3.3)) : 0);
+    const bump = 0.12 * Math.sin(r * 0.7 + a * 5) * Math.min(1, Math.max(0, r - ED_POD_R) / 4);
     return GY + h + bump;
   };
-  const colAt = (r, a, i, j) => {
-    const jit = 0.92 + hsh(i, j) * 0.16;
-    let c;
-    if (r < 6.4) { const k = (r - 3.55) / 2.85; c = colMix([0.55, 0.45, 0.32], [0.46, 0.56, 0.28], Math.max(0, k * k)); }
-    else if (r < 34) c = colMix([0.42, 0.62, 0.26], [0.36, 0.56, 0.26], 0.5 + 0.5 * Math.sin(a * 9 + r * 0.4));
-    else c = colMix([0.40, 0.58, 0.30], [0.46, 0.55, 0.52], Math.min(1, (r - 34) / 70));
-    return [c[0] * jit, c[1] * jit, c[2] * jit];
+  // moss, leaf litter and a trodden path; darker toward the trees
+  const floorCol = (x, z, r, i, j) => {
+    const n1 = edNoise(Math.atan2(z, x) * 3 + r * 0.21, 2.1) * 0.5 + 0.5;
+    const n2 = hsh(i, j);
+    const path = Math.max(0, 1 - Math.abs(z + Math.sin(x * 0.12) * 3) / 2.6) * (x > 0 ? 1 : 0.3);
+    let c = colMix([0.20, 0.33, 0.12], [0.30, 0.25, 0.15], n1 * 0.7);
+    c = colMix(c, [0.34, 0.27, 0.19], path * 0.7);
+    c = colMix(c, [0.36, 0.44, 0.16], Math.max(0, n2 - 0.8) * 2);
+    const dark = 1 - Math.min(0.45, Math.max(0, r - 10) / 60);
+    const jit = 0.9 + n2 * 0.18;
+    return [c[0] * jit * dark, c[1] * jit * dark, c[2] * jit * dark];
   };
   const base0 = V.length / 9;
   for (let i = 0; i < rings.length; i++) {
     for (let j = 0; j <= SEG; j++) {
       const a = j / SEG * Math.PI * 2, r = rings[i];
       const y = hAt(r, a);
-      // normal by finite difference
       const e = 0.5;
       const yr = hAt(r + e, a), ya = hAt(r, a + e / r);
       const tr = [Math.cos(a) * e, yr - y, Math.sin(a) * e];
       const ta = [-Math.sin(a) * e, ya - y, Math.cos(a) * e];
       let n = v3.norm(v3.cross(ta, tr));
       if (n[1] < 0) n = v3.mul(n, -1);
-      vert(Math.cos(a) * r, y, Math.sin(a) * r, n[0], n[1], n[2], colAt(r, a, i, j));
+      vert(Math.cos(a) * r, y, Math.sin(a) * r, n[0], n[1], n[2], floorCol(Math.cos(a) * r, Math.sin(a) * r, r, i, j));
     }
   }
   for (let i = 0; i < rings.length - 1; i++) for (let j = 0; j < SEG; j++) {
     const a = base0 + i * (SEG + 1) + j, b = a + SEG + 1;
     I.push(a, b, a + 1, a + 1, b, b + 1);
   }
-  // ---- podium: lathe profile, carved stone with a painted top ---------------
-  const PS = 96;
-  const prof = [
-    // r, y, colour kind
-    [ED_POD_R, 0.0, 'top'],
-    [ED_POD_R + 0.08, -0.06, 'lip'], [ED_POD_R + 0.12, -0.2, 'lip'], [ED_POD_R + 0.02, -0.28, 'lip'],
-    [ED_POD_R - 0.1, -0.32, 'col'], [ED_POD_R - 0.1, -0.86, 'col'], [ED_POD_R + 0.08, -0.93, 'lip'],
-    [ED_POD_R + 0.2, -1.02, 'lip'], [ED_POD_R + 0.24, -1.14, 'lip'],
-  ];
-  const podCol = (kind, a, k) => {
-    const blk = Math.floor(a / (Math.PI * 2) * 16);
-    const seam = Math.abs(((a / (Math.PI * 2) * 16) % 1) - 0.5) > 0.47;
-    const j = 0.93 + hsh(blk, k) * 0.12;
-    switch (kind) {
-      case 'top': { const w = 0.97 + 0.03 * Math.sin(a * 5 + k); return [0.84 * w, 0.76 * w, 0.60 * w]; }
-      case 'ring': { const dash = Math.sin(a * 22) > -0.1; return dash ? [0.98, 0.93, 0.70] : [0.84, 0.76, 0.60]; }
-      case 'lip': return [0.70 * j, 0.68 * j, 0.62 * j];
-      default: return seam ? [0.40, 0.38, 0.35] : [0.60 * j, 0.58 * j, 0.53 * j];
-    }
-  };
-  const pBase = V.length / 9;
-  for (let k = 0; k < prof.length; k++) {
-    const [r, y, kind] = prof[k];
-    // profile normal from neighbours
-    const pa = prof[Math.max(0, k - 1)], pb = prof[Math.min(prof.length - 1, k + 1)];
-    let dr = pb[0] - pa[0], dy = pb[1] - pa[1];
-    let nr = dy, ny = -dr; const l = Math.hypot(nr, ny) || 1; nr /= l; ny /= l;
-    if (kind === 'top' || kind === 'ring') { nr = 0; ny = 1; }
-    for (let j = 0; j <= PS; j++) {
-      const a = j / PS * Math.PI * 2;
-      vert(Math.cos(a) * r, y, Math.sin(a) * r, Math.cos(a) * nr, ny, Math.sin(a) * nr, podCol(kind, a, k));
-    }
-  }
-  for (let k = 0; k < prof.length - 1; k++) for (let j = 0; j < PS; j++) {
-    const a = pBase + k * (PS + 1) + j, b = a + PS + 1;
-    I.push(a, b, a + 1, a + 1, b, b + 1);
-  }
-  // ---- podium top: its own grid so the creature's soft shadow can be baked
-  // into its vertex colours every frame
+  // ---- the clearing under the creature: its own grid so the soft shadow can
+  // be baked into its colours every frame
   const TR = [];
-  for (let i = 0; i <= 28; i++) TR.push(ED_POD_R * Math.pow(i / 28, 0.8));
-  const TS = 96, topPos = [], topCol = [], TI = [];
+  for (let i = 0; i <= 30; i++) TR.push(ED_POD_R * Math.pow(i / 30, 0.8));
+  const TS = 128, topPos = [], topCol = [], TI = [];
   for (let i = 0; i < TR.length; i++) for (let j = 0; j <= TS; j++) {
     const a = j / TS * Math.PI * 2, r = TR[i];
-    topPos.push(Math.cos(a) * r, 0.001, Math.sin(a) * r);
-    const ring = r > 2.36 && r < 2.66 && Math.sin(a * 22) > -0.1;
-    const inner = r > 1.08 && r < 1.16 && Math.sin(a * 12) > 0;
-    const w = 0.97 + 0.03 * Math.sin(a * 5 + i);
-    topCol.push(...(ring ? [0.98, 0.93, 0.70] : inner ? [0.92, 0.86, 0.66] : [0.84 * w, 0.76 * w, 0.60 * w]));
+    const x = Math.cos(a) * r, z = Math.sin(a) * r;
+    topPos.push(x, GY + 0.001, z);
+    topCol.push(...floorCol(x, z, r, i + 900, j));
   }
   for (let i = 0; i < TR.length - 1; i++) for (let j = 0; j < TS; j++) {
     const a = i * (TS + 1) + j, b = a + TS + 1;
@@ -8694,25 +10062,21 @@ function buildEditorEnv() {
   const topVB = dev.createBuffer({ size: topN * 36, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
   const topIB = dev.createBuffer({ size: TI.length * 4, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST });
   dev.queue.writeBuffer(topIB, 0, new Uint32Array(TI));
-  // decorative carved studs around the rim
-  const studs = [];
-  for (let j = 0; j < 16; j++) studs.push(j / 16 * Math.PI * 2 + Math.PI / 16);
-  edEnv = { studs };
+  edEnv = {};
   const vb = dev.createBuffer({ size: V.length * 4, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
   dev.queue.writeBuffer(vb, 0, new Float32Array(V));
   const ib = dev.createBuffer({ size: I.length * 4, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST });
   dev.queue.writeBuffer(ib, 0, new Uint32Array(I));
   edEnv.vb = vb; edEnv.ib = ib; edEnv.count = I.length;
   edEnv.top = { vb: topVB, ib: topIB, count: TI.length, pos: new Float32Array(topPos), col: new Float32Array(topCol), n: topN, buf: new Float32Array(topN * 9) };
-  // ---- sky dome ---------------------------------------------------------------
+  // ---- misty sky seen through the canopy --------------------------------------
   const SV = [], SI = [];
   const RS = 600, ST = 16, SS = 48;
   for (let i = 0; i <= ST; i++) {
     const el = -0.15 + (i / ST) * (Math.PI / 2 + 0.15);
     const y = Math.sin(el), rr = Math.cos(el);
     const u = Math.max(0, y);
-    const c = u < 0.18 ? colMix([0.95, 0.88, 0.86], [0.80, 0.84, 0.92], u / 0.18)
-                       : colMix([0.80, 0.84, 0.92], [0.44, 0.62, 0.88], Math.min(1, (u - 0.18) / 0.8));
+    const c = colMix([0.50, 0.58, 0.50], [0.68, 0.76, 0.66], Math.min(1, u * 1.6));
     for (let j = 0; j <= SS; j++) {
       const a = j / SS * Math.PI * 2;
       SV.push(Math.cos(a) * rr * RS, y * RS, Math.sin(a) * rr * RS, 0, 1, 0, c[0], c[1], c[2]);
@@ -8727,83 +10091,75 @@ function buildEditorEnv() {
   edEnv.skyIB = dev.createBuffer({ size: SI.length * 4, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST });
   dev.queue.writeBuffer(edEnv.skyIB, 0, new Uint32Array(SI));
   edEnv.skyCount = SI.length;
-  // ---- scenery placements (instanced every frame) ------------------------------
-  const rnd = C.makeRNG(9031);
-  const trees = [];
-  for (let i = 0; i < 22; i++) {
-    const a = rnd() * Math.PI * 2, r = 15 + rnd() * 30;
-    trees.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, h: 4 + rnd() * 4.5, w: 1.6 + rnd() * 1.4, s: rnd() * 10, kind: rnd() < 0.3 ? 1 : 0 });
-  }
-  const bushes = [];
-  for (let i = 0; i < 40; i++) { const a = rnd() * Math.PI * 2, r = 6.5 + rnd() * 20; bushes.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, s: 0.4 + rnd() * 0.7, c: rnd() }); }
-  const rocks = [];
-  for (let i = 0; i < 14; i++) { const a = rnd() * Math.PI * 2, r = 4.2 + rnd() * 12; rocks.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, s: 0.2 + rnd() * 0.45, a: rnd() * 6 }); }
-  const tufts = [];
-  for (let i = 0; i < 220; i++) { const a = rnd() * Math.PI * 2, r = 4.2 + rnd() * 24; tufts.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, s: 0.06 + rnd() * 0.07, c: rnd() }); }
-  Object.assign(edEnv, { trees, bushes, rocks, tufts, GY, hAt });
+  Object.assign(edEnv, { GY, hAt });
+  buildHabitatFoliage();
 }
-// Scenery instances: trees with puffy canopies, bushes, rocks, grass tufts,
-// a wooden fence arc behind the podium, and the carved rim studs.
-function editorScenery(t) {
-  const E = edEnv, GY = E.GY;
-  const bark = [0.45, 0.33, 0.24];
-  for (const tr of E.trees) {
-    const y0 = E.hAt(Math.hypot(tr.x, tr.z), Math.atan2(tr.z, tr.x));
-    const sway = Math.sin(t * 0.6 + tr.s) * 0.05;
-    const tw = tr.w * 0.17;
-    pushT(tr.x, y0 - 0.2, tr.z, tr.x + sway * tr.h * 0.6, y0 + tr.h * 0.62, tr.z, tw * 1.3, bark, tw * 0.7);
-    pushSX(tr.x, y0 + 0.05, tr.z, 0, 1, 0, 0, 0, 0, tw * 1.7, tw * 0.9, tw * 1.7, colMul(bark, 0.9));
-    const cy = y0 + tr.h * 0.62;
-    const greens = tr.kind ? [[0.22, 0.42, 0.26], [0.26, 0.48, 0.30]] : [[0.30, 0.55, 0.26], [0.36, 0.62, 0.30], [0.26, 0.50, 0.24]];
-    const n = tr.kind ? 4 : 7;
-    for (let k = 0; k < n; k++) {
-      const a = k * 2.4 + tr.s, rr = tr.w * (k === 0 ? 0 : 0.55);
-      const r = tr.w * (k === 0 ? 0.85 : 0.6);
-      const c = greens[k % greens.length];
-      if (tr.kind) pushCX(tr.x + sway * tr.h, cy - tr.h * 0.1 + k * tr.h * 0.13, tr.z, 0, 1, 0, 0, 0, 0, tr.w * (0.9 - k * 0.17), tr.h * 0.35, c);
-      else pushSX(tr.x + Math.cos(a) * rr + sway * tr.h, cy + (k === 0 ? tr.h * 0.12 : Math.sin(k * 1.7) * r * 0.4), tr.z + Math.sin(a) * rr, 0, 1, 0, 0, 0, 0, r, r * 0.85, r, c);
-    }
+// Trees, ferns, big-leaved understory, grass and fallen logs around the clearing,
+// using the same meshes as the world (scaled: one editor unit is one body radius,
+// about five world units).
+function buildHabitatFoliage() {
+  if (typeof folInit === 'function') folInit();
+  if (!FOL.ready) return;
+  const rnd = C.makeRNG(4217);
+  const W = 0.2;                                   // world units -> editor units
+  const buckets = new Map();
+  const put = (mesh, x, z, rot, s, tint) => {
+    const y = edEnv.hAt(Math.hypot(x, z), Math.atan2(z, x)) - 0.15;
+    let b = buckets.get(mesh); if (!b) { b = []; buckets.set(mesh, b); }
+    b.push(x, y, z, rot, s, tint[0], tint[1], tint[2]);
+  };
+  const tint = () => [0.85 + rnd() * 0.25, 0.88 + rnd() * 0.2, 0.85 + rnd() * 0.2];
+  // a ring of trunks: giants and canopy trees behind, palms and ferns nearer
+  for (let i = 0; i < 46; i++) {
+    const a = rnd() * Math.PI * 2, r = 14 + Math.pow(rnd(), 0.7) * 70;
+    const kind = r > 40 && rnd() < 0.2 ? 0 : rnd() < 0.55 ? 1 : rnd() < 0.5 ? 2 : rnd() < 0.5 ? 3 : 8;
+    put(FOL.tree[kind][(rnd() * 3) | 0][r > 55 ? 1 : 0], Math.cos(a) * r, Math.sin(a) * r, rnd() * 6.28, W * (0.8 + rnd() * 0.5), tint());
   }
-  for (const b of E.bushes) {
-    const y0 = E.hAt(Math.hypot(b.x, b.z), Math.atan2(b.z, b.x));
-    const c = colMix([0.30, 0.52, 0.24], [0.40, 0.58, 0.28], b.c);
-    for (let k = 0; k < 3; k++) pushSX(b.x + (k - 1) * b.s * 0.6, y0 + b.s * 0.45, b.z + Math.sin(k * 2) * b.s * 0.3, 0, 1, 0, 0, 0, 0, b.s * 0.7, b.s * 0.55, b.s * 0.7, colMul(c, 0.9 + k * 0.08));
+  // understory: dense toward the edges, a few plants reaching into the clearing
+  for (let i = 0; i < 520; i++) {
+    const a = rnd() * Math.PI * 2, r = ED_POD_R + 0.4 + Math.pow(rnd(), 0.8) * 40;
+    const k = rnd();
+    const kind = k < 0.36 ? 2 : k < 0.56 ? 5 : k < 0.8 ? 0 : k < 0.9 ? 4 : 3;
+    const s = (kind === 0 ? 0.28 : kind === 3 ? 0.22 : 0.3) * (0.7 + rnd() * 0.7) * (r < 9 ? 0.75 : 1);
+    put(FOL.cover[kind][(rnd() * 2) | 0], Math.cos(a) * r, Math.sin(a) * r, rnd() * 6.28, s, [1, 1, 1]);
   }
-  for (const r of E.rocks) {
-    const y0 = E.hAt(Math.hypot(r.x, r.z), Math.atan2(r.z, r.x));
-    const rc = colMul([0.58, 0.56, 0.52], 0.85 + (r.a % 1) * 0.2);
-    for (let q = 0; q < 3; q++) {
-      const ox = Math.cos(r.a + q * 2.1) * r.s * 0.45, oz = Math.sin(r.a + q * 2.1) * r.s * 0.45, k = 1 - q * 0.22;
-      pushSX(r.x + ox, y0 + r.s * 0.2 * k, r.z + oz, 0.1, 1, 0.05, 0, 0, 0, r.s * 0.72 * k, r.s * 0.52 * k, r.s * 0.66 * k, colMul(rc, 1 - q * 0.06));
-    }
+  // pack into a static instance buffer
+  let n = 0; for (const arr of buckets.values()) n += arr.length / FOL_IF;
+  const data = new Float32Array(Math.max(1, n) * FOL_IF);
+  const batches = []; let off = 0;
+  for (const [mesh, arr] of buckets) { data.set(arr, off * FOL_IF); batches.push({ mesh, first: off, count: arr.length / FOL_IF }); off += arr.length / FOL_IF; }
+  const buf = dev.createBuffer({ size: data.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+  dev.queue.writeBuffer(buf, 0, data);
+  edEnv.fol = { buf, batches };
+  // fallen logs: mossy bark tubes lying on the floor
+  const logs = folMB();
+  for (let i = 0; i < 5; i++) {
+    const a = rnd() * Math.PI * 2, r = 9 + rnd() * 14, L = 6 + rnd() * 7, dir = rnd() * Math.PI;
+    const cx = Math.cos(a) * r, cz = Math.sin(a) * r, dx = Math.cos(dir), dz = Math.sin(dir);
+    const y0 = edEnv.hAt(r, a) + 0.3;
+    const pts = [], rad = [];
+    for (let k = 0; k <= 5; k++) { const u = k / 5 - 0.5; pts.push([cx + dx * L * u, y0 + Math.sin(k) * 0.05, cz + dz * L * u]); rad.push(0.55 - Math.abs(u) * 0.2); }
+    folTube(logs, pts, rad, 8, colMix([0.30, 0.24, 0.17], [0.26, 0.36, 0.14], rnd() * 0.6), 1, 0, null);
   }
-  for (const tf of E.tufts) {
-    const y0 = E.hAt(Math.hypot(tf.x, tf.z), Math.atan2(tf.z, tf.x));
-    const c = colMix([0.34, 0.56, 0.22], [0.52, 0.66, 0.30], tf.c);
-    for (let q = 0; q < 3; q++) pushCX(tf.x + (q - 1) * tf.s * 0.8, y0 - 0.02, tf.z + Math.sin(q * 2.1) * tf.s * 0.6, Math.sin(tf.c * 9 + q) * 0.35, 1, Math.cos(tf.c * 9 + q) * 0.35, 0, 0, 0, tf.s, tf.s * (3.4 + q * 0.6), colMul(c, 0.9 + q * 0.07));
-  }
-  // fence arc
-  const wood = [0.52, 0.38, 0.26];
-  const FR = 11.5;
-  let prev = null;
-  for (let i = 0; i <= 14; i++) {
-    const a = Math.PI * 0.55 + i / 14 * Math.PI * 0.9;
-    const x = Math.cos(a) * FR, z = Math.sin(a) * FR, y0 = E.hAt(FR, a);
-    pushSX(x, y0 + 0.55, z, 0, 1, 0, 0, 0, 0, 0.12, 0.62, 0.12, wood);
-    if (prev) {
-      for (const hy of [0.45, 0.85]) {
-        const m = [(x + prev[0]) / 2, y0 + hy, (z + prev[1]) / 2], d = [x - prev[0], 0, z - prev[1]], L = Math.hypot(d[0], d[2]);
-        pushSX(m[0], m[1], m[2], d[0] / L, 0, d[2] / L, 0, 1, 0, 0.06, L * 0.52, 0.09, colMul(wood, 0.92));
-      }
-    }
-    prev = [x, z];
-  }
-  // carved studs on the podium rim
-  for (const a of E.studs) {
-    const x = Math.cos(a) * (ED_POD_R - 0.05), z = Math.sin(a) * (ED_POD_R - 0.05);
-    pushSX(x, -0.55, z, Math.cos(a), 0, Math.sin(a), 0, 1, 0, 0.22, 0.1, 0.3, [0.74, 0.70, 0.62]);
-  }
+  edEnv.logs = folUpload(logs);
+  const one = new Float32Array([0, 0, 0, 0, 1, 1, 1, 1]);
+  edEnv.logInst = dev.createBuffer({ size: one.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+  dev.queue.writeBuffer(edEnv.logInst, 0, one);
 }
+function edDrawHabitat(pass) {
+  if (!edEnv || !edEnv.fol || !folPipe) return;
+  pass.setPipeline(folPipe); pass.setBindGroup(0, folBind);
+  pass.setVertexBuffer(1, edEnv.fol.buf);
+  for (const b of edEnv.fol.batches) {
+    pass.setVertexBuffer(0, b.mesh.vb); pass.setIndexBuffer(b.mesh.ib, 'uint32');
+    pass.drawIndexed(b.mesh.count, b.count, 0, 0, b.first);
+  }
+  pass.setVertexBuffer(1, edEnv.logInst);
+  pass.setVertexBuffer(0, edEnv.logs.vb); pass.setIndexBuffer(edEnv.logs.ib, 'uint32');
+  pass.drawIndexed(edEnv.logs.count, 1);
+}
+// (the old podium scenery is gone; the habitat is static and drawn by edDrawHabitat)
+function editorScenery(t) { }
 // Soft contact shadow: the union of every skeleton ball and foot, projected
 // straight down, blurred, and fading as the creature bobs up.
 function bakePodiumShadow(des, pl) {
@@ -8886,9 +10242,9 @@ function edSetGlobals(eye, target, aspect, fov, fogDen, t) {
   m4look(eye[0], eye[1], eye[2], target[0], target[1], target[2], viewM);
   m4mul(projM, viewM, vpM);
   gArr.set(vpM, 0);
-  gArr[16] = eye[0]; gArr[17] = eye[1]; gArr[18] = eye[2]; gArr[19] = 0;
+  gArr[16] = eye[0]; gArr[17] = eye[1]; gArr[18] = eye[2]; gArr[19] = 1;   // w=1: editor, no near-camera foliage fade
   gArr[20] = 0.42; gArr[21] = 0.82; gArr[22] = 0.38; gArr[23] = 0;
-  gArr[24] = 0.90; gArr[25] = 0.87; gArr[26] = 0.88; gArr[27] = 1;
+  gArr[24] = 0.52; gArr[25] = 0.60; gArr[26] = 0.52; gArr[27] = 1;
   gArr[28] = t; gArr[29] = fogDen; gArr[30] = 1; gArr[31] = -1000;
   dev.queue.writeBuffer(gBuf, 0, gArr);
 }
@@ -8907,7 +10263,7 @@ function edPlacement(des, t) {
 function edDesignX(des, t, hl, extra) {
   const pl = edPlacement(des, t);
   const X = Object.assign({
-    R: 1, t, seed: 0.5, sync: true, quality: 1, yaw: 0, meshFar: true,
+    R: 1, t, seed: 0.5, sync: true, quality: 2, yaw: 0, meshFar: true,
     toW: (l) => [l[0], l[1] + pl.cy, l[2]],
     toL: (w) => [w[0], w[1] - pl.cy, w[2]],
     dirW: (v) => v,
@@ -8916,6 +10272,24 @@ function edDesignX(des, t, hl, extra) {
     blink: (pi) => (((t * 0.23 + pi * 0.137) % 1) < 0.03 ? 1 : 0),
     hl,
   }, extra || {});
+  // attack preview on the podium
+  const A = ED.anim && !extra ? ED.anim : null;
+  if (A) {
+    const k = (performance.now() - A.t0) / (A.dur * 1000);
+    if (k >= 1) ED.anim = null;
+    else {
+      const an = { kind: A.kind, k, s: strikeCurve(k) };
+      const lunge = A.kind === 'sweep' ? 0.05 * an.s : 0.28 * an.s;
+      const lift = A.kind === 'slam' ? Math.max(0, -an.s) * 0.9 - Math.max(0, an.s) * 0.3 : 0;
+      X.toW = (l) => [l[0] + lunge, l[1] + pl.cy + lift, l[2]];
+      X.toL = (w) => [w[0] - lunge, w[1] - pl.cy - lift, w[2]];
+      const rig = attackRig(pl.G, an, (A.seq & 1) ? 1 : -1, t, 0, X.toW);
+      X.head = rig.head;
+      if (rig.chomp != null) X.chomp = rig.chomp;
+      if (A.kind === 'sweep') { X.tailSwing = an.s * 1.5 * rig.tailMul; X.tailAmp = 0.2; }
+      X.limbPose = (o, li, root, knee, foot) => rig.limb(o, root, foot);
+    }
+  }
   return { X, pl };
 }
 
@@ -8985,6 +10359,7 @@ function grantCountOf(d) {
   const m = {};
   for (const p of d.parts || []) m[p.id] = (m[p.id] || 0) + 1;
   for (const l of d.limbs || []) { m[l.id] = (m[l.id] || 0) + 1; if (l.tip) m[l.tip.id] = (m[l.tip.id] || 0) + 1; }
+  m[SKIN_ITEMS[skinOf(d)]] = 1;
   return m;
 }
 const planBaseCost = (() => { const cache = {}; return (p) => (cache[p] != null ? cache[p] : (cache[p] = C.designCost(C.defaultDesign(p)))); })();
@@ -8993,7 +10368,7 @@ const KILL_SPACE = 3, FREE_SPACE = 8;
 // floor is whatever it cost when the editor opened (evolved or inherited
 // bodies can exceed the plan formula).
 function edCapacity(des) {
-  const base = planBaseCost(des.plan | 0) + FREE_SPACE + PROG.kills * KILL_SPACE + (SANDBOX ? 200 : 0);
+  const base = planBaseCost(des.plan | 0) + FREE_SPACE + PROG.kills * KILL_SPACE + (PROG.bonus || 0) + (SANDBOX ? 200 : 0);
   return (ED.open && ED.capFloor) ? Math.max(base, ED.capFloor) : base;
 }
 function stripDesign(d) { return C.cloneDesign(d); }
@@ -9051,13 +10426,15 @@ function mirrorBall(sk, b, p) {
   if (!k || Math.abs(k.z) < 1e-6) return b;
   return C.nearestBall(sk, p[0], p[1], p[2], k.g === 'tail');
 }
-function defaultLimbPose(sk, stand, hit) {
+function defaultLimbPose(sk, stand, hit, id) {
   const n = hit.n, root = hit.p;
   const under = n[1] < -0.25 && root[1] < 0.2;
   if (under) {
     // a leg: straight down to the ground with a slight forward knee
     const fy = -stand - root[1];
     const fz = n[2] * 0.25;
+    // a springing leg folds into a Z: the knee sits well behind the hip, like a hare's
+    if (id === 'l_spring') return { k: [-0.42, fy * 0.42, fz * 0.6 + n[2] * 0.1], f: [0.1, fy, fz] };
     return { k: [0.14, fy * 0.5, fz * 0.6 + n[2] * 0.08], f: [0.04, fy, fz] };
   }
   // an arm: out along the normal, bending down and forward
@@ -9073,7 +10450,7 @@ function edAddLimb(id, hit) {
   if (!edCanUse(id, pair ? 2 : 1)) return false;
   if (need > edSpaceLeft()) { edDenied('Not enough genome space for ' + (pair ? 'a pair of limbs' : 'a limb') + '.'); return false; }
   edPushUndo();
-  const pose = defaultLimbPose(sk, G.cls.stand, hit);
+  const pose = defaultLimbPose(sk, G.cls.stand, hit, id);
   const lb = { id, b: 0, o: [0, 0, 0], n: hit.n.slice(), k: pose.k, f: pose.f, th: 1, c: null, tip: null, m: 0 };
   C.setAnchor(sk, lb, hit.p, hit.n, hit.b);
   des.limbs.push(lb);
@@ -9189,6 +10566,7 @@ function designItems(d) {
   const s = new Set();
   for (const p of d.parts || []) s.add(p.id);
   for (const l of d.limbs || []) { s.add(l.id); if (l.tip) s.add(l.tip.id); }
+  const sk = skinOf(d); if (sk > 0) s.add(SKIN_ITEMS[sk]);
   return [...s];
 }
 
@@ -9201,7 +10579,7 @@ function edCamera(t) {
   const cp = Math.cos(ED.cam.pitch);
   const eye = [target[0] + Math.cos(ED.cam.yaw) * cp * dist, target[1] + Math.sin(ED.cam.pitch) * dist,
                target[2] + Math.sin(ED.cam.yaw) * cp * dist];
-  eye[1] = Math.max(eye[1], -0.9);
+  eye[1] = Math.max(eye[1], 0.5);
   return { eye, target, pl };
 }
 function edRay(clientX, clientY) {
@@ -9326,7 +10704,7 @@ function renderEditor(tSec) {
   const cam = edCamera(tSec);
   ED.lastCam = cam;
   const aspect = canvas.width / canvas.height;
-  edSetGlobals(cam.eye, cam.target, aspect, ED_FOV, 1 / 150, tSec);
+  edSetGlobals(cam.eye, cam.target, aspect, ED_FOV, 1 / 85, tSec);
   // lens shift so the creature centres in the part of the screen the palette leaves free
   projM[8] = ED.shift; m4mul(projM, viewM, vpM); gArr.set(vpM, 0); dev.queue.writeBuffer(gBuf, 0, gArr);
   ED.vp = vpM.slice();
@@ -9381,7 +10759,7 @@ function renderEditor(tSec) {
   const enc = dev.createCommandEncoder();
   const pass = enc.beginRenderPass({
     colorAttachments: [{ view: msaaTex.createView(), resolveTarget: ctx.getCurrentTexture().createView(),
-      clearValue: { r: 0.9, g: 0.87, b: 0.88, a: 1 }, loadOp: 'clear', storeOp: 'discard' }],
+      clearValue: { r: 0.52, g: 0.60, b: 0.52, a: 1 }, loadOp: 'clear', storeOp: 'discard' }],
     depthStencilAttachment: { view: depthTex.createView(), depthClearValue: 1.0, depthLoadOp: 'clear', depthStoreOp: 'store' },
   });
   pass.setPipeline(unlitPipe); pass.setBindGroup(0, bindG.unlit);
@@ -9389,6 +10767,7 @@ function renderEditor(tSec) {
   pass.setPipeline(terrainPipe); pass.setBindGroup(0, bindG.terrain);
   pass.setVertexBuffer(0, edEnv.vb); pass.setIndexBuffer(edEnv.ib, 'uint32'); pass.drawIndexed(edEnv.count);
   pass.setVertexBuffer(0, edEnv.top.vb); pass.setIndexBuffer(edEnv.top.ib, 'uint32'); pass.drawIndexed(edEnv.top.count);
+  edDrawHabitat(pass);
   edFlushAndDraw(pass);
   if (edHandleN) {
     // joint handles stay visible through the body
@@ -9423,7 +10802,17 @@ async function edMakeThumbs() {
     const j = jobs[i];
     edResetInstances();
     let view = [0.55, 0.32, 0.78];
-    if (j.plan != null) {
+    const skinJob = j.id && VIS[j.id] && VIS[j.id].cat === 'skin';
+    let thumbDes = null;
+    if (skinJob) {
+      // a round sample body wearing that covering
+      const d = C.defaultDesign(9); d.parts = d.parts.filter(p => p.id === 'm_grazer' ? false : true).filter(p => !(p.id === 's_knob'));
+      d.col = { base: [0.52, 0.6, 0.5], coat: [0.86, 0.84, 0.74], detail: [0.3, 0.36, 0.3], pat: 0, skin: VIS[j.id].skin };
+      thumbDes = d;
+      const { X } = edDesignX(d, 0.6, null, { toW: (l) => [l[0], l[1], l[2]], toL: (w) => [w[0], w[1], w[2]], blink: () => 0, sync: 'now', quality: 2 });
+      drawDesign(d, X);
+      view = [0.35, 0.35, 0.86];
+    } else if (j.plan != null) {
       const d = C.defaultDesign(j.plan);
       const { X } = edDesignX(d, 0.6, null, { toW: (l) => [l[0], l[1], l[2]], toL: (w) => [w[0], w[1], w[2]], blink: () => 0, sync: 'now', quality: 0 });
       drawDesign(d, X);
@@ -9435,7 +10824,7 @@ async function edMakeThumbs() {
       else if (v.kind === 'tip') view = [0.55, 0.45, 0.8];
     }
     // frame whatever was emitted
-    const bb = instBounds(j.plan != null ? designGeo(C.defaultDesign(j.plan)) : null);
+    const bb = instBounds(thumbDes ? designGeo(thumbDes) : j.plan != null ? designGeo(C.defaultDesign(j.plan)) : null);
     const c = [(bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, (bb[2] + bb[5]) / 2];
     const rad = Math.max(0.05, Math.hypot(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]) / 2);
     const vd = v3.norm(view);
@@ -9652,9 +11041,12 @@ function edRefreshUI() {
   U.title.textContent = cat ? cat.label : '';
   let html = '';
   if (ED.tab === 'body') {
+    // the body plan is chosen once per world; only a reset lets you pick another
+    const planLocked = ED.mode === 'game';
     html += '<div class="edgrid">';
-    for (let p = 0; p < C.PLANS.length; p++) html += `<div class="edtile plan${ED.des.plan === p ? ' cur' : ''}" data-plan="${p}">${tileHTML('plan' + p, true)}</div>`;
+    for (let p = 0; p < C.PLANS.length; p++) html += `<div class="edtile plan${ED.des.plan === p ? ' cur' : ''}${planLocked && ED.des.plan !== p ? ' locked' : ''}" data-plan="${p}">${tileHTML('plan' + p, !planLocked || ED.des.plan === p)}</div>`;
     html += '</div>';
+    if (planLocked) html += '<div class="edhint">your body shape is fixed for this world. reset the world to start as a different shape</div>';
     const bd = ED.des.body;
     const sl = (k, label) => `<label class="edsl"><span>${label}</span><input type="range" data-body="${k}" min="${C.BODY_RANGE[k][0]}" max="${C.BODY_RANGE[k][1]}" step="0.01" value="${bd[k]}"></label>`;
     html += '<div class="edsec">' + sl('len', 'body length') + sl('girth', 'body thickness') + sl('neck', 'neck length') + sl('tail', 'tail length') + '</div>';
@@ -9666,7 +11058,11 @@ function edRefreshUI() {
       `<input type="color" data-paintc="${k}" value="${hex(c[k])}"></div></div>`;
     html += row('base', 'body colour') + row('coat', 'underside colour') + row('detail', 'pattern colour');
     html += '<div class="edpl">pattern</div><div class="edgrid pats">' + PATTERNS.map((n, i) => `<div class="edtile pat${(c.pat | 0) === i ? ' cur' : ''}" data-pat="${i}"><canvas width="96" height="96" data-patc="${i}"></canvas></div>`).join('') + '</div>';
-    html += '<div class="edhint">to colour a single part, click it on the creature</div>';
+    html += '<div class="edpl">skin</div><div class="edgrid skins">' + SKIN_ITEMS.map((id, i) => {
+      const av = edSkinAllowed(i);
+      return `<div class="edtile item${skinOf(ED.des) === i ? ' cur' : ''}${av ? '' : ' locked'}" data-skin="${i}" title="${SKIN_NAMES[i]}">${tileHTML(id, av)}</div>`;
+    }).join('') + '</div>';
+    html += '<div class="edhint">to colour a single part, click it on the creature. new skins are earned by killing animals that wear them</div>';
   } else {
     const ids = Object.keys(VIS).filter(id => VIS[id].cat === ED.tab || (ED.tab === 'limbs' && VIS[id].cat === 'limbs'));
     html += '<div class="edgrid">';
@@ -9683,6 +11079,10 @@ function edRefreshUI() {
   edRenderInspector();
   edUpdateStats();
   edRenderSaved();
+}
+function edSkinAllowed(i) {
+  const id = SKIN_ITEMS[i];
+  return i === 0 || isUnlocked(id) || !!(ED.grantCount && ED.grantCount[id]) || (C.PLAN_SKIN && C.PLAN_SKIN[ED.des.plan | 0] === i);
 }
 function edDrawPatternIcons() {
   const c = ED.des.col;
@@ -9714,6 +11114,7 @@ function edBindGrid() {
     t.onclick = () => {
       const p = +t.getAttribute('data-plan');
       if (p === ED.des.plan) return;
+      if (ED.mode === 'game') { edFlash('Your body shape is fixed for this world. Reset the world to choose another.'); return; }
       edSetPlan(p);
     };
   }
@@ -9734,6 +11135,13 @@ function edBindGrid() {
     inp.addEventListener('focus', () => edPushUndo());
     inp.addEventListener('input', () => { const c = unhex(inp.value); if (c) { ED.des.col[inp.getAttribute('data-paintc')] = c; edTouch(); } });
     inp.addEventListener('change', () => edRefreshUI());
+  }
+  for (const t of U.grid.querySelectorAll('[data-skin]')) {
+    t.onclick = () => {
+      const i = +t.getAttribute('data-skin');
+      if (!edSkinAllowed(i)) { edFlash('Locked. Kill an animal with ' + SKIN_NAMES[i] + ' and choose it to unlock it.'); return; }
+      edPushUndo(); ED.des.col.skin = i; edTouch(); edRefreshUI();
+    };
   }
   for (const t of U.grid.querySelectorAll('[data-pat]')) {
     t.onclick = () => { edPushUndo(); ED.des.col.pat = +t.getAttribute('data-pat'); edTouch(); edRefreshUI(); };
@@ -9787,6 +11195,8 @@ function edRenderInspector() {
     if (lb.tip && VIS[lb.tip.id]) {
       h += `<div class="edpl">${VIS[lb.tip.id].name}</div>`;
       h += `<label class="edsl"><span>size</span><input type="range" id="edTS" min="0.4" max="2.5" step="0.01" value="${lb.tip.s || 1}"></label>`;
+      h += `<label class="edsl"><span>rotate</span><input type="range" id="edTR" min="-3.14" max="3.14" step="0.01" value="${lb.tip.spin || 0}"></label>`;
+      h += `<label class="edsl"><span>tilt</span><input type="range" id="edTT" min="-1.3" max="1.3" step="0.01" value="${lb.tip.tilt || 0}"></label>`;
       h += '<div class="edrow">' + `<input type="color" id="edTC" value="${hex(itemColor(lb.tip.id, lb.tip.c, ED.des.col))}"><button id="edTipX">remove ${VIS[lb.tip.id].name}</button></div>`;
     } else h += '<div class="edhint">drag a foot, hand or claw onto the end of this limb. drag the glowing joints to bend and stretch it</div>';
   }
@@ -9803,6 +11213,8 @@ function edRenderInspector() {
   slider('edPR', (v) => edSelProp((o) => { o.spin = v; }));
   slider('edLT', (v) => edSelProp((o) => { o.th = v; }));
   slider('edTS', (v) => edSelProp((o) => { if (o.tip) o.tip.s = v; }));
+  slider('edTR', (v) => edSelProp((o) => { if (o.tip) o.tip.spin = v; }));
+  slider('edTT', (v) => edSelProp((o) => { if (o.tip) o.tip.tilt = v; }));
   const tc = $('edTC');
   if (tc) { tc.addEventListener('focus', () => edPushUndo()); tc.addEventListener('input', () => edSelProp((o) => { if (o.tip) o.tip.c = unhex(tc.value); })); }
   const tx = $('edTipX'); if (tx) tx.onclick = () => { edPushUndo(); edSelProp((o) => { o.tip = null; }); edRenderInspector(); };
@@ -9853,8 +11265,16 @@ function edUpdateStats() {
   h += row('reach', ph.reach, o && o.reach, 0);
   h += row('energy use', ph.upkeep, o && o.upkeep, 2, true);
   h += row('adult size', ph.mass, o && o.mass, 1);
+  // attacks this body can make, each playable on the podium
+  try {
+    const mv = movesFor(ph, tallyParts(ph));
+    h += '<div class="edmoves"><span>attacks</span>' + mv.map(m => `<button data-try="${m}">${MOVE_DEF[m].label}</button>`).join('') + '</div>';
+  } catch (e) { /* stats still render */ }
   if (warn.length) h += '<div class="edwarn">' + warn.map(w => '<div>' + w + '</div>').join('') + '</div>';
   ED.ui.stats.innerHTML = h;
+  for (const b of ED.ui.stats.querySelectorAll('[data-try]')) {
+    b.onclick = () => { const k = b.getAttribute('data-try'); ED.anim = { kind: k, t0: performance.now(), dur: MOVE_DEF[k].dur * 2.2, seq: ((ED.anim && ED.anim.seq) || 0) + 1 }; };
+  }
   const done = $('edDone');
   if (done) done.classList.toggle('blocked', !hasMouth || used > cap);
 }
@@ -9875,6 +11295,7 @@ function edRenderSaved() {
   };
   for (const b of el.querySelectorAll('[data-load]')) b.onclick = () => {
     const s = PROG.saved[+b.getAttribute('data-load')]; if (!s) return;
+    if (ED.mode === 'game' && (s.design.plan | 0) !== (ED.des.plan | 0)) { edFlash('That creature has a different body shape. Reset the world to play it.'); return; }
     edPushUndo(); ED.des = C.cloneDesign(s.design); ED.sel = null;
     { const g = grantCountOf(ED.des); for (const k in g) ED.grantCount[k] = Math.max(ED.grantCount[k] || 0, g[k]); }
     edTouch(); ED.savedOpen = false; edRefreshUI();
@@ -10056,6 +11477,16 @@ function edBindCanvas() {
     if ((k === 'q' || k === 'e') && ED.sel && ED.sel.kind === 'part') {
       edPushUndo(); edSelProp((o) => { o.spin = ((o.spin || 0) + (k === 'q' ? -0.2 : 0.2)); }); edRenderInspector();
     }
+    // Q/E turn a selected limb's claw, hand or foot; R/F tilt it
+    if ((k === 'q' || k === 'e' || k === 'r' || k === 'f') && ED.sel && ED.sel.kind === 'limb' && ED.sel.ref.tip) {
+      edPushUndo();
+      edSelProp((o) => {
+        if (!o.tip) return;
+        if (k === 'q' || k === 'e') o.tip.spin = clamp((o.tip.spin || 0) + (k === 'q' ? -0.2 : 0.2), -3.14, 3.14);
+        else o.tip.tilt = clamp((o.tip.tilt || 0) + (k === 'r' ? -0.15 : 0.15), -1.3, 1.3);
+      });
+      edRenderInspector();
+    }
   }, true);
 }
 
@@ -10230,6 +11661,7 @@ const TYPE_ITEMS = {
   ORN: ['d_crest', 'd_frill', 'd_antenna'],
 };
 function preyItems(prey) {
+  if (!prey || !prey.genome) return [];
   const g = prey.genome;
   let ids = [];
   if (g.design) ids = designItems(g.design);
@@ -10257,6 +11689,7 @@ function preyItems(prey) {
 }
 function edOnKill(prey) {
   PROG.kills++;
+  objOnKill(prey);
   saveProgress();
   const opts = preyItems(prey);
   if (!opts.length) { toast('Killed it. +' + KILL_SPACE + ' genome space.', 2600); return; }
@@ -10317,6 +11750,8 @@ function tick(dt, skipRender) {
   if (hudAcc > 0.25) { hudAcc = 0; updateHUD(); updateStats(); }
   return r;
 }
+window.addEventListener('pointerdown', () => sndInit(), { once: true });
+window.addEventListener('keydown', () => sndInit(), { once: true });
 function loop(now) {
   if (!running) return;
   const dt = lastT ? (now - lastT) / 1000 : 0.016;
@@ -10327,6 +11762,7 @@ function loop(now) {
     return;
   }
   try { tick(dt); } catch (e) { running = false; fatal('Render loop failed: ' + e.message); throw e; }
+  try { objTick(dt); sndTick(dt); } catch (e) { console.warn(e); }
   requestAnimationFrame(loop);
 }
 
@@ -10375,11 +11811,12 @@ async function init() {
   // The first world is built from the SAME panel values a reset uses. Previously
   // init() had its own hardcoded numbers, so the controls did nothing until you
   // pressed reset.
-  world = C.makeWorld(Object.assign({ w: WORLD_W, h: WORLD_H, tileSize: TILE, seed }, panelOpts()));
+  world = C.makeWorld(Object.assign({ w: WORLD_W, h: WORLD_H, tileSize: TILE, seed, featureScale: 2, heightScale: HEIGHT_SCALE, maxSlope: 1, baseRelief: 0.35, plantArea: 0.5 }, panelOpts()));
   terrain = world.terrain;
 
   buildPipelines();
   makeBindGroups();
+  folInit(); buildCanopyMap(); FOL.key = '';
   const info = buildTerrain();
   buildWater();
   buildMinimap();
@@ -10402,7 +11839,7 @@ async function init() {
     player.yaw = Math.atan2((isl2 ? isl2.cy : WORLD_H / 2) - player.c.y,
                             (isl2 ? isl2.cx : WORLD_W / 2) - player.c.x);
   } else {
-    player.camX = WORLD_W / 2; player.camZ = WORLD_H / 2; player.camY = 600; player.spectator = true;
+    player.camX = WORLD_W / 2; player.camZ = WORLD_H / 2; player.camY = 2600; player.spectator = true;
   }
   bindInput();
   bindPanel();
@@ -10456,7 +11893,8 @@ window.__G3D = {
   absorbFrom: (prey) => absorbPartFrom(prey),
   get ED() { return ED; }, get PROG() { return PROG; },
   openEditor: (m) => openEditor(m), closeEditor: (a) => closeEditor(a),
-  meshDbg: { designGeo, creaturePrims, meshPrims, get skinDraws() { return skinDraws.length; }, get boneN() { return boneN; }, get pool() { return meshPool ? meshPool.length : (meshPoolBroken ? -1 : 0); } },
+  startAnim: (c, k, d) => startAnim(c, k, d), setMove: (m) => { player.moveSel = m; },
+  meshDbg: { designGeo, creaturePrims, meshPrims, get skinDraws() { return skinDraws.length; }, get boneN() { return boneN; }, get pool() { return meshPool ? meshPool.length : (meshPoolBroken ? -1 : 0); }, get FOL() { return FOL; } },
   edAddPart: (id, hit) => edAddPart(id, hit), edAddLimb: (id, hit) => edAddLimb(id, hit), edSetTip: (l, id) => edSetTip(l, id),
   edBodyHit: (x, y) => edBodyHit(x, y), edProject: (p) => edProject(p), edPick: (x, y) => edPick(x, y),
   limbWorld: (l) => limbWorld(l), partWorld: (p) => partWorld(p), onKill: (c) => edOnKill(c),
