@@ -2,6 +2,15 @@
 
 Build: `dev/3dgenesis-dev-src.tgz` unpacks to the patch pipeline. `bash build.sh` (edit its `cd` to your folder) turns `g3.v3` + `src/patch_*.py` into `g3.html` (= `index.html`) and extracts `core.js` for node tests.
 
+## 2026-09-22 (evening): Render 2
+- Sun shadows: cascaded shadow map (near cascade 380 units for creatures and undergrowth, far cascade 2400 units for trees and hills), 3x3 soft filtering, texel-snapped so they do not shimmer. Trees, grass, creatures, skeletons and terrain cast; everything lit receives. Medium: 1 cascade at 1024. High: 2 at 2048. Ultra: 2 at 4096. Low: off.
+- Post-processing: half-res ambient occlusion from depth, screen-space sun shafts, quarter-res bloom, filmic grade (highlight roll-off, contrast, saturation, split toning), vignette, dithering.
+- Render scale: the scene renders below screen resolution and is upscaled with contrast-adaptive sharpening (low 65%, medium 80%, high 90%, ultra 115% supersampled). The canvas itself is always native resolution so the HUD stays crisp.
+- Auto resolution (on by default, "auto res" toggle): lowers the render scale down to 60% when frames take over ~21 ms, raises it again when there is headroom. The graphics bar shows fps and the current render scale.
+- View-frustum culling: creatures, food plants, skeletons, trees and ground cover outside the view are not drawn at all (trees within 380 units stay so they can still cast shadows into view).
+- Bark fixed: the per-pixel sparkle came from projecting world position onto the normal's tangent (huge coordinate swings per pixel); bark now uses triplanar projection, with fine grain only up close.
+- Not done: temporal anti-aliasing (needs motion vectors through every pipeline), terrain chunk culling, tree impostors, moving creature building to the GPU.
+
 ## 2026-09-22 (later): Feedback pass
 - Removed the grey/black ground rings around creatures (attack arc, threat ring, telegraph ring). No on-screen proximity indicator; danger is heard, not drawn.
 - 3D audio: every animal sound goes through an HRTF panner at its real position, with the listener following your head, so on headphones sounds come from behind, above and around you. Distance loudness and muffling are unchanged.

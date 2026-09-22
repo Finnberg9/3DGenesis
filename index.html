@@ -314,7 +314,7 @@
 <div id="drownfx"></div>
 <div id="deathfx"><div class="big">YOU DIED</div><div class="sub"></div></div>
 <button id="resetbtn" type="button">Reset World</button>
-<div id="gfxsel"><span>graphics</span><button data-q="low">low</button><button data-q="medium">medium</button><button data-q="high">high</button><button data-q="ultra">ultra</button></div>
+<div id="gfxsel"><span id="gfxfps" title="frame rate and render scale">-</span><button data-q="auto" id="gfxauto" class="on" title="lower the render scale automatically to keep the frame rate up">auto res</button><span>graphics</span><button data-q="low">low</button><button data-q="medium">medium</button><button data-q="high">high</button><button data-q="ultra">ultra</button></div>
 <div id="hurtfx" style="position:fixed;inset:0;pointer-events:none;opacity:0;z-index:4;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 45%,rgba(120,0,0,.55) 80%,rgba(70,0,0,.9) 100%)"></div>
 
 <div id="vitals" class="panel">
@@ -4288,7 +4288,7 @@ function makeCone(seg) {
 // =====================================================================
 let dev, ctx, fmt, canvas, depthTex, msaaTex, world, terrain;
 const SAMPLES = 4;   // MSAA; the jagged silhouettes were the single worst artefact
-let gBuf, gArr = new Float32Array(32);          // 128-byte globals block
+let gBuf, gArr = new Float32Array(68);          // 128-byte globals block
 let terrainPipe, instPipe, waterPipe, bodyPipe, unlitPipe, tubePipe, overPipe, skinPipe, skinBind, skinInstVB, folPipe, folBind, bindG;
 let bodyInstVB;
 const BINST_FLOATS = 20;                    // pos3 yaw scale base3 coat3 detail3 pattern pad wave3 pad
@@ -4338,8 +4338,43 @@ struct G {
   lightDir : vec4<f32>,
   fogCol   : vec4<f32>,
   params   : vec4<f32>,   // x=time  y=fogDensity  z=lightAmount  w=seaLevelY
+  shadowVP0 : mat4x4<f32>,
+  shadowVP1 : mat4x4<f32>,
+  shadowP  : vec4<f32>,   // x=near cascade radius  y=cascades  z=1/map size  w=strength
 };
 @group(0) @binding(0) var<uniform> g : G;
+@group(0) @binding(8) var shadowMap : texture_depth_2d_array;
+@group(0) @binding(9) var shadowSmp : sampler_comparison;
+fn shadowCascade(wpos: vec3<f32>, N: vec3<f32>, c: i32) -> f32 {
+  var m = g.shadowVP0;
+  var bias = 0.9;
+  if (c == 1) { m = g.shadowVP1; bias = 5.0; }
+  let p4 = m * vec4<f32>(wpos + N * bias, 1.0);
+  let p = p4.xyz / p4.w;
+  let uv = vec2<f32>(p.x * 0.5 + 0.5, 0.5 - p.y * 0.5);
+  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || p.z > 1.0 || p.z < 0.0) { return 1.0; }
+  let ts = g.shadowP.z * select(1.0, 1.5, c == 1);
+  var sum = 0.0;
+  for (var y = -1; y <= 1; y = y + 1) {
+    for (var x = -1; x <= 1; x = x + 1) {
+      sum += textureSampleCompareLevel(shadowMap, shadowSmp, uv + vec2<f32>(f32(x), f32(y)) * ts * 1.25, c, p.z - 0.0005);
+    }
+  }
+  return sum / 9.0;
+}
+fn shadowAt(wpos: vec3<f32>, N: vec3<f32>) -> f32 {
+  let n = i32(g.shadowP.y + 0.5);
+  if (n == 0) { return 1.0; }
+  let d = distance(wpos, g.camPos.xyz);
+  let r0 = g.shadowP.x;
+  var s = 1.0;
+  if (d < r0 * 0.8) { s = shadowCascade(wpos, N, 0); }
+  else if (n > 1) {
+    let r1 = r0 * 6.3;
+    s = mix(shadowCascade(wpos, N, 1), 1.0, smoothstep(r1 * 0.55, r1 * 0.9, d));
+  }
+  return mix(1.0, s, g.shadowP.w);
+}
 
 fn shade(col: vec3<f32>, nrm: vec3<f32>, wpos: vec3<f32>) -> vec3<f32> {
   let N = normalize(nrm);
@@ -4354,10 +4389,11 @@ fn shade(col: vec3<f32>, nrm: vec3<f32>, wpos: vec3<f32>) -> vec3<f32> {
   let day = g.params.z;
   let ambCol = mix(vec3<f32>(0.16, 0.19, 0.26), vec3<f32>(0.42, 0.52, 0.66), day);
   let sunCol = mix(vec3<f32>(0.20, 0.24, 0.34), vec3<f32>(1.06, 0.98, 0.86), day);
-  var lit = col * (ambCol * (0.55 + 0.45 * sky) + sunCol * sun * 0.85 + col * bounce);
+  let shd = shadowAt(wpos, N);
+  var lit = col * (ambCol * (0.55 + 0.45 * sky) * (0.82 + 0.18 * shd) + sunCol * sun * 0.85 * shd + col * bounce);
   // soft specular sheen gives curved surfaces a readable highlight
   let H = normalize(L + V);
-  lit += sunCol * pow(max(dot(N, H), 0.0), 22.0) * 0.10 * day;
+  lit += sunCol * pow(max(dot(N, H), 0.0), 22.0) * 0.10 * day * shd;
   // rim light separates silhouettes from the background
   let rim = pow(1.0 - max(dot(N, V), 0.0), 3.0);
   lit += mix(vec3<f32>(0.05, 0.07, 0.10), vec3<f32>(0.30, 0.38, 0.48), day) * rim * 0.35;
@@ -4706,7 +4742,13 @@ struct VO { @builtin(position) pos: vec4<f32>, @location(0) nrm: vec3<f32>, @loc
   o.wpos = w; o.col = c * iTint; o.leaf = leaf;
   return o;
 }
-fn fhash(p: vec2<f32>) -> f32 { return fract(sin(dot(p, vec2<f32>(127.1, 311.7))) * 43758.5453); }
+// sin-free hash: stays stable at large world coordinates, where sin() loses
+// precision on the GPU and turns into per-pixel sparkle
+fn fhash(p: vec2<f32>) -> f32 {
+  var p3 = fract(vec3<f32>(p.x, p.y, p.x) * 0.1031);
+  p3 += dot(p3, p3.yzx + vec3<f32>(33.33));
+  return fract((p3.x + p3.y) * p3.z);
+}
 fn fnoise(p: vec2<f32>) -> f32 {
   let i = floor(p); let f = fract(p); let u = f * f * (3.0 - 2.0 * f);
   return mix(mix(fhash(i), fhash(i + vec2<f32>(1.0, 0.0)), u.x), mix(fhash(i + vec2<f32>(0.0, 1.0)), fhash(i + vec2<f32>(1.0, 1.0)), u.x), u.y);
@@ -4716,13 +4758,23 @@ fn fnoise(p: vec2<f32>) -> f32 {
 // Coordinates run round the trunk (horizontal tangent) and up it, so the
 // pattern follows each trunk without needing UVs. Detail fades with distance
 // so it never shimmers.
-fn barkPattern(a: f32, y: f32) -> f32 {
+fn barkPattern(a: f32, y: f32, fine: f32) -> f32 {
   let q = vec2<f32>(a * 0.30, y * 0.032);
   let warp = fnoise(q * vec2<f32>(1.0, 2.5) + vec2<f32>(3.1, 7.7)) * 1.6;
   let n = fnoise(q + vec2<f32>(warp, 0.0));
   let plates = smoothstep(0.30, 0.62, n);
   let grain = fnoise(vec2<f32>(a * 0.9, y * 0.11));
-  return plates * 0.85 + grain * 0.15;
+  return plates * 0.85 + mix(0.075, grain * 0.15, fine);   // fine grain only up close
+}
+// triplanar: project on the two vertical world planes, weighted by how much the
+// surface faces each. (Projecting onto the normal's own tangent made the
+// coordinate swing by hundreds of units per pixel at large world positions.)
+fn barkTri(p: vec3<f32>, N: vec3<f32>, fine: f32, da: f32, dy: f32) -> f32 {
+  var w = vec2<f32>(abs(N.x), abs(N.z));
+  w = w * w; w = w / max(w.x + w.y, 1e-4);
+  let bx = barkPattern(p.z + da, p.y + dy, fine);
+  let bz = barkPattern(p.x + da, p.y + dy, fine);
+  return bx * w.x + bz * w.y;
 }
 @fragment fn fs(i: VO, @builtin(front_facing) ff: bool) -> @location(0) vec4<f32> {
   let d = distance(i.wpos, g.camPos.xyz);
@@ -4740,24 +4792,25 @@ fn barkPattern(a: f32, y: f32) -> f32 {
       let hz = vec2<f32>(N.x, N.z);
       let hl = length(hz);
       let T = select(vec3<f32>(1.0, 0.0, 0.0), normalize(vec3<f32>(-N.z, 0.0, N.x)), hl > 0.2);
-      let a = dot(i.wpos, T);
-      let b0 = barkPattern(a, i.wpos.y);
-      let b1 = barkPattern(a + 0.35, i.wpos.y);
-      let b2 = barkPattern(a, i.wpos.y + 2.5);
+      let a = (i.wpos.x + i.wpos.z) * 0.7071;   // a fixed diagonal plane: smooth, never depends on the normal
+      let fine = 1.0 - smoothstep(25.0, 120.0, d);
+      let b0 = barkTri(i.wpos, N, fine, 0.0, 0.0);
+      let b1 = barkTri(i.wpos, N, fine, 0.8, 0.0);
+      let b2 = barkTri(i.wpos, N, fine, 0.0, 4.0);
       // furrows dark, plate faces light, with a touch of grey weathering on the ridges
       let bark = col * (0.50 + 0.78 * b0) + vec3<f32>(0.05, 0.05, 0.045) * smoothstep(0.75, 0.95, b0);
       // moss: patchy, heavier on faces that look up or away from the sun
       let mp = fnoise(vec2<f32>(a * 0.08, i.wpos.y * 0.02) + i.wpos.xz * 0.004);
       let shadeSide = clamp(0.5 - 0.5 * dot(N, normalize(g.lightDir.xyz)), 0.0, 1.0);
       let moss = smoothstep(0.52, 0.80, mp) * (0.35 + 0.65 * max(shadeSide, clamp(N.y + 0.2, 0.0, 1.0))) * (1.0 - smoothstep(0.55, 0.9, b0));
-      let mossCol = mix(vec3<f32>(0.16, 0.26, 0.08), vec3<f32>(0.30, 0.38, 0.14), fnoise(i.wpos.xz * 0.3));
-      let lichen = smoothstep(0.86, 0.93, fnoise(vec2<f32>(a * 0.9, i.wpos.y * 0.12) + vec2<f32>(9.0, 2.0)));
+      let mossCol = mix(vec3<f32>(0.16, 0.26, 0.08), vec3<f32>(0.30, 0.38, 0.14), fnoise(vec2<f32>(a * 0.12, i.wpos.y * 0.05)));
+      let lichen = smoothstep(0.80, 0.92, fnoise(vec2<f32>(a * 0.22, i.wpos.y * 0.035) + vec2<f32>(9.0, 2.0))) * (0.3 + 0.7 * fine);
       var detailed = mix(bark, mossCol, moss * 0.85);
       detailed = mix(detailed, vec3<f32>(0.55, 0.58, 0.46), lichen * 0.5 * (1.0 - moss));
       col = mix(col, detailed, det);
       // bump from the pattern's slope, round the trunk and up it
-      let gA = (b1 - b0) / 0.35;
-      let gY = (b2 - b0) / 2.5;
+      let gA = (b1 - b0) / 0.8 * (0.4 + 0.6 * fine);
+      let gY = (b2 - b0) / 4.0 * (0.4 + 0.6 * fine);
       N = normalize(N - (T * gA * 0.55 + vec3<f32>(0.0, 1.0, 0.0) * gY * 0.9) * det);
     }
   }
@@ -5256,7 +5309,7 @@ function folUpdate(camX, camY, camZ, yaw) {
     const dx = tr.x - camX, dz = tr.y - camZ, d = Math.hypot(dx, dz);
     if (d > FAR * 0.95) continue;
     // behind the camera (with margin for the wide field of view and tall crowns)
-    if (d > 260 && (dx * fx + dz * fz) / d < -0.45) continue;
+    if (!r2InCone(dx, dz, d, 60 + tr.s * 60, fx, fz)) continue;
     const lod = d < TREE_LOD0 ? 0 : d < TREE_LOD1 ? 1 : 2;
     const g = FOL.tree[tr.kind][tr.v % TREE_VARIANTS][lod];
     const hs = ((tr.x * 131) ^ (tr.y * 71)) & 1023;
@@ -5272,7 +5325,7 @@ function folUpdate(camX, camY, camZ, yaw) {
     const dx = x - camX, dz = z - camZ;
     if (dx * dx + dz * dz > COVER_R * COVER_R || x < 0 || z < 0 || x >= WORLD_W || z >= WORLD_H) continue;
     const d = Math.hypot(dx, dz);
-    if (d > 60 && (dx * fx + dz * fz) / d < -0.5) continue;
+    if (d > 60 && !r2InCone(dx, dz, d, 20, fx, fz)) continue;
     const e = T.height(x, z);
     if (e < T.LV.water - 0.004 && T.biomeAt(x, z) !== 'shallow' && T.biomeAt(x, z) !== 'marsh') continue;
     const opts = COVER_BY_BIOME[T.biomeAt(x, z)];
@@ -5445,7 +5498,10 @@ function buildWater() {
 
 // ---------------------------------------------------------- pipelines
 function buildPipelines() {
-  gBuf = dev.createBuffer({ size: 128, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  gBuf = dev.createBuffer({ size: 272, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  // remember every pipeline descriptor so render2 can build depth-only shadow copies
+  const __crp = dev.createRenderPipeline;
+  dev.createRenderPipeline = (d) => { const pp = __crp.call(dev, d); R2.descOf.set(pp, d); return pp; };
   const depthState = { format: 'depth24plus', depthWriteEnabled: true, depthCompare: 'less' };
   const MS = { count: SAMPLES };
 
@@ -5631,19 +5687,23 @@ function buildPipelines() {
   instVB   = dev.createBuffer({ size: instData.byteLength,  usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
   spikeVB  = dev.createBuffer({ size: spikeData.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
   plantVB  = dev.createBuffer({ size: plantData.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+  dev.createRenderPipeline = __crp;
+  r2BuildPipelines();
 }
 function makeBindGroups() {
-  folBind = dev.createBindGroup({ layout: folPipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: gBuf } }] });
+  const SE = r2ShadowEntries();
+  folBind = dev.createBindGroup({ layout: folPipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: gBuf } }].concat(SE) });
   skinBind = dev.createBindGroup({ layout: skinPipe.getBindGroupLayout(0), entries: [
-    { binding: 0, resource: { buffer: gBuf } }, { binding: 1, resource: { buffer: boneBuf } }] });
+    { binding: 0, resource: { buffer: gBuf } }, { binding: 1, resource: { buffer: boneBuf } }].concat(SE) });
+  R2.bL = [{}, {}];
   bindG = {
-    terrain: dev.createBindGroup({ layout: terrainPipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: gBuf } }] }),
-    inst:    dev.createBindGroup({ layout: instPipe.getBindGroupLayout(0),    entries: [{ binding: 0, resource: { buffer: gBuf } }] }),
+    terrain: dev.createBindGroup({ layout: terrainPipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: gBuf } }].concat(SE) }),
+    inst:    dev.createBindGroup({ layout: instPipe.getBindGroupLayout(0),    entries: [{ binding: 0, resource: { buffer: gBuf } }].concat(SE) }),
     water:   dev.createBindGroup({ layout: waterPipe.getBindGroupLayout(0),   entries: [{ binding: 0, resource: { buffer: gBuf } }] }),
-    body:    dev.createBindGroup({ layout: bodyPipe.getBindGroupLayout(0),    entries: [{ binding: 0, resource: { buffer: gBuf } }] }),
+    body:    dev.createBindGroup({ layout: bodyPipe.getBindGroupLayout(0),    entries: [{ binding: 0, resource: { buffer: gBuf } }].concat(SE) }),
     unlit:   dev.createBindGroup({ layout: unlitPipe.getBindGroupLayout(0),   entries: [{ binding: 0, resource: { buffer: gBuf } }] }),
-    tube:    dev.createBindGroup({ layout: tubePipe.getBindGroupLayout(0),    entries: [{ binding: 0, resource: { buffer: gBuf } }] }),
-    over:    dev.createBindGroup({ layout: overPipe.getBindGroupLayout(0),    entries: [{ binding: 0, resource: { buffer: gBuf } }] }),
+    tube:    dev.createBindGroup({ layout: tubePipe.getBindGroupLayout(0),    entries: [{ binding: 0, resource: { buffer: gBuf } }].concat(SE) }),
+    over:    dev.createBindGroup({ layout: overPipe.getBindGroupLayout(0),    entries: [{ binding: 0, resource: { buffer: gBuf } }].concat(SE) }),
   };
 }
 
@@ -6241,6 +6301,8 @@ function buildCreatureInstances(camX, camZ, t) {
     const dx = c.x - camX, dz = c.y - camZ;
     const d2 = dx * dx + dz * dz;
     if (d2 > FAR * FAR) continue;
+    // not in view: skip entirely (your own body always draws)
+    if (c !== player.c && d2 > 900 && !r2InView(c.x, groundAt(c.x, c.y) + (c.ph.standH || c.ph.radius || 4) * BODY_SCALE, c.y, bodyExtent(c) * 1.4 + 12)) continue;
     if (instCount > MAX_INST - 64) break;
     drawCreature(c, t, Math.sqrt(d2));
   }
@@ -6312,6 +6374,7 @@ function buildPlantInstances(camX, camZ, t) {
     const d2 = dx * dx + dz * dz;
     if (d2 > FARR) continue;
     const y = groundAt(pl.x, pl.y);
+    if (d2 > 160000 && !r2InView(pl.x, y + 40, pl.y, 110)) continue;
     let hs = ((pl.x * 7919) ^ (pl.y * 104729)) >>> 0; hs = (hs ^ (hs >>> 13)) >>> 0;
     const j = (hs % 1000) / 1000, j2 = ((hs >>> 10) % 1000) / 1000, roll = (hs >>> 20) % 100;
     const rot = j * 6.283;
@@ -10568,10 +10631,10 @@ function drawFight(t) {
 // The choice is remembered in this browser.
 // =====================================================================
 const GFX_PRESETS = {
-  low:    { res: 0.60, cover: 380,  plant: 2600,  lod0: 420,  lod1: 1600, crit: 0.6, fog: 1.00, folMax: 50000 },
-  medium: { res: 0.85, cover: 620,  plant: 4200,  lod0: 700,  lod1: 2600, crit: 0.9, fog: 0.80, folMax: 90000 },
-  high:   { res: 1.00, cover: 900,  plant: 6500,  lod0: 1000, lod1: 3800, crit: 1.3, fog: 0.60, folMax: 140000 },
-  ultra:  { res: 1.25, cover: 1250, plant: 11000, lod0: 1500, lod1: 6000, crit: 1.9, fog: 0.42, folMax: 200000 },
+  low:    { res: 0.65, cover: 380,  plant: 2600,  lod0: 420,  lod1: 1600, crit: 0.6, fog: 1.00, folMax: 50000,  shadow: 0, ao: 0, bloom: 0, rays: 0 },
+  medium: { res: 0.80, cover: 620,  plant: 4200,  lod0: 700,  lod1: 2600, crit: 0.9, fog: 0.80, folMax: 90000,  shadow: 1, ao: 0, bloom: 1, rays: 1 },
+  high:   { res: 0.90, cover: 900,  plant: 6500,  lod0: 1000, lod1: 3800, crit: 1.3, fog: 0.60, folMax: 140000, shadow: 2, ao: 1, bloom: 1, rays: 1 },
+  ultra:  { res: 1.15, cover: 1250, plant: 11000, lod0: 1500, lod1: 6000, crit: 1.9, fog: 0.42, folMax: 200000, shadow: 3, ao: 1, bloom: 1, rays: 1 },
 };
 const GFX_ORDER = ['low', 'medium', 'high', 'ultra'];
 const GFX = Object.assign({ name: 'high' }, GFX_PRESETS.high);
@@ -10587,7 +10650,8 @@ function gfxSet(name, silent) {
   if (typeof FOL !== 'undefined') FOL.key = '';                 // rebuild the foliage set now
   try { localStorage.setItem('g3d_gfx', name); } catch (e) { /* private mode: not remembered */ }
   const el = document.getElementById('gfxsel');
-  if (el) for (const b of el.querySelectorAll('button')) b.classList.toggle('on', b.dataset.q === name);
+  if (el) for (const b of el.querySelectorAll('button')) if (b.dataset.q !== 'auto') b.classList.toggle('on', b.dataset.q === name);
+  if (typeof R2 !== 'undefined') R2.dyn = 1;
   if (!silent && typeof toast === 'function') toast('Graphics: ' + name, 1200);
 }
 function gfxBind() {
@@ -10595,9 +10659,11 @@ function gfxBind() {
   if (!el) return;
   el.addEventListener('click', (e) => {
     const b = e.target.closest ? e.target.closest('button[data-q]') : null;
+    if (b && b.dataset.q === 'auto') { R2.auto = !R2.auto; if (!R2.auto) R2.dyn = 1; b.classList.toggle('on', R2.auto); try { localStorage.setItem('g3d_autores', R2.auto ? '1' : '0'); } catch (err) { /* not remembered */ } e.stopPropagation(); return; }
     if (b) { gfxSet(b.dataset.q); e.stopPropagation(); }
   });
   el.addEventListener('mousedown', (e) => e.stopPropagation());
+  try { if (localStorage.getItem('g3d_autores') === '0') { R2.auto = false; const ab = document.getElementById('gfxauto'); if (ab) ab.classList.remove('on'); } } catch (err) { /* default on */ }
   gfxLoad();
 }
 // keep clear of the control panel when it is open
@@ -10944,7 +11010,7 @@ function drawRemains(t) {
     const age = simT - r.t0;
     if (age > REMAINS_LIFE || age < -1) { REMAINS.splice(ri, 1); continue; }
     const dcam = Math.hypot(r.x - player.camX, r.z - player.camZ);
-    if (dcam > REMAINS_DRAW_R) continue;
+    if (dcam > REMAINS_DRAW_R || (dcam > 60 && !r2InView(r.x, groundAt(r.x, r.z), r.z, r.R * 4 + 10))) continue;
     drawSkeleton(r, age, dcam);
   }
 }
@@ -11310,6 +11376,422 @@ function drownFx(dt) {
     }
   } else drownMsgT = 0;
 }
+// Post-processing shaders: half-res ambient occlusion + sun shafts, a bright
+// pass and separable blur for bloom, and the final composite that upscales
+// the scene with contrast-adaptive sharpening and grades it.
+const WGSL_POST_COMMON = `
+struct PP { a: vec4<f32>, b: vec4<f32>, c: vec4<f32>, d: vec4<f32> };
+// a: sunUV.xy, sun visible, ray strength
+// b: ao strength, bloom strength, sharpen, time
+// c: near, far, daylight, vignette
+// d: sun colour rgb, grade strength
+@group(0) @binding(0) var<uniform> P: PP;
+struct VO { @builtin(position) pos: vec4<f32>, @location(0) uv: vec2<f32> };
+@vertex fn vs(@builtin(vertex_index) i: u32) -> VO {
+  var p = array<vec2<f32>, 3>(vec2<f32>(-1.0, -1.0), vec2<f32>(3.0, -1.0), vec2<f32>(-1.0, 3.0));
+  var o: VO;
+  o.pos = vec4<f32>(p[i], 0.0, 1.0);
+  o.uv = vec2<f32>(p[i].x * 0.5 + 0.5, 0.5 - p[i].y * 0.5);
+  return o;
+}
+fn phash(p: vec2<f32>) -> f32 { return fract(sin(dot(p, vec2<f32>(12.9898, 78.233))) * 43758.5453); }
+`;
+const WGSL_POST_FX = WGSL_POST_COMMON + `
+@group(0) @binding(1) var depthTex: texture_depth_multisampled_2d;
+fn depthAt(uv: vec2<f32>) -> f32 {
+  let dim = vec2<f32>(textureDimensions(depthTex));
+  let ip = vec2<i32>(clamp(uv * dim, vec2<f32>(0.0), dim - vec2<f32>(1.0)));
+  return textureLoad(depthTex, ip, 0);
+}
+fn linZ(d: f32) -> f32 { return P.c.x * P.c.y / max(1e-4, P.c.y - d * (P.c.y - P.c.x)); }
+@fragment fn fs(i: VO) -> @location(0) vec4<f32> {
+  let d0 = depthAt(i.uv);
+  var ao = 0.0;
+  if (P.b.x > 0.0 && d0 < 0.99999) {
+    let z0 = linZ(d0);
+    // about 9 world units of search radius, shrinking on screen with distance
+    let rad = clamp(9.0 / z0 * 1.1, 0.002, 0.045);
+    let rot = phash(i.pos.xy) * 6.2831;
+    var occ = 0.0;
+    for (var k = 0; k < 8; k = k + 1) {
+      let a = rot + f32(k) * 0.7853982;
+      let dir = vec2<f32>(cos(a), sin(a) * 1.6);
+      for (var s = 1; s <= 2; s = s + 1) {
+        let z = linZ(depthAt(i.uv + dir * rad * (f32(s) * 0.5)));
+        let diff = z0 - z;
+        if (diff > 0.35 && diff < 30.0) { occ += 1.0 - diff / 30.0; }
+      }
+    }
+    ao = clamp(occ / 16.0 * 1.6, 0.0, 1.0) * (1.0 - smoothstep(600.0, 1400.0, z0));
+  }
+  var ray = 0.0;
+  if (P.a.z > 0.0 && P.a.w > 0.0) {
+    let N = 28;
+    let delta = (P.a.xy - i.uv) / f32(N);
+    var uv = i.uv + delta * phash(i.pos.xy + vec2<f32>(7.0, 3.0));
+    var decay = 1.0;
+    for (var s = 0; s < N; s = s + 1) {
+      uv += delta;
+      if (depthAt(uv) >= 0.99999) { ray += decay; }
+      decay *= 0.95;
+    }
+    let toSun = distance(i.uv, P.a.xy);
+    ray = ray / f32(N) * P.a.w * P.a.z * (1.0 - smoothstep(0.1, 0.9, toSun));
+  }
+  return vec4<f32>(ao, ray, 0.0, 1.0);
+}`;
+const WGSL_POST_BLOOM = WGSL_POST_COMMON + `
+@group(0) @binding(1) var src: texture_2d<f32>;
+@group(0) @binding(2) var smp: sampler;
+@fragment fn fs_bright(i: VO) -> @location(0) vec4<f32> {
+  let ts = 1.0 / vec2<f32>(textureDimensions(src));
+  var c = textureSampleLevel(src, smp, i.uv + ts * vec2<f32>(-1.0, -1.0), 0.0).rgb;
+  c += textureSampleLevel(src, smp, i.uv + ts * vec2<f32>(1.0, -1.0), 0.0).rgb;
+  c += textureSampleLevel(src, smp, i.uv + ts * vec2<f32>(-1.0, 1.0), 0.0).rgb;
+  c += textureSampleLevel(src, smp, i.uv + ts * vec2<f32>(1.0, 1.0), 0.0).rgb;
+  c *= 0.25;
+  let l = max(c.r, max(c.g, c.b));
+  let thr = 0.66 + 0.0 * P.b.w;   // P referenced so every post pass shares one bind layout
+  return vec4<f32>(c * smoothstep(thr, 0.97, l), 1.0);
+}
+fn blur(uv: vec2<f32>, dir: vec2<f32>) -> vec4<f32> {
+  let ts = (1.0 + 0.0 * P.b.w) / vec2<f32>(textureDimensions(src));
+  var w = array<f32, 5>(0.227027, 0.1945946, 0.1216216, 0.054054, 0.016216);
+  var c = textureSampleLevel(src, smp, uv, 0.0).rgb * w[0];
+  for (var k = 1; k < 5; k = k + 1) {
+    let o = dir * ts * f32(k) * 1.5;
+    c += textureSampleLevel(src, smp, uv + o, 0.0).rgb * w[k];
+    c += textureSampleLevel(src, smp, uv - o, 0.0).rgb * w[k];
+  }
+  return vec4<f32>(c, 1.0);
+}
+@fragment fn fs_blurH(i: VO) -> @location(0) vec4<f32> { return blur(i.uv, vec2<f32>(1.0, 0.0)); }
+@fragment fn fs_blurV(i: VO) -> @location(0) vec4<f32> { return blur(i.uv, vec2<f32>(0.0, 1.0)); }`;
+const WGSL_POST_FINAL = WGSL_POST_COMMON + `
+@group(0) @binding(1) var scene: texture_2d<f32>;
+@group(0) @binding(2) var fxT: texture_2d<f32>;
+@group(0) @binding(3) var bloomT: texture_2d<f32>;
+@group(0) @binding(4) var smp: sampler;
+@fragment fn fs(i: VO) -> @location(0) vec4<f32> {
+  let ts = 1.0 / vec2<f32>(textureDimensions(scene));
+  let c = textureSampleLevel(scene, smp, i.uv, 0.0).rgb;
+  // contrast-adaptive sharpening: restores detail lost to the lower render
+  // scale without ringing on edges that are already sharp
+  let n0 = textureSampleLevel(scene, smp, i.uv + vec2<f32>(ts.x, 0.0), 0.0).rgb;
+  let n1 = textureSampleLevel(scene, smp, i.uv - vec2<f32>(ts.x, 0.0), 0.0).rgb;
+  let n2 = textureSampleLevel(scene, smp, i.uv + vec2<f32>(0.0, ts.y), 0.0).rgb;
+  let n3 = textureSampleLevel(scene, smp, i.uv - vec2<f32>(0.0, ts.y), 0.0).rgb;
+  let mn = min(c, min(min(n0, n1), min(n2, n3)));
+  let mx = max(c, max(max(n0, n1), max(n2, n3)));
+  let amp = sqrt(clamp(min(mn, vec3<f32>(1.0) - mx) / max(mx, vec3<f32>(1e-4)), vec3<f32>(0.0), vec3<f32>(1.0)));
+  let w = -amp * mix(0.08, 0.2, P.b.z);
+  var col = (c + (n0 + n1 + n2 + n3) * w) / (vec3<f32>(1.0) + 4.0 * w);
+  let f = textureSampleLevel(fxT, smp, i.uv, 0.0);
+  col *= 1.0 - f.r * P.b.x;
+  col += P.d.rgb * f.g;
+  col += textureSampleLevel(bloomT, smp, i.uv, 0.0).rgb * P.b.y;
+  // grade: gentle highlight roll-off, filmic contrast, a little saturation,
+  // cool shadows and warm highlights
+  col = max(col, vec3<f32>(0.0));
+  let g = P.d.w;
+  col = col * (1.0 + 0.18 * g) / (vec3<f32>(1.0) + col * 0.18 * g);
+  col = mix(col, col * col * (vec3<f32>(3.0) - 2.0 * clamp(col, vec3<f32>(0.0), vec3<f32>(1.0))), 0.22 * g);
+  let lum = dot(col, vec3<f32>(0.2126, 0.7152, 0.0722));
+  col = mix(vec3<f32>(lum), col, 1.0 + 0.12 * g);
+  col += (vec3<f32>(-0.012, 0.0, 0.018) * (1.0 - lum) + vec3<f32>(0.022, 0.010, -0.016) * lum) * g;
+  let vq = (i.uv - vec2<f32>(0.5)) * vec2<f32>(1.15, 1.0);
+  col *= mix(1.0, smoothstep(0.98, 0.32, length(vq)), P.c.w);
+  col += vec3<f32>((phash(i.pos.xy + vec2<f32>(P.b.w)) - 0.5) / 255.0);
+  return vec4<f32>(col, 1.0);
+}`;
+
+// =====================================================================
+// RENDER 2: sun shadows, post-processing, render scale with sharpening,
+// automatic resolution, and view-frustum culling.
+//
+// Frame: [shadow depth passes] -> scene (MSAA, at render scale) -> half-res
+// AO + sun shafts -> quarter-res bloom (bright, blur H, blur V) -> final
+// composite to the screen (sharpened upscale, AO, shafts, bloom, grade).
+// Everything scales with the graphics preset; the auto resolution keeps the
+// frame rate up by lowering the render scale when frames run long.
+// =====================================================================
+const R2 = {
+  descOf: new Map(), ok: false,
+  shadowTex: null, shadowArr: null, shadowViews: [], shadowSize: 0, shadowSmp: null,
+  gL: [], lightArr: [new Float32Array(68), new Float32Array(68)], lvp: [new Float32Array(16), new Float32Array(16)],
+  p: {}, bL: [{}, {}],
+  sw: 0, sh: 0, sceneMs: null, sceneDepth: null, sceneRes: null, fxTex: null, bloomA: null, bloomB: null,
+  post: null, postBuf: null, postArr: new Float32Array(16), linSmp: null, bg: null,
+  dyn: 1, auto: true, ftAvg: 16.7, lastT: 0, lastChange: 0, fps: 60,
+  planes: new Float32Array(24),
+};
+const SHADOW_CFG = [{ n: 0, size: 1024 }, { n: 1, size: 1024 }, { n: 2, size: 2048 }, { n: 2, size: 4096 }];
+const SHADOW_R0 = 380, SHADOW_R1 = 2400;
+
+// ---------------------------------------------------------------- frustum culling
+function r2Frustum(m) {
+  const P = R2.planes;
+  const rows = (r) => [m[r], m[4 + r], m[8 + r], m[12 + r]];
+  const r0 = rows(0), r1 = rows(1), r2 = rows(2), r3 = rows(3);
+  const set = (i, a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; P[i * 4] = a[0] / l; P[i * 4 + 1] = a[1] / l; P[i * 4 + 2] = a[2] / l; P[i * 4 + 3] = a[3] / l; };
+  set(0, [r3[0] + r0[0], r3[1] + r0[1], r3[2] + r0[2], r3[3] + r0[3]]);
+  set(1, [r3[0] - r0[0], r3[1] - r0[1], r3[2] - r0[2], r3[3] - r0[3]]);
+  set(2, [r3[0] + r1[0], r3[1] + r1[1], r3[2] + r1[2], r3[3] + r1[3]]);
+  set(3, [r3[0] - r1[0], r3[1] - r1[1], r3[2] - r1[2], r3[3] - r1[3]]);
+  set(4, [r2[0], r2[1], r2[2], r2[3]]);
+  set(5, [r3[0] - r2[0], r3[1] - r2[1], r3[2] - r2[2], r3[3] - r2[3]]);
+}
+// sphere (world x, y, z, radius) intersects the view
+function r2InView(x, y, z, r) {
+  const P = R2.planes;
+  for (let i = 0; i < 6; i++) if (P[i * 4] * x + P[i * 4 + 1] * y + P[i * 4 + 2] * z + P[i * 4 + 3] < -r) return false;
+  return true;
+}
+// horizontal view cone for systems cached by yaw only (foliage): true if a
+// thing at (dx, dz) from the camera, radius r, could be on screen
+function r2InCone(dx, dz, d, r, fx, fz) {
+  if (d < 380) return true;                         // close: always (shadows, peripheral vision)
+  const aspect = canvas ? canvas.width / Math.max(1, canvas.height) : 1.8;
+  const half = Math.atan(Math.tan(1.15 / 2) * aspect) + 0.3 + Math.asin(Math.min(1, r / d));
+  return (dx * fx + dz * fz) / d > Math.cos(Math.min(Math.PI, half));
+}
+
+// ---------------------------------------------------------------- matrices
+function m4ortho(l, r, b, t, n, f, o) {
+  o.fill(0);
+  o[0] = 2 / (r - l); o[5] = 2 / (t - b); o[10] = 1 / (n - f);
+  o[12] = -(r + l) / (r - l); o[13] = -(t + b) / (t - b); o[14] = n / (n - f); o[15] = 1;
+  return o;
+}
+const _lv = new Float32Array(16), _lp = new Float32Array(16);
+// light view-projection for one cascade, centred ahead of the camera and
+// snapped to its texel grid so shadows do not crawl as you move
+function r2LightVP(c, R, cx, cz, out) {
+  const L = [gArr[20], gArr[21], gArr[22]];
+  const ll = Math.hypot(L[0], L[1], L[2]) || 1; L[0] /= ll; L[1] /= ll; L[2] /= ll;
+  const texel = (2 * R) / Math.max(256, R2.shadowSize);
+  cx = Math.round(cx / texel) * texel; cz = Math.round(cz / texel) * texel;
+  const cy = groundAt(cx, cz);
+  const D = R * 2 + 2500;
+  m4look(cx + L[0] * D, cy + L[1] * D, cz + L[2] * D, cx, cy, cz, _lv);
+  m4ortho(-R, R, -R, R, 1, D * 2, _lp);
+  m4mul(_lp, _lv, out);
+}
+
+// ---------------------------------------------------------------- resources
+function r2Tex(w, h, format, usage, samples) {
+  return dev.createTexture({ size: [Math.max(1, w), Math.max(1, h)], format, sampleCount: samples || 1, usage });
+}
+function r2EnsureShadow() {
+  const cfg = SHADOW_CFG[clamp(GFX.shadow | 0, 0, 3)];
+  const size = cfg.size;
+  if (R2.shadowTex && R2.shadowSize === size) return false;
+  if (R2.shadowTex) R2.shadowTex.destroy();
+  R2.shadowTex = dev.createTexture({ size: [size, size, 2], format: 'depth32float', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
+  R2.shadowArr = R2.shadowTex.createView({ dimension: '2d-array' });
+  R2.shadowViews = [0, 1].map(l => R2.shadowTex.createView({ dimension: '2d', baseArrayLayer: l, arrayLayerCount: 1 }));
+  R2.shadowSize = size;
+  if (!R2.shadowSmp) R2.shadowSmp = dev.createSampler({ compare: 'less', magFilter: 'linear', minFilter: 'linear' });
+  return true;
+}
+function r2ShadowEntries() {
+  r2EnsureShadow();
+  return [{ binding: 8, resource: R2.shadowArr }, { binding: 9, resource: R2.shadowSmp }];
+}
+function r2SceneScale() {
+  return clamp((GFX.res || 1) * (R2.auto ? R2.dyn : 1), 0.45, 1.5);
+}
+function r2EnsureScene() {
+  const s = r2SceneScale();
+  const w = Math.max(64, Math.round(canvas.width * s)), h = Math.max(64, Math.round(canvas.height * s));
+  if (R2.sceneRes && R2.sw === w && R2.sh === h) return;
+  for (const k of ['sceneMs', 'sceneDepth', 'sceneRes', 'fxTex', 'bloomA', 'bloomB']) if (R2[k]) R2[k].destroy();
+  const RA = GPUTextureUsage.RENDER_ATTACHMENT, TB = GPUTextureUsage.TEXTURE_BINDING;
+  R2.sceneMs = r2Tex(w, h, fmt, RA, SAMPLES);
+  R2.sceneDepth = r2Tex(w, h, 'depth24plus', RA | TB, SAMPLES);
+  R2.sceneRes = r2Tex(w, h, fmt, RA | TB);
+  R2.fxTex = r2Tex(w >> 1, h >> 1, 'rgba8unorm', RA | TB);
+  R2.bloomA = r2Tex(w >> 2, h >> 2, fmt, RA | TB);
+  R2.bloomB = r2Tex(w >> 2, h >> 2, fmt, RA | TB);
+  R2.sw = w; R2.sh = h;
+  r2PostBinds();
+}
+// depth-only copies of the scene pipelines, rendering into the shadow map
+function r2CasterPipe(src) {
+  const d = R2.descOf.get(src);
+  if (!d) return null;
+  return dev.createRenderPipeline({
+    layout: 'auto', vertex: d.vertex,
+    primitive: { topology: 'triangle-list', cullMode: 'none' },
+    depthStencil: { format: 'depth32float', depthWriteEnabled: true, depthCompare: 'less', depthBias: 3, depthBiasSlopeScale: 2.5, depthBiasClamp: 0 },
+    multisample: { count: 1 },
+  });
+}
+function r2BuildPipelines() {
+  try {
+    R2.p.terrain = r2CasterPipe(terrainPipe);
+    R2.p.inst = r2CasterPipe(instPipe);
+    R2.p.tube = r2CasterPipe(tubePipe);
+    R2.p.fol = r2CasterPipe(folPipe);
+    R2.p.skin = r2CasterPipe(skinPipe);
+    R2.p.body = r2CasterPipe(bodyPipe);
+    for (let c = 0; c < 2; c++) R2.gL[c] = dev.createBuffer({ size: 272, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    const pm = (code) => dev.createShaderModule({ code });
+    const fxm = pm(WGSL_POST_FX), blm = pm(WGSL_POST_BLOOM), fnm = pm(WGSL_POST_FINAL);
+    const full = (m, fs, format) => dev.createRenderPipeline({ layout: 'auto', vertex: { module: m, entryPoint: 'vs' },
+      fragment: { module: m, entryPoint: fs, targets: [{ format }] }, primitive: { topology: 'triangle-list' } });
+    R2.post = {
+      fx: full(fxm, 'fs', 'rgba8unorm'),
+      bright: full(blm, 'fs_bright', fmt), blurH: full(blm, 'fs_blurH', fmt), blurV: full(blm, 'fs_blurV', fmt),
+      final: full(fnm, 'fs', fmt),
+    };
+    R2.postBuf = dev.createBuffer({ size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    R2.linSmp = dev.createSampler({ magFilter: 'linear', minFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
+    R2.ok = true;
+  } catch (e) { console.warn('render2 unavailable', e); R2.ok = false; }
+}
+function r2CasterBinds() {
+  for (let c = 0; c < 2; c++) {
+    const b = R2.bL[c] = {};
+    const mk = (pipe, extra) => pipe ? dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: R2.gL[c] } }].concat(extra || []) }) : null;
+    b.terrain = mk(R2.p.terrain); b.inst = mk(R2.p.inst); b.tube = mk(R2.p.tube); b.fol = mk(R2.p.fol); b.body = mk(R2.p.body);
+    b.skin = mk(R2.p.skin, [{ binding: 1, resource: { buffer: boneBuf } }]);
+  }
+}
+function r2PostBinds() {
+  if (!R2.post) return;
+  const E = (pipe, list) => dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: list.map((r, i) => ({ binding: i, resource: r })) });
+  const U = { buffer: R2.postBuf };
+  R2.bg = {
+    fx: E(R2.post.fx, [U, R2.sceneDepth.createView()]),
+    bright: E(R2.post.bright, [U, R2.sceneRes.createView(), R2.linSmp]),
+    blurH: E(R2.post.blurH, [U, R2.bloomA.createView(), R2.linSmp]),
+    blurV: E(R2.post.blurV, [U, R2.bloomB.createView(), R2.linSmp]),
+    final: E(R2.post.final, [U, R2.sceneRes.createView(), R2.fxTex.createView(), R2.bloomA.createView(), R2.linSmp]),
+  };
+}
+
+// ---------------------------------------------------------------- per frame
+// fills the shadow part of the globals and the per-cascade light uniforms
+function r2FrameGlobals() {
+  const cfg = SHADOW_CFG[clamp(GFX.shadow | 0, 0, 3)];
+  const n = R2.ok ? cfg.n : 0;
+  if (R2.ok && r2EnsureShadow()) { makeBindGroups(); }
+  const fx = Math.cos(player.yaw), fz = Math.sin(player.yaw);
+  const night = (world.light != null ? world.light : 1) < 0.18;
+  const nn = night ? Math.min(n, 1) : n;
+  if (nn > 0) {
+    r2LightVP(0, SHADOW_R0, player.camX + fx * SHADOW_R0 * 0.45, player.camZ + fz * SHADOW_R0 * 0.45, R2.lvp[0]);
+    r2LightVP(1, SHADOW_R1, player.camX + fx * SHADOW_R1 * 0.4, player.camZ + fz * SHADOW_R1 * 0.4, R2.lvp[1]);
+  }
+  gArr.set(R2.lvp[0], 32); gArr.set(R2.lvp[1], 48);
+  gArr[64] = SHADOW_R0; gArr[65] = nn; gArr[66] = 1 / Math.max(1, R2.shadowSize); gArr[67] = night ? 0.45 : 0.82;
+  for (let c = 0; c < nn; c++) {
+    const a = R2.lightArr[c];
+    a.set(gArr);
+    a.set(R2.lvp[c], 0);
+    a[19] = 1;                                   // no near-camera foliage dissolve in the shadow pass
+    dev.queue.writeBuffer(R2.gL[c], 0, a);
+  }
+  R2.cascades = nn;
+}
+function r2ShadowPass(enc, nInst, nPlant) {
+  const n = R2.cascades || 0;
+  if (!n) return;
+  if (!R2.bL[0].fol) r2CasterBinds();
+  for (let c = 0; c < n; c++) {
+    const b = R2.bL[c];
+    const pass = enc.beginRenderPass({ colorAttachments: [], depthStencilAttachment: { view: R2.shadowViews[c], depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'store' } });
+    if (R2.p.terrain && terrVB && c === 1) {
+      pass.setPipeline(R2.p.terrain); pass.setBindGroup(0, b.terrain);
+      pass.setVertexBuffer(0, terrVB); pass.setIndexBuffer(terrIB, 'uint32'); pass.drawIndexed(terrCount);
+    }
+    if (R2.p.fol && FOL.ready && FOL.batches.length) {
+      pass.setPipeline(R2.p.fol); pass.setBindGroup(0, b.fol);
+      pass.setVertexBuffer(1, FOL.instBuf);
+      for (const bt of FOL.batches) {
+        // grass and small cover do not cast into the far cascade
+        pass.setVertexBuffer(0, bt.mesh.vb); pass.setIndexBuffer(bt.mesh.ib, 'uint32');
+        pass.drawIndexed(bt.mesh.count, bt.count, 0, 0, bt.first);
+      }
+    }
+    if (c === 0) {
+      if (R2.p.inst && (nInst || nPlant || spikeCount)) {
+        pass.setPipeline(R2.p.inst); pass.setBindGroup(0, b.inst);
+        pass.setVertexBuffer(0, sphVB); pass.setIndexBuffer(sphIB, 'uint16');
+        if (nPlant) { pass.setVertexBuffer(1, plantVB); pass.drawIndexed(sphCount, nPlant); }
+        if (nInst) { pass.setVertexBuffer(1, instVB); pass.drawIndexed(sphCount, nInst); }
+        if (spikeCount) { pass.setVertexBuffer(0, coneVB); pass.setIndexBuffer(coneIB, 'uint16'); pass.setVertexBuffer(1, spikeVB); pass.drawIndexed(coneCount, spikeCount); }
+      }
+      if (R2.p.tube && tubeN) {
+        dev.queue.writeBuffer(tubeInstVB, 0, tubeData, 0, tubeN * INST_FLOATS);
+        pass.setPipeline(R2.p.tube); pass.setBindGroup(0, b.tube);
+        pass.setVertexBuffer(0, tubeVB); pass.setIndexBuffer(tubeIB, 'uint16');
+        pass.setVertexBuffer(1, tubeInstVB); pass.drawIndexed(tubeMeshCount, tubeN);
+      }
+      if (R2.p.body && bodyBatches.length) {
+        pass.setPipeline(R2.p.body); pass.setBindGroup(0, b.body);
+        pass.setVertexBuffer(1, bodyInstVB);
+        for (const bt of bodyBatches) { pass.setVertexBuffer(0, bt.mesh.vb); pass.setIndexBuffer(bt.mesh.ib, 'uint32'); pass.drawIndexed(bt.mesh.count, bt.count, 0, 0, bt.first); }
+      }
+      if (R2.p.skin && skinDraws.length && boneBuf) {
+        dev.queue.writeBuffer(boneBuf, 0, boneData, 0, boneN * 16);
+        const nn = Math.min(skinDraws.length, MAX_SKIN_INST);
+        for (let i = 0; i < nn; i++) skinInstData.set(skinDraws[i].inst, i * BINST_FLOATS);
+        dev.queue.writeBuffer(skinInstVB, 0, skinInstData, 0, nn * BINST_FLOATS);
+        pass.setPipeline(R2.p.skin); pass.setBindGroup(0, b.skin);
+        pass.setVertexBuffer(1, skinInstVB);
+        for (let i = 0; i < nn; i++) { const d = skinDraws[i]; pass.setVertexBuffer(0, d.mesh.vb); pass.setIndexBuffer(d.mesh.ib, 'uint32'); pass.drawIndexed(d.mesh.count, 1, 0, 0, i); }
+      }
+    }
+    pass.end();
+  }
+}
+function r2PostPass(enc, fog) {
+  const A = R2.postArr;
+  // sun on screen
+  const L = [gArr[20], gArr[21], gArr[22]];
+  const sx = player.camX + L[0] * 9000, sy = player.camY + L[1] * 9000, sz = player.camZ + L[2] * 9000;
+  const m = vpM;
+  const cx = m[0] * sx + m[4] * sy + m[8] * sz + m[12], cy = m[1] * sx + m[5] * sy + m[9] * sz + m[13], cw = m[3] * sx + m[7] * sy + m[11] * sz + m[15];
+  let su = 0.5, sv = -1, vis = 0;
+  if (cw > 0) { su = cx / cw * 0.5 + 0.5; sv = 0.5 - cy / cw * 0.5; vis = clamp(1.4 - Math.max(Math.abs(su - 0.5), Math.abs(sv - 0.5)) * 1.3, 0, 1); }
+  const day = gArr[30];
+  A[0] = su; A[1] = sv; A[2] = vis; A[3] = GFX.rays ? 0.55 * day : 0;
+  A[4] = GFX.ao ? 0.55 : 0; A[5] = GFX.bloom ? 0.55 : 0; A[6] = clamp(0.3 + (1 - r2SceneScale()) * 1.1, 0.25, 0.85); A[7] = (performance.now() % 997) / 997;
+  A[8] = NEAR; A[9] = FAR; A[10] = day; A[11] = 0.55;
+  A[12] = 1.0 * (0.6 + 0.4 * fog[0]); A[13] = 0.92 * (0.6 + 0.4 * fog[1]); A[14] = 0.72 * (0.6 + 0.4 * fog[2]); A[15] = 1;
+  dev.queue.writeBuffer(R2.postBuf, 0, A);
+  const run = (pipe, bg, view) => {
+    const p = enc.beginRenderPass({ colorAttachments: [{ view, loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 1 } }] });
+    p.setPipeline(pipe); p.setBindGroup(0, bg); p.draw(3); p.end();
+  };
+  run(R2.post.fx, R2.bg.fx, R2.fxTex.createView());
+  if (GFX.bloom) {
+    run(R2.post.bright, R2.bg.bright, R2.bloomA.createView());
+    run(R2.post.blurH, R2.bg.blurH, R2.bloomB.createView());
+    run(R2.post.blurV, R2.bg.blurV, R2.bloomA.createView());
+  }
+  run(R2.post.final, R2.bg.final, ctx.getCurrentTexture().createView());
+}
+// automatic resolution: keep frames under ~20 ms by trading render scale
+function r2AutoRes() {
+  const now = performance.now();
+  if (R2.lastT) {
+    const ft = Math.min(100, now - R2.lastT);
+    R2.ftAvg += (ft - R2.ftAvg) * 0.05;
+    R2.fps = 1000 / Math.max(1, R2.ftAvg);
+  }
+  R2.lastT = now;
+  if (!R2.auto || now - R2.lastChange < 1500) return;
+  if (R2.ftAvg > 21 && R2.dyn > 0.6) { R2.dyn = Math.max(0.6, R2.dyn - 0.08); R2.lastChange = now; }
+  else if (R2.ftAvg < 15.5 && R2.dyn < 1) { R2.dyn = Math.min(1, R2.dyn + 0.05); R2.lastChange = now; }
+}
+function r2Hud() {
+  const el = document.getElementById('gfxfps');
+  if (el) el.textContent = Math.round(R2.fps) + ' fps · ' + Math.round(r2SceneScale() * 100) + '%';
+}
+
 function stepSim(dt) {
   if (player.atkCD > 0) player.atkCD = Math.max(0, player.atkCD - dt);
   fightTick(dt);
@@ -11415,7 +11897,7 @@ function ensureDepth() {
 }
 function resize() {
   const lim = dev && dev.limits ? dev.limits.maxTextureDimension2D : 8192;
-  let dpr = Math.min(window.devicePixelRatio || 1, 2) * GFX.res;
+  let dpr = Math.min(window.devicePixelRatio || 1, 2) * (R2.ok ? 1 : GFX.res);
   dpr = Math.min(dpr, lim / Math.max(1, canvas.clientWidth), lim / Math.max(1, canvas.clientHeight), 3);
   const w = Math.max(1, Math.floor(canvas.clientWidth * dpr));
   const h = Math.max(1, Math.floor(canvas.clientHeight * dpr));
@@ -11434,6 +11916,8 @@ function renderFrame(t) {
   const tz = player.camZ + Math.sin(player.yaw) * cp;
   m4look(player.camX, player.camY, player.camZ, tx, ty, tz, viewM);
   m4mul(projM, viewM, vpM);
+  r2Frustum(vpM);
+  r2AutoRes();
 
   // sky/fog colour tracks the day/night cycle the core already simulates
   // Under the canopy the air is green and close; at night it is nearly black
@@ -11454,6 +11938,7 @@ function renderFrame(t) {
   const sunA = (world.bt || 0) * 0.4;
   gArr[20] = Math.cos(sunA) * 0.45; gArr[21] = 0.72 + 0.28 * lt; gArr[22] = Math.sin(sunA) * 0.45; gArr[23] = 0;
   gArr[24] = fog[0]; gArr[25] = fog[1]; gArr[26] = fog[2]; gArr[27] = 1;
+  r2FrameGlobals();
   gArr[28] = t; gArr[29] = FOG_DENSITY * GFX.fog * (1 + 2.4 * can) * (1 + 3.2 * (1 - lt2)); gArr[30] = (0.1 + 0.9 * lt2) * (1 - 0.22 * can); gArr[31] = terrain.LV.water * HEIGHT_SCALE;
   dev.queue.writeBuffer(gBuf, 0, gArr);
 
@@ -11462,10 +11947,12 @@ function renderFrame(t) {
   folUpdate(player.camX, player.camY, player.camZ, player.yaw);
 
   const enc = dev.createCommandEncoder();
+  const R2on = R2.ok;
+  if (R2on) { r2EnsureScene(); r2ShadowPass(enc, nInst, nPlant); }
   const pass = enc.beginRenderPass({
-    colorAttachments: [{ view: msaaTex.createView(), resolveTarget: ctx.getCurrentTexture().createView(),
+    colorAttachments: [{ view: (R2on ? R2.sceneMs : msaaTex).createView(), resolveTarget: (R2on ? R2.sceneRes : ctx.getCurrentTexture()).createView(),
       clearValue: { r: fog[0], g: fog[1], b: fog[2], a: 1 }, loadOp: 'clear', storeOp: 'discard' }],
-    depthStencilAttachment: { view: depthTex.createView(), depthClearValue: 1.0,
+    depthStencilAttachment: { view: (R2on ? R2.sceneDepth : depthTex).createView(), depthClearValue: 1.0,
       depthLoadOp: 'clear', depthStoreOp: 'store' },
   });
   pass.setPipeline(terrainPipe); pass.setBindGroup(0, bindG.terrain);
@@ -11497,6 +11984,7 @@ function renderFrame(t) {
   pass.setPipeline(waterPipe); pass.setBindGroup(0, bindG.water);
   pass.setVertexBuffer(0, waterVB); pass.draw(6);
   pass.end();
+  if (R2on) r2PostPass(enc, fog);
   dev.queue.submit([enc.finish()]);
   return { inst: nInst, plants: nPlant };
 }
@@ -11506,6 +11994,7 @@ let hudAcc = 0;
 function updateHUD() {
   edHudLine();
   gfxPlace();
+  r2Hud();
   const c = player.c;
   if (c && c.alive) {
     const p = c.ph;
@@ -12163,7 +12652,7 @@ function edSetGlobals(eye, target, aspect, fov, fogDen, t) {
   gArr[16] = eye[0]; gArr[17] = eye[1]; gArr[18] = eye[2]; gArr[19] = 1;   // w=1: editor, no near-camera foliage fade
   gArr[20] = 0.42; gArr[21] = 0.82; gArr[22] = 0.38; gArr[23] = 0;
   gArr[24] = 0.52; gArr[25] = 0.60; gArr[26] = 0.52; gArr[27] = 1;
-  gArr[28] = t; gArr[29] = fogDen; gArr[30] = 1; gArr[31] = -1000;
+  gArr[28] = t; gArr[29] = fogDen; gArr[30] = 1; gArr[31] = -1000; gArr[65] = 0;
   dev.queue.writeBuffer(gBuf, 0, gArr);
 }
 function edResetInstances() {
@@ -13828,6 +14317,7 @@ window.__G3D = {
   HEIGHT_SCALE, WORLD_W, WORLD_H,
   begin: () => { started = true; const st = document.getElementById('start'); if (st) st.style.display = 'none'; }, showDeath: (c) => showDeath(c),
   get REMAINS() { return REMAINS; }, remainsAdd: (c) => remainsAdd(c),
+  get R2() { return R2; },
   get GFX() { return GFX; }, gfxSet: (n) => gfxSet(n), feedGrowth: (c, m) => feedGrowth(c, m),
   spat: { stepInterval, stepSurface, proxDraw, sndPlacer: (p) => SND.ctx && sndPlacer(SND.ctx, p, SND.master), get ok() { return SPAT.ok; } },
   get FIGHT() { return FIGHT; }, get simT() { return simT; },
