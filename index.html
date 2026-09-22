@@ -264,6 +264,9 @@
   .edtile .edph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 11px; color: #9fc6d6; padding: 6px; }
   .edtile.locked img { filter: grayscale(.7) brightness(.82) contrast(1.05); opacity: .9; }
   .edtile.locked { cursor: not-allowed; }
+  .edgnote{font-size:11px;color:#7fb9c9;margin:-2px 0 6px}
+  .edcname2{position:absolute;left:0;right:0;bottom:0;padding:3px 4px;font-size:10.5px;text-align:center;
+    color:#dff4f0;background:linear-gradient(180deg,rgba(6,20,32,0),rgba(6,20,32,.85))}
   .edlock { position: absolute; left: 6px; top: 6px; display: flex; align-items: center; justify-content: center;
     color: #e8f3f8; background: rgba(6,18,24,.62); border-radius: 7px; padding: 3px; }
   .edlock svg { width: 15px; height: 15px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
@@ -1247,6 +1250,23 @@
     // hard wall, above it the sea floor is an untapped food supply.
     ph.canSwim = finEff >= 0.8 ? 1 : 0;
     ph.aquaticForm = aquaticForm ? 1 : 0;
+    // Breathing. A body with no legs and real fins is a water animal: it takes
+    // oxygen from the water and cannot breathe air. Anything that walks
+    // breathes air and drowns with its head under. Gills and lungs are parts,
+    // so a body can grow either, and one with both is amphibious.
+    // This is deliberately a shape test, not a strength test: a calf must be
+    // the same kind of animal as its mother, and finEff grows with the body.
+    ph.waterBreath = (designed && genome.dx)
+      ? (((genome.dx.legs || 0) === 0 && (genome.dx.arms || 0) === 0 && stat.fins > 0) ? 1 : 0)
+      : ((aquaticForm && stat.legs <= 0.05 && stat.fins > 0.15) ? 1 : 0);
+    ph.airBreath = ph.waterBreath ? 0 : 1;
+    // grown gills or lungs override the body plan; a body with both is amphibious
+    if (designed && genome.dx) {
+      if (genome.dx.gill) ph.waterBreath = 1;
+      if (genome.dx.lung) ph.airBreath = 1;
+    }
+    if (!ph.waterBreath && !ph.airBreath) ph.airBreath = 1;
+    if (ph.waterBreath) ph.canSwim = 1;   // a water animal swims at any age, calf or adult
     ph.finEff = finEff; ph.wingEff = wingEff;
     ph.carnivory = clamp(stat.mouthCarn / 1.2, 0, 1);
     // v8.4: scavenger is carnivory's counterpart for the scav mouth mode --
@@ -1797,6 +1817,18 @@
         if (canFly) return 0;
         return terrain.height(x, y) >= LV.rock ? 0.35 : 0;
       },
+      // nearest water deep enough for a gill-breather (spiral search)
+      nearestDeep(x, y) {
+        if (terrain.isDeep(x, y)) return null;
+        for (let r = 60; r <= 6000; r *= 1.5) {
+          for (let a = 0; a < 16; a++) {
+            const ang = (a / 16) * TAU;
+            const nx = clamp(x + Math.cos(ang) * r, 1, w - 1), ny = clamp(y + Math.sin(ang) * r, 1, h - 1);
+            if (terrain.isDeep(nx, ny)) return [nx, ny];
+          }
+        }
+        return null;
+      },
       // nearest point that a non-swimmer can legally occupy (spiral search)
       nearestShallow(x, y, canSwim) {
         if (canSwim || !terrain.isDeep(x, y)) return null;
@@ -2174,6 +2206,10 @@
       // founders have no fins: never strand one in open water
       if (terrain.isDeep(x, y)) { const spot = terrain.nearestShallow(x, y, false); if (spot) { x = spot[0]; y = spot[1]; } }
       const founder = makeCreature(g, x, y, 30 + rng() * 10);
+      if (!founder.ph.airBreath) {                       // a water species belongs in the water
+        const wet = terrain.nearestDeep(founder.x, founder.y);
+        if (wet) { founder.x = wet[0]; founder.y = wet[1]; }
+      }
       founder.pnode = pedNode(world, world.ped.root, founder);
       world.creatures.push(founder);
       checkFirsts(world, founder);
@@ -2560,7 +2596,7 @@
       // Safety net: a finless creature that has somehow ended up past the
       // drop-off (edge case in any push/spawn path) is returned to solid ground
       // instead of starving in place. Rare, so the spiral search is affordable.
-      if (!p.canSwim && !p.canFly && terrain.isDeep(c.x, c.y)) {
+      if (!p.canSwim && !p.canFly && p.airBreath && terrain.isDeep(c.x, c.y)) {
         const spot = terrain.nearestShallow(c.x, c.y, false);
         if (spot) { c.x = spot[0]; c.y = spot[1]; }
       }
@@ -2568,6 +2604,7 @@
       // a target is only worth pursuing if the movement rule permits reaching it
       const reachable = (tx, ty) => {
         if (p.canFly) return true;
+        if (!p.airBreath && c !== world.playerRef && !terrain.isWater(tx, ty)) return false;   // gills only: never leave the water
         if (terrain.isDeep(tx, ty)) return !!p.canSwim;     // swimmers only
         if (terrain.isWater(tx, ty)) return true;           // wadeable shallows
         return terrain.level(tx, ty) - myLevel <= terrain.maxStep;
@@ -2828,6 +2865,7 @@
       if (!p.canFly) {
         const lv0 = terrain.level(c.x, c.y);
         const blocked = (bx, by) => {
+          if (!p.airBreath && c !== world.playerRef && !terrain.isWater(bx, by)) return true;   // gills only: the shoreline is a wall
           if (terrain.isDeep(bx, by)) return !p.canSwim;
           if (terrain.isWater(bx, by)) {
             // a non-swimmer will not wade in over its head (but may wade back out)
@@ -2869,13 +2907,15 @@
       c._inHazard = inHazard ? 1 : 0;   // fed back into next step's senses
       // drowning: a body without fins whose head is under water loses energy
       // fast (a full reserve lasts about eight seconds)
-      if (!p.canSwim && !p.canFly && terrain.isWater(c.x, c.y) && waterDepth(terrain, c.x, c.y) > headHeight(world, p) - (c.jumpLv || 0) * 8) {
-        c.energy -= p.storage * 0.12 * dt; c._drown = true;
-      } else c._drown = false;
+      const underNow = !p.canFly && terrain.isWater(c.x, c.y) &&
+        waterDepth(terrain, c.x, c.y) > headHeight(world, p) - (c.jumpLv || 0) * 8;
+      const cantBreathe = underNow ? !p.waterBreath : !p.airBreath;
+      if (cantBreathe) { c.energy -= p.storage * 0.12 * dt; c._drown = underNow ? 1 : 2; }
+      else c._drown = 0;
 
       if (c.energy <= 0 || c.age >= c.maxAge) {
         c.alive = false;
-        c.deathCause = c.age >= c.maxAge ? 'oldage' : c._drown ? 'drowned' : (inHazard ? 'toxin' : 'starvation');
+        c.deathCause = c.age >= c.maxAge ? 'oldage' : c._drown === 1 ? 'drowned' : c._drown === 2 ? 'suffocated' : (inHazard ? 'toxin' : 'starvation');
         recordDeath(world, c); dropCarrion(world, c);
         continue;
       }
@@ -3037,7 +3077,10 @@
     const baby = makeCreature(genome, x, y, energy);
     // a finless calf born to swimming parents would otherwise be stranded in
     // open water with no way out: relocate it to the nearest legal ground
-    if (terrain && !baby.ph.canSwim && !baby.ph.canFly) {
+    if (terrain && !baby.ph.airBreath) {
+      const wet = terrain.nearestDeep(x, y);
+      if (wet) { baby.x = wet[0]; baby.y = wet[1]; }
+    } else if (terrain && !baby.ph.canSwim && !baby.ph.canFly) {
       const spot = terrain.nearestShallow(x, y, false);
       if (spot) { baby.x = spot[0]; baby.y = spot[1]; }
     }
@@ -3248,7 +3291,8 @@
     d_antenna:  { t: 'EYE', w: 0.25, cost: 1, sense: 10 },
     d_crest:    { t: 'ORN', w: 0.3, cost: 1 },
     d_frill:    { t: 'ORN', w: 0.5, cost: 1, def: 2 },
-    d_gills:    { t: 'FIN', w: 0.4, cost: 1 },
+    d_gills:    { t: 'FIN', w: 0.4, cost: 1, gill: 1 },
+    d_lungs:    { t: 'GUT', w: 0.5, cost: 2, lung: 1 },
     d_gland:    { t: 'GLAND', w: 0.8, cost: 2 },
   };
   // Parts that must never be duplicated: placing a second one replaces the first.
@@ -3556,12 +3600,13 @@
       const key = type + '|' + (mode || '');
       (groups[key] || (groups[key] = { type, mode: mode || null, sizes: [] })).sizes.push(size);
     };
-    const dx = { atk: 0, def: 0, reach: 0, sense: 0, spd: 0, fin: 0, grab: 0, sweep: 0, claw: 0, legs: 0, arms: 0, spring: 0 };
+    const dx = { atk: 0, def: 0, reach: 0, sense: 0, spd: 0, fin: 0, grab: 0, sweep: 0, claw: 0, legs: 0, arms: 0, spring: 0, gill: 0, lung: 0 };
     const extra = (s, scale) => {
       if (!s) return;
       dx.atk += (s.atk || 0) * scale; dx.def += (s.def || 0) * scale; dx.reach += (s.reach || 0) * scale;
       dx.sense += (s.sense || 0) * scale; dx.fin += (s.fin || 0) * scale; dx.grab += (s.grab || 0);
       dx.sweep += (s.sweep || 0);
+      dx.gill += (s.gill || 0); dx.lung += (s.lung || 0);
     };
     let mouth = null;
     for (const pt of d.parts || []) {
@@ -7112,7 +7157,7 @@ const VIS = {
     }
     g.ball(p[0], p[1], p[2], 0.2, colMul(c, 0.5));
   } },
-  m_jaws: { name: 'jaws', cat: 'mouth', size: 0.36, col: 'base', draw(g, c, e) {
+  m_jaws: { name: 'jaws', cat: 'mouth', size: 0.5, col: 'base', draw(g, c, e) {
     const o = 0.1 + e.chomp * 0.22;
     g.sp(-0.05, 0.3, 0, 0, 1, 0, 0.36 + o, 0.55, 0.72, MAW);
     g.sp(0.32 + o * 0.5, 0.38, 0, 0.2, 1, 0, 0.32, 0.68, 0.86, c);
@@ -7127,7 +7172,7 @@ const VIS = {
       g.cn(-0.28 - o * 0.5, y, z, 1, 0.1, 0, 0.07, 0.26, IVORY);
     }
   } },
-  m_maw: { name: 'fanged maw', cat: 'mouth', size: 0.42, col: 'base', draw(g, c, e) {
+  m_maw: { name: 'fanged maw', cat: 'mouth', size: 0.56, col: 'base', draw(g, c, e) {
     const o = 0.18 + e.chomp * 0.3;
     g.sp(-0.05, 0.32, 0, 0, 1, 0, 0.42 + o, 0.6, 0.95, MAW);
     g.sp(0.4 + o * 0.5, 0.4, 0, 0.25, 1, 0, 0.34, 0.74, 1.05, c);
@@ -7137,10 +7182,10 @@ const VIS = {
     for (let i = 0; i < 6; i++) g.cn(-0.34 - o * 0.5, 0.6, (i - 2.5) * 0.2, 1, 0.1, 0, 0.065, 0.3, IVORY);
     for (const s of [1, -1]) g.cn(-0.34 - o * 0.5, 0.62, s * 0.62, 1, 0.2, 0, 0.1, 0.5, IVORY);
   } },
-  m_rex: { name: 'crushing jaw', cat: 'mouth', size: 0.5, col: 'base', use: 'a deep bone-cracking bite: the heaviest damage of any mouth, and the most genome space', draw(g, c, e) { dinoJawHard(g, c, e, jawShape('m_rex')); } },
-  m_spino: { name: 'fishing jaw', cat: 'mouth', size: 0.44, col: 'base', use: 'long crocodile jaws full of conical teeth: extra reach, good in water', draw(g, c, e) { dinoJawHard(g, c, e, jawShape('m_spino')); } },
-  m_short: { name: 'short muzzle', cat: 'mouth', size: 0.42, col: 'base', use: 'a short deep bulldog muzzle: fast, strong bites at close range', draw(g, c, e) { dinoJawHard(g, c, e, jawShape('m_short')); } },
-  m_duck: { name: 'duck bill', cat: 'mouth', size: 0.44, col: 'base', use: 'a broad beak with grinding rows behind it: strips plants fast and reaches further', draw(g, c, e) { dinoJawHard(g, c, e, jawShape('m_duck')); } },
+  m_rex: { name: 'crushing jaw', cat: 'mouth', size: 0.74, col: 'base', use: 'a deep bone-cracking bite: the heaviest damage of any mouth, and the most genome space', draw(g, c, e) { dinoJawHard(g, c, e, jawShape('m_rex')); } },
+  m_spino: { name: 'fishing jaw', cat: 'mouth', size: 0.62, col: 'base', use: 'long crocodile jaws full of conical teeth: extra reach, good in water', draw(g, c, e) { dinoJawHard(g, c, e, jawShape('m_spino')); } },
+  m_short: { name: 'short muzzle', cat: 'mouth', size: 0.6, col: 'base', use: 'a short deep bulldog muzzle: fast, strong bites at close range', draw(g, c, e) { dinoJawHard(g, c, e, jawShape('m_short')); } },
+  m_duck: { name: 'duck bill', cat: 'mouth', size: 0.64, col: 'base', use: 'a broad beak with grinding rows behind it: strips plants fast and reaches further', draw(g, c, e) { dinoJawHard(g, c, e, jawShape('m_duck')); } },
   m_hook: { name: 'hooked beak', cat: 'mouth', size: 0.36, col: [0.36, 0.30, 0.26], draw(g, c) {
     g.sp(0, 0.1, 0, 0, 1, 0, 0.6, 0.4, 0.62, colMul(c, 1.2));
     let p = [0.2, 0.1, 0], d = [0, 1, 0];
@@ -7457,12 +7502,19 @@ const VIS = {
     for (let i = 0; i < 9; i++) { angs.push(-1.35 + i * 0.3375); lens.push(1.1 + 0.15 * Math.cos(i * 0.8)); }
     drawFan(g, [0, 1, 0], S2, angs, lens, c, e.detail, 0.05, 0.05, e.t + e.seed);
   } },
-  d_gills: { name: 'gills', cat: 'details', size: 0.26, col: [0.78, 0.30, 0.34], draw(g, c, e) {
+  d_gills: { name: 'gills', cat: 'details', size: 0.26, col: [0.78, 0.30, 0.34], use: 'breathe under water: no drowning, ever', draw(g, c, e) {
     for (let i = 0; i < 3; i++) {
       const z = (i - 1) * 0.42;
       g.sp(0, 0.06, z, 0, 1, 0, 0.72, 0.12, 0.1, colMul(c, 0.45), 1, 0, 0);
       g.sp(0.05, 0.14, z - 0.1, 0.1, 1, -0.4, 0.66, 0.1, 0.16, e.base, 1, 0, 0);
     }
+  } },
+  d_lungs: { name: 'lungs', cat: 'details', size: 0.3, col: 'base', use: 'breathe air: a water animal can come ashore', draw(g, c, e) {
+    const br = 1 + Math.sin(e.t * 1.6 + e.seed) * 0.06;          // the chest lifts as it breathes
+    g.sp(0, 0.16, 0, 0, 1, 0, 0.92 * br, 0.34 * br, 0.86 * br, colMul(c, 0.95));
+    g.sp(0, 0.34, 0, 0, 1, 0, 0.42, 0.22, 0.36, colMul(c, 0.8));  // the blowhole mound
+    g.sp(0, 0.46, 0, 0, 1, 0, 0.2, 0.08, 0.1, BLACKP);            // the hole itself
+    for (const s2 of [1, -1]) g.sp(0, 0.2, s2 * 0.52, 0, 1, 0, 0.5, 0.12, 0.12, colMul(c, 0.7));   // rib swell
   } },
   d_gland: { name: 'toxin gland', cat: 'details', size: 0.26, col: [0.62, 0.22, 0.78], draw(g, c, e) {
     const k = 1 + Math.sin(e.t * 2.5 + e.seed) * 0.05;
@@ -7479,8 +7531,11 @@ const VIS = {
 // dark throat. One builder drives every mouth: a deep crushing jaw, a long
 // fish-catching jaw, a short deep muzzle, a duck bill, and the older ones.
 //
-// Local frame: x forward (snout), y up, z across. The part is scaled by its
-// VIS size, so these numbers are relative to the head.
+// Authoring frame: x forward (snout), y up, z across, which is how a skull is
+// natural to write down. The engine's part frame is different: +y points out of
+// the face and +x is up. jawG/jawF swap those two axes on the way out, which is
+// a mirror across the snout's midline and so invisible on a symmetric jaw. A
+// rotation about z reverses sign under that mirror, hence -open below.
 // =====================================================================
 // S: len (snout length), deep (jaw depth), wide (half width), teeth (pairs),
 // tooth (tooth length), fang (front fang multiplier), beak (bony beak tip),
@@ -7500,9 +7555,27 @@ function jawProfile(S, u) {
   const taper = S.croc ? 0.85 - 0.35 * u * u : S.beak ? 0.9 - 0.15 * u + 0.5 * Math.pow(u, 6) : 1 - 0.55 * u * u;
   return { w: S.wide * taper, d: S.deep * (S.croc ? 0.9 - 0.3 * u : 1 - 0.45 * u * u) };
 }
+// x forward, y up  ->  engine: y forward, x up
+function jawG(g) {
+  return {
+    sp: (x, y, z, nx, ny, nz, rx, ry, rz, col, ux, uy, uz) =>
+      (ux === undefined ? g.sp(y, x, z, ny, nx, nz, ry, rx, rz, col) : g.sp(y, x, z, ny, nx, nz, ry, rx, rz, col, uy, ux, uz)),
+    cn: (x, y, z, dx, dy, dz, r, len, col) => g.cn(y, x, z, dy, dx, dz, r, len, col),
+    ball: (x, y, z, r, col) => g.ball(y, x, z, r, col),
+  };
+}
+function jawF(F) {
+  return {
+    e: (x, y, z, ax, ay, az, hx, hy, hz, rx, ry, rz, k, col) =>
+      F.e(y, x, z, ay, ax, az, hy, hx, hz, ry, rx, rz, k, col),
+    jaw: () => F.jaw(),
+    main: () => F.main(),
+  };
+}
 // the skin/flesh half of a jaw: the muzzle above, the mandible below (F.jaw()
 // marks the pieces that ride the jaw bone, so they swing when it opens)
-function dinoJawFlesh(F, S) {
+function dinoJawFlesh(F0, S) {
+  const F = jawF(F0);
   const N = 5;
   for (let i = 0; i <= N; i++) {
     const u = i / N, x = -0.35 + u * (S.len + 0.35);
@@ -7522,9 +7595,10 @@ function dinoJawFlesh(F, S) {
   F.main();
 }
 // the hard half: teeth, gums, tongue, throat, beak and horn ridges
-function dinoJawHard(g, c, e, S) {
+function dinoJawHard(g0, c, e, S) {
   const open = (e.jaw || 0) * (S.gape || 1);
-  const j = g.rotated(0, 0, 1, open);                  // the mandible swings about the hinge
+  const g = jawG(g0);
+  const j = jawG(g0.rotated(0, 0, 1, -open));          // the mandible swings about the hinge
   const gum = colMul(c, 0.55), bone = colMul(c, 0.9);
   // palette icon: in game the muzzle flesh comes from the mesh builder, so the
   // icon has to grow its own or it reads as a floating set of teeth
@@ -7632,6 +7706,16 @@ function drawEye(g, c, e, k, style) {
     g.sp(q[0], q[1], q[2], up[0], up[1], up[2], R * 0.78, R * 0.07, R * 0.5, colMul(lid, 0.45), f[0], f[1], f[2]);
   } else if (shut) g.sp(0, cy, 0, f[0], f[1], f[2], R * 1.06, R * 1.06, R * 1.06, lid, up[0], up[1], up[2]);
 }
+// The body shapes, grouped by where they live. Sea shapes have no legs: they
+// breathe water and cannot leave it until they take lungs or legs from a kill.
+const PLAN_NAMES = ['blob', 'quadruped', 'biped', 'serpent', 'crawler', 'glider', 'fish', 'tank', 'runner', 'grazer',
+                    'theropod', 'raptor', 'sauropod', 'horned', 'armoured', 'plated', 'duckbill', 'sail-back',
+                    'pterosaur', 'shark', 'whale', 'plesiosaur'];
+const PLAN_GROUPS = [
+  { label: 'land', note: 'walks and runs. breathes air.', plans: [1, 2, 8, 9, 0, 3, 4, 10, 11, 12, 13, 14, 15, 16, 17] },
+  { label: 'air', note: 'wings: flight once they beat your weight.', plans: [5, 7, 18] },
+  { label: 'sea', note: 'no legs: breathes water, starts in the sea and cannot come ashore without lungs.', plans: [6, 19, 20, 21] },
+];
 const VIS_CATS = [
   { id: 'body', label: 'body shape', hint: 'the skeleton everything else hangs on' },
   { id: 'shape', label: 'proportions', hint: 'stretch the body, neck and tail' },
@@ -7648,7 +7732,9 @@ const VIS_CATS = [
 // Nothing is unlocked at the start: every part is earned by killing an animal
 // that has one. Your current body's own parts stay usable while you edit it.
 const STARTER_ITEMS = [];
+let GREY_THUMB = null;     // body-shape tiles: one flat grey, whatever the part says
 function itemColor(id, c, dcol) {
+  if (GREY_THUMB) return GREY_THUMB;
   if (c) return c;
   const v = VIS[id];
   const dc = v ? v.col : 'base';
@@ -8515,6 +8601,12 @@ FLESH.d_antenna = (F) => mound(F, 0.3, 0.2);
 FLESH.d_crest = (F) => mound(F, 0.32, 0.15);
 FLESH.d_gills = (F) => { for (let i = 0; i < 3; i++) F.e(0.03, 0.05, (i - 1) * 0.42, 0, 1, 0, 1, 0, 0, 0.72, 0.16, 0.16, 0.06); };
 HARD.d_gills = (g, c) => { for (let i = 0; i < 2; i++) g.sp(0.03, 0.06, (i - 0.5) * 0.42, 0, 1, 0, 0.66, 0.08, 0.06, colMul(c, 0.4), 1, 0, 0); };
+// lungs read on a skinned body as a breathing chest and a blowhole
+FLESH.d_lungs = (F, c) => {
+  F.e(0, 0.14, 0, 0, 1, 0, 1, 0, 0, 0.9, 0.3, 0.84, 0.3, c);
+  F.e(0, 0.3, 0, 0, 1, 0, 1, 0, 0, 0.4, 0.2, 0.34, 0.2, c);
+};
+HARD.d_lungs = (g, c) => { g.sp(0, 0.4, 0, 0, 1, 0, 0.18, 0.07, 0.09, BLACKP); };
 FLESH.d_gland = (F, c) => {
   F.e(0, 0.36, 0, 0, 1, 0, 1, 0, 0, 0.66, 0.58, 0.66, 0.25, c);
   for (let i = 0; i < 3; i++) { const a = i * 2.1; F.s(Math.cos(a) * 0.5, 0.6, Math.sin(a) * 0.5, 0.14, 0.06, colMul(c, 0.7)); }
@@ -11023,6 +11115,7 @@ function fightResolveSwing(sw) {
 function fightTick(dt) {
   world.hitFilter = fightHitFilter;
   world.params.bodyScale = BODY_SCALE;
+  world.playerRef = player.c;    // the one animal allowed to make its own bad decisions
   drownFx(dt);
   world.onDeath = onWorldDeath;
   const c = player.c;
@@ -11894,7 +11987,7 @@ function showDeath(dead) {
   const el = document.getElementById('deathfx');
   if (!el) return;
   const cause = dead ? dead.deathCause : '';
-  const why = cause === 'drowned' ? 'You drowned.' : cause === 'predation' ? 'You were killed.' :
+  const why = cause === 'drowned' ? 'You drowned.' : cause === 'suffocated' ? 'You suffocated out of water.' : cause === 'predation' ? 'You were killed.' :
               cause === 'oldage' ? 'You died of old age.' : cause === 'toxin' ? 'You were poisoned.' :
               cause === 'starvation' ? 'You starved.' : '';
   const sub = el.querySelector('.sub'); if (sub) sub.textContent = why + ' Your line continues in your nearest kin.';
@@ -11925,7 +12018,9 @@ function drownFx(dt) {
     FIGHT.hurtFx = Math.min(1, FIGHT.hurtFx + dt * 1.6);
     drownMsgT -= dt;
     if (drownMsgT <= 0) {
-      drownMsgT = 2.2; toast('Drowning! You have no fins. Get your head above water.', 2000);
+      drownMsgT = 2.2;
+      toast(c._drown === 2 ? 'Suffocating! You breathe water. Get back in the sea, or grow lungs.'
+                          : 'Drowning! Get your head above water, or grow gills.', 2000);
       if (SND.ctx && SND.on) for (let k = 0; k < 4; k++) setTimeout(() => sndNoiseBurst(320 + Math.random() * 300, 6, 0.12, 0.12, 0, 0.6), k * 110);
     }
   } else drownMsgT = 0;
@@ -12676,9 +12771,26 @@ function menuPage(id) {
 function menuChoose() {
   const it = MENU.items[MENU.i];
   if (!it) return;
-  if (it.id === 'continue') { becomeDesigned(C.cloneDesign(PROG.last)); menuStart(); return; }
-  if (it.id === 'new') { const st = document.getElementById('start'); if (st) st.style.display = 'none'; openEditor('start'); return; }
+  if (it.id === 'continue') { menuFresh(() => { becomeDesigned(C.cloneDesign(PROG.last)); menuStart(); }); return; }
+  if (it.id === 'new') { menuFresh(() => { const st = document.getElementById('start'); if (st) st.style.display = 'none'; openEditor('start'); }); return; }
   menuPage(it.id);
+}
+// Build a brand new island before starting: a new game is a new world, not the
+// one that was generated while the menu was up. Runs at most once per menu.
+let menuBusy = false;
+function menuFresh(then) {
+  if (menuBusy) return;
+  menuBusy = true;
+  const big = document.getElementById('mmBig');
+  const was = big ? big.textContent : '';
+  if (big) big.textContent = 'BUILDING A WORLD';
+  REMAINS.length = 0; FIGHT.blood.length = 0; FIGHT.splatN = 0; FIGHT.splats.fill(undefined);
+  const lock = document.getElementById('seedLock'); if (lock) lock.checked = false;
+  Promise.resolve(rebuildWorld()).catch((e) => { console.warn(e); }).then(() => {
+    menuBusy = false;
+    if (big) big.textContent = was;
+    then();
+  });
 }
 function menuStart() {
   started = true;
@@ -12711,7 +12823,7 @@ function menuBind() {
     if (t.dataset.auto) { R2.auto = !R2.auto; toast('auto resolution ' + (R2.auto ? 'on' : 'off'), 1200); return; }
     if (t.dataset.snd) { sndToggle(); return; }
     if (t.dataset.wipe) { try { localStorage.removeItem(PROG_KEY); } catch (err) { /* nothing saved */ } location.reload(); return; }
-    if (t.dataset.load != null) { const s = (PROG.saved || [])[+t.dataset.load]; if (s && s.design) { becomeDesigned(C.cloneDesign(s.design)); menuStart(); } return; }
+    if (t.dataset.load != null) { const s = (PROG.saved || [])[+t.dataset.load]; if (s && s.design) menuFresh(() => { becomeDesigned(C.cloneDesign(s.design)); menuStart(); }); return; }
   });
   addEventListener('keydown', (e) => {
     if (started || ED.open || st.style.display === 'none') return;
@@ -14157,7 +14269,8 @@ async function edMakeThumbs() {
     } else if (j.plan != null) {
       const d = C.defaultDesign(j.plan);
       d.parts = (d.parts || []).filter(q => { const sim = C.ITEM_SIM[q.id]; return sim && (sim.t === 'FIN' || sim.t === 'WING'); });
-      d.col = { base: [0.62, 0.63, 0.64], coat: [0.78, 0.79, 0.80], detail: [0.45, 0.46, 0.48], pat: 0, skin: 0 };
+      d.col = { base: [0.66, 0.67, 0.68], coat: [0.66, 0.67, 0.68], detail: [0.66, 0.67, 0.68], pat: 0, skin: 0 };
+      GREY_THUMB = [0.66, 0.67, 0.68];
       const { X } = edDesignX(d, 0.6, null, { toW: (l) => [l[0], l[1], l[2]], toL: (w) => [w[0], w[1], w[2]], blink: () => 0, sync: 'now', quality: 0 });
       drawDesign(d, X);
       view = [0.62, 0.30, 0.74];
@@ -14167,6 +14280,7 @@ async function edMakeThumbs() {
       if (v.cat === 'mouth') view = [0.58, 0.26, 0.95];
       else if (v.kind === 'tip') view = [0.55, 0.45, 0.8];
     }
+    GREY_THUMB = null;
     // frame whatever was emitted
     const bb = instBounds(thumbDes ? designGeo(thumbDes) : j.plan != null ? designGeo(C.defaultDesign(j.plan)) : null);
     const c = [(bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, (bb[2] + bb[5]) / 2];
@@ -14455,9 +14569,13 @@ function edRefreshUI() {
   if (ED.tab === 'body') {
     // the body plan is chosen once per world; only a reset lets you pick another
     const planLocked = ED.mode === 'game';
-    html += '<div class="edgrid">';
-    for (let p = 0; p < C.PLANS.length; p++) html += `<div class="edtile plan${ED.des.plan === p ? ' cur' : ''}${planLocked && ED.des.plan !== p ? ' locked' : ''}" data-plan="${p}">${tileHTML('plan' + p, !planLocked || ED.des.plan === p)}</div>`;
-    html += '</div>';
+    for (const grp of PLAN_GROUPS) {
+      const list = grp.plans.filter(p => p < C.PLANS.length);
+      if (!list.length) continue;
+      html += `<div class="edpl">${grp.label}</div><div class="edgnote">${grp.note}</div><div class="edgrid">`;
+      for (const p of list) html += `<div class="edtile plan${ED.des.plan === p ? ' cur' : ''}${planLocked && ED.des.plan !== p ? ' locked' : ''}" data-plan="${p}" title="${PLAN_NAMES[p] || ''}">${tileHTML('plan' + p, !planLocked || ED.des.plan === p)}<span class="edcname2">${PLAN_NAMES[p] || ''}</span></div>`;
+      html += '</div>';
+    }
     if (planLocked) html += '<div class="edhint">your body shape is fixed for this world. reset the world to start as a different shape</div>';
     else html += '<div class="edhint">pick the skeleton: it sets your size, stance, neck and tail, and where parts can go</div>';
   } else if (ED.tab === 'shape') {
@@ -14666,7 +14784,9 @@ function edUpdateStats() {
   if (used > cap) warn.push('over genome space by ' + (used - cap) + '. remove something');
   const flyNeed = 0.32 * ph.mass;
   if ((ph.sWings || 0) > 0 && !ph.canFly) warn.push('wings carry ' + Math.round(((ph.wingEff || 0) / Math.max(0.01, flyNeed)) * 100) + '% of what flight needs' + (aqua ? ' (fins outweigh wings, so they act as fins)' : ''));
-  if ((ph.sFins || 0) > 0 && !ph.canSwim) warn.push('fins are ' + Math.round(((ph.finEff || 0) / 0.8) * 100) + '% of what deep water needs');
+  if ((ph.sFins || 0) > 0 && !ph.canSwim && ph.airBreath) warn.push('fins are ' + Math.round(((ph.finEff || 0) / 0.8) * 100) + '% of what deep water needs');
+  if (ph.waterBreath && !ph.airBreath) warn.push('water only: you start in the sea and suffocate on land. add lungs to come ashore');
+  if (ph.waterBreath && ph.airBreath) warn.push('amphibious: you breathe both water and air');
   const diet = ph.carnivory > 0.5 ? 'meat eater' : ph.scavenger > 0.5 ? 'carrion eater' : 'plant eater';
   const legs = ph.dLegs || 0, arms = ph.dArms || 0;
   const row = (label, v, ov, dec, inv) => `<div class="edst"><span>${label}</span><b>${v.toFixed(dec)}${fmtDelta(v, ov, dec, inv)}</b></div>`;
@@ -14677,6 +14797,8 @@ function edUpdateStats() {
   h += row('land speed', ph.speedLand, o && o.speedLand, 0);
   h += row('swim speed', ph.speedWater, o && o.speedWater, 0);
   h += `<div class="edst"><span>flight</span><b>${ph.canFly ? ph.speedAir.toFixed(0) : 'no'}${fmtDelta(ph.speedAir, o && o.speedAir, 0)}</b></div>`;
+  const breath = ph.waterBreath && ph.airBreath ? 'water &amp; air' : ph.waterBreath ? 'water only' : 'air only';
+  h += `<div class="edst"><span>breathes</span><b>${breath}</b></div>`;
   h += row('attack', ph.attack, o && o.attack, 1);
   h += row('defence', ph.defense, o && o.defense, 1);
   h += row('vision', ph.sense, o && o.sense, 0);
@@ -14964,6 +15086,18 @@ function closeEditor(apply) {
   updateHUD(); updateStats();
 }
 // Found a small deme of your design around you and become its newest member.
+// nearest water deep enough to swim in (spiral search, world units)
+function nearestSwimmable(x, y) {
+  if (terrain.isDeep(x, y)) return [x, y];
+  for (let r = 60; r <= 6000; r *= 1.5) {
+    for (let a = 0; a < 16; a++) {
+      const ang = (a / 16) * Math.PI * 2;
+      const nx = clamp(x + Math.cos(ang) * r, 1, WORLD_W - 1), ny = clamp(y + Math.sin(ang) * r, 1, WORLD_H - 1);
+      if (terrain.isDeep(nx, ny)) return [nx, ny];
+    }
+  }
+  return null;
+}
 function becomeDesigned(des) {
   if (!world) return;
   const rng = world.rng;
@@ -14974,8 +15108,11 @@ function becomeDesigned(des) {
   let x, y;
   if (old) { x = old.x; y = old.y; }
   else { const isl = terrain.island; x = isl ? isl.cx : WORLD_W / 2; y = isl ? isl.cy : WORLD_H / 2; }
-  if (terrain.isDeep(x, y) && !C.develop(g).canSwim) { const sp2 = terrain.nearestShallow(x, y, false); if (sp2) { x = sp2[0]; y = sp2[1]; } }
+  const phMe = C.develop(g);
+  if (!phMe.airBreath) { const wp = nearestSwimmable(x, y); if (wp) { x = wp[0]; y = wp[1]; } }
+  else if (terrain.isDeep(x, y) && !phMe.canSwim) { const sp2 = terrain.nearestShallow(x, y, false); if (sp2) { x = sp2[0]; y = sp2[1]; } }
   const me = C.makeCreature(g, x, y, 400);
+  me._isPlayer = 1;
   world.creatures.push(me);
   const KIN = 6;
   for (let i = 0; i < KIN; i++) {
@@ -14983,6 +15120,7 @@ function becomeDesigned(des) {
     const a2 = rng() * Math.PI * 2, r2 = 60 + rng() * 220;
     let kx = clamp(x + Math.cos(a2) * r2, 1, WORLD_W - 1), ky = clamp(y + Math.sin(a2) * r2, 1, WORLD_H - 1);
     if (terrain.isDeep(kx, ky)) { const sp3 = terrain.nearestShallow(kx, ky, false); if (sp3) { kx = sp3[0]; ky = sp3[1]; } }
+    if (!phMe.airBreath) { const wp3 = nearestSwimmable(kx, ky); if (wp3) { kx = wp3[0]; ky = wp3[1]; } }
     const kin = C.makeCreature(kg, kx, ky, 400);
     for (const q of kin.cellState) q.grow = 1;
     kin._growthAvg = 1;
@@ -15077,6 +15215,7 @@ const TYPE_ITEMS = {
   FIN: ['f_fin', 'f_dorsal', 'f_fluke', 'd_gills', 't_flipper'],
   WING: ['w_bat', 'w_feather', 'w_insect'],
   GLAND: ['d_gland'], TAIL: ['s_club', 'f_fluke', 'd_frill'],
+  GUT: ['d_lungs'],
   ORN: ['d_crest', 'd_frill', 'd_antenna'],
 };
 function preyItems(prey) {
@@ -15101,6 +15240,9 @@ function preyItems(prey) {
       } else if (TYPE_ITEMS[t]) ids.push(...pickN(TYPE_ITEMS[t], t === 'LEG' ? 2 : 1, t.length * 13));
     }
   }
+  // you can always take the organ it breathed with: lungs off anything that
+  // breathed air, gills off anything that breathed water
+  if (prey.ph) { if (prey.ph.airBreath) ids.push('d_lungs'); if (prey.ph.waterBreath) ids.push('d_gills'); }
   // locked ones first, then the rest; at most nine
   ids = [...new Set(ids)].filter(id => VIS[id]);
   ids.sort((a, b) => isUnlocked(a) - isUnlocked(b));

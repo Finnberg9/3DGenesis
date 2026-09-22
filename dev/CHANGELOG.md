@@ -2,6 +2,33 @@
 
 Build: `dev/3dgenesis-dev-src.tgz` unpacks to the patch pipeline. `bash build.sh` (edit its `cd` to your folder) turns `g3.v3` + `src/patch_*.py` into `g3.html` (= `index.html`) and extracts `core.js` for node tests.
 
+## 2026-09-22 (later still): Sea life, breathing, and fixes
+
+### Breathing
+- Gills and lungs decide where you can be. A body with no legs and real fins is a water animal: it breathes water, never drowns however deep it goes, and suffocates if it ends up on dry land. Anything that walks breathes air and drowns with its head under water, as before.
+- Two parts change that: **gills** (breathe water) and **lungs** (breathe air), both in the details tab. A body with both is amphibious and safe everywhere. The builder shows a "breathes" line (water only / air only / water and air) and warns you when you are water only.
+- You can always take the organ your kill breathed with: lungs from anything that breathed air, gills from anything that breathed water. That is how a shark gets ashore.
+- This is a shape test, not a strength test, so a calf is the same kind of animal as its mother and never suffocates while it is still growing. Water animals also swim at any age.
+- Water species now start, are born and are founded in the water. Wild ones will not wander onto land; you can, and you will suffocate for it, which is your choice to make.
+- Death screen says "You suffocated out of water" when that is what killed you.
+
+### Sea start
+- Choosing a sea shape (fish, shark, whale, plesiosaur) drops you in deep water, with your kin around you, and you can swim from the first second.
+
+### Body shape menu
+- Split into **land**, **air** and **sea**, each with a line saying what it means. Every shape has its name on the tile.
+- The shapes are flat grey silhouettes now, with no parts, colours, skin or eyes: you pick the skeleton, then paint it.
+
+### Jaws
+- Fixed: the jaws were built on their own axes and came out pointing straight up out of the face. They point forward now, and the mandible hinges up and down instead of rotating around the snout.
+- All the jaws are bigger, so a crushing jaw reads as a real skull on a theropod's head rather than a row of teeth sunk into it.
+
+### Menu and palette
+- NEW GAME (and CONTINUE, and loading a saved creature) now builds a brand new island with a new seed instead of dropping you into the world that was generated behind the menu.
+- The name field is free text; the forced "-saurus" is gone, though the roll button still favours it.
+- The icon strip above the palette is gone: the category bar with its arrows is the only category control, and the toolbar no longer runs underneath the palette.
+- Locked parts are readable (small lock badge in the corner) instead of blacked out, and jaw icons show their muzzle instead of floating teeth.
+
 ## 2026-09-22 (late): Prehistoric pass
 
 Twelve new body plans, real jaws, a flight model that actually flies, rearing up, a main menu, and a rebuilt builder palette.
