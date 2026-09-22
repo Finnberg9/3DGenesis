@@ -8193,6 +8193,12 @@ function drawDesign(des, X) {
       boneAff((bb + L.jaw) * 16, J, 1);
     } else if (headA) boneAff((bb + L.jaw) * 16, headA, 1);
     for (let li = L.nl; li < nlB; li++) { boneIdentity((bb + L.limb0 + 2 * li) * 16, 1); boneIdentity((bb + L.limb0 + 1 + 2 * li) * 16, 1); }
+    // lying along a slope: every bone is carried by the body's tilt
+    if (X.tilt) for (let j = 0; j < boneCount; j++) {
+      const o = (bb + j) * 16, D = boneData;
+      const M = { R: [D[o], D[o + 4], D[o + 8], D[o + 1], D[o + 5], D[o + 9], D[o + 2], D[o + 6], D[o + 10]], t: [D[o + 12], D[o + 13], D[o + 14]] };
+      boneAff(o, affMul(X.tilt, M), D[o + 15]);
+    }
     boneN += boneCount;
     const inst = new Float32Array(BINST_FLOATS);
     const q = X.toW([0, 0, 0]);
@@ -8377,22 +8383,45 @@ function drawDesignedCreature(c, t, camDist, A) {
   const p = c.ph, des = c.genome.design;
   const G = designGeo(des);
   const Rw = A.R;
-  const toW = (l) => [A.wx(l[0] * Rw, l[2] * Rw), A.bodyY + l[1] * Rw, A.wz(l[0] * Rw, l[2] * Rw)];
-  const dW = (v) => A.dirW(v[0], v[1], v[2]);
-  // world -> body space (inverse of toW; used to bring IK results back for skinning)
-  const o0 = toW([0, 0, 0]), cyw = Math.cos(A.yaw), syw = Math.sin(A.yaw);
-  const toL = (w) => {
-    const dx = w[0] - o0[0], dz = w[2] - o0[2];
-    return [(dx * cyw + dz * syw) / Rw, (w[1] - o0[1]) / Rw, (-dx * syw + dz * cyw) / Rw];
-  };
-  const isPlayer = typeof player !== 'undefined' && player && player.c === c;
-  const ranks = legRanks(G);
   const airborne = A.hover > Rw * 0.4;
   const walk = !airborne && !A.swimming;
+  // ---- lie along the ground: pitch and roll from the terrain under the body ----
+  // Sampled at the nose and rump (pitch) and both flanks (roll), eased over a
+  // fraction of a second, and switched off in the air or water.
+  const cyw = Math.cos(A.yaw), syw = Math.sin(A.yaw);
+  let tP = 0, tQ = 0;
+  if (walk) {
+    const L = Math.max(0.5, G.sk.a * 0.9) * Rw, W = Math.max(0.4, G.sk.b * 0.9) * Rw;
+    const cx0 = c.x, cz0 = c.y;
+    const hF = A.groundAt(cx0 + cyw * L, cz0 + syw * L), hB = A.groundAt(cx0 - cyw * L, cz0 - syw * L);
+    const hR = A.groundAt(cx0 - syw * W, cz0 + cyw * W), hL = A.groundAt(cx0 + syw * W, cz0 - cyw * W);
+    tP = clamp(Math.atan2(hF - hB, 2 * L), -0.6, 0.6);
+    tQ = clamp(Math.atan2(hR - hL, 2 * W), -0.35, 0.35);
+  }
+  const ke = Math.min(1, (typeof frameDt === 'number' ? frameDt : 1 / 60) * 6);
+  c._tiltP = c._tiltP == null ? tP : c._tiltP + (tP - c._tiltP) * ke;
+  c._tiltQ = c._tiltQ == null ? tQ : c._tiltQ + (tQ - c._tiltQ) * ke;
+  const cP = Math.cos(c._tiltP), sP = Math.sin(c._tiltP), cQ = Math.cos(c._tiltQ), sQ = Math.sin(c._tiltQ);
+  // tilt in body space: pitch about z (nose up), then roll about x (right side up)
+  const tilt = (v) => { const x1 = v[0] * cP - v[1] * sP, y1 = v[0] * sP + v[1] * cP; return [x1, y1 * cQ + v[2] * sQ, -y1 * sQ + v[2] * cQ]; };
+  const untilt = (v) => { const y1 = v[1] * cQ - v[2] * sQ, z = v[1] * sQ + v[2] * cQ; return [v[0] * cP + y1 * sP, -v[0] * sP + y1 * cP, z]; };
+  const toW = (l0) => { const l = tilt(l0); return [A.wx(l[0] * Rw, l[2] * Rw), A.bodyY + l[1] * Rw, A.wz(l[0] * Rw, l[2] * Rw)]; };
+  const dW = (v0) => { const v = tilt(v0); return A.dirW(v[0], v[1], v[2]); };
+  // world -> body space (inverse of toW; used to bring IK results back for skinning)
+  const o0 = toW([0, 0, 0]);
+  const toL = (w) => {
+    const dx = w[0] - o0[0], dz = w[2] - o0[2];
+    return untilt([(dx * cyw + dz * syw) / Rw, (w[1] - o0[1]) / Rw, (-dx * syw + dz * cyw) / Rw]);
+  };
+  // the same tilt as an affine for the skin's bones: R = roll * pitch (row-major)
+  const tiltAff = (Math.abs(c._tiltP) + Math.abs(c._tiltQ) > 1e-4)
+    ? { R: [cP, -sP, 0, sP * cQ, cP * cQ, sQ, -sP * sQ, -cP * sQ, cQ], t: [0, 0, 0] } : null;
+  const isPlayer = typeof player !== 'undefined' && player && player.c === c;
+  const ranks = legRanks(G);
   const rig = attackRig(G, A.anim, ((c._strikeSeq || 0) & 1) ? 1 : -1, t, c.id, toW);
   const head = rig.head, kind = rig.kind;
   const X = {
-    head,
+    head, tilt: tiltAff,
     R: Rw, t, seed: c.id * 0.37, toW, toL, yaw: A.yaw, dirW: dW,
     quality: isPlayer ? 2 : camDist < 420 ? 1 : 0, sync: false, meshFar: true, far: A.far, lod: camDist > 650 ? 2 : camDist > 420 ? 1 : 0,
     hide: deadTypes(c), gaitPhase: A.phase0, tailSwing: A.tailSwing * rig.tailMul,
