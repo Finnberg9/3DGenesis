@@ -1888,7 +1888,7 @@
   const FOREST_DENS = { forest: 0.8, marsh: 0.5, taiga: 0.6, plains: 0.09, savanna: 0.08, beach: 0.14,
                         desert: 0.03, tundra: 0.04, rock: 0.02, scree: 0, snow: 0, shallow: 0.05, deep: 0 };
   const FOREST_CELL = 64;
-  const TREE_R = [16, 9, 4, 4.5, 6, 6, 5, 5, 3];      // trunk collision radius at scale 1
+  const TREE_R = [16, 7.5, 3, 3, 5, 4, 4, 4, 2.2];     // trunk collision radius at scale 1 (bark plus root flare)
   function buildForest(terrain, w, h, density) {
     const trees = [];
     const hsh = (i, j, s) => { let v = ((i * 73856093) ^ (j * 19349663) ^ (s * 83492791)) >>> 0; v = Math.imul(v ^ (v >>> 15), 2246822519) >>> 0; v = Math.imul(v ^ (v >>> 13), 3266489917) >>> 0; return ((v ^ (v >>> 16)) >>> 0) / 4294967296; };
@@ -3835,6 +3835,7 @@
 
   const API = {
     ...DESIGN_API,
+    pushOutOfTrees, trunkClearance,
     onHit, HURT_TIME,
     makeRNG, gauss, clamp, PART, PART_TYPES, MOUTH_MODES, SINGLETON, CAPS, IN, OUT, MAX_SEGS, MAX_RADIAL,
     O_GAIT, O_GRAB, GAIT_BOOST, GAIT_COST, GRAB_GAIN, GRAB_COST, gaitFrac, grabFrac,
@@ -8702,10 +8703,39 @@ const SFX_DATA = {"roar_epic": "T2dnUwACAAAAAAAAAAAU7stYAAAAAE4UdHEBE09wdXNIZWFk
 // R roars: smaller animals nearby scatter; big meat eaters take it as a challenge.
 // =====================================================================
 const VOX = { verb: null, verbIn: null, dry: null, shaper: null, nextAmbient: 3, nextLocal: 0, recent: 0 };
+function voxValley(ctx) {
+  // 7 s cathedral-of-trees reverb
+  const len = Math.floor(ctx.sampleRate * 7);
+  const ir = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = ir.getChannelData(ch); let lp = 0;
+    for (let i = 0; i < len; i++) {
+      const tt = i / ctx.sampleRate;
+      const n = (Math.random() * 2 - 1) * Math.exp(-tt * 0.55) * (tt < 0.08 ? tt / 0.08 : 1);
+      lp = lp * 0.72 + n * 0.28; d[i] = lp;
+    }
+  }
+  VOX.bigVerb = ctx.createConvolver(); VOX.bigVerb.buffer = ir;
+  const bg = ctx.createGain(); bg.gain.value = 0.7;
+  VOX.bigVerb.connect(bg).connect(SND.master);
+  // echoes thrown back by the hills: a darkening feedback delay, split left/right
+  VOX.echo = ctx.createGain(); VOX.echo.gain.value = 1;
+  const mk = (time, pan) => {
+    const dl = ctx.createDelay(3); dl.delayTime.value = time;
+    const fb = ctx.createGain(); fb.gain.value = 0.42;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1600;
+    const pn = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain();
+    if (pn.pan) pn.pan.value = pan;
+    VOX.echo.connect(dl); dl.connect(lp); lp.connect(fb); fb.connect(dl);
+    lp.connect(pn); pn.connect(SND.master); lp.connect(VOX.bigVerb);
+  };
+  mk(0.62, -0.6); mk(1.07, 0.55);
+}
 function voxInit() {
   const ctx = SND.ctx; if (!ctx) return;
   sfxInit();
   if (VOX.verb) return;
+  voxValley(ctx);
   // long, dark echo: a decaying noise impulse, filtered so it sounds like trees not a hall
   const len = Math.floor(ctx.sampleRate * 3.2);
   const ir = ctx.createBuffer(2, len, ctx.sampleRate);
@@ -8763,8 +8793,9 @@ function voxOut(ctx, dist, pan, when, loud) {
   const dry = ctx.createGain(); dry.gain.value = clamp(1 - dist / 2400, 0.25, 1);
   if (pn) { lp.connect(pn); pn.connect(dry); } else lp.connect(dry);
   dry.connect(SND.master);
-  const wet = ctx.createGain(); wet.gain.value = clamp(0.15 + dist / 1800, 0.15, 0.85);
+  const wet = ctx.createGain(); wet.gain.value = clamp(0.25 + dist / 1200, 0.25, 1.1);
   lp.connect(wet); wet.connect(VOX.verb);
+  if (dist > 700 && VOX.echo) { const eg = ctx.createGain(); eg.gain.value = clamp((dist - 700) / 2000, 0, 0.6); lp.connect(eg); eg.connect(VOX.echo); }
   return g;
 }
 const vEnv = (param, t, a, hold, rel, peak) => {
@@ -8948,14 +8979,33 @@ function vGrowl(ctx, out, t, v, k, len) {
   ns.stop(t + dur + 0.1); o.stop(t + dur + 0.1); lfo.stop(t + dur + 0.1);
 }
 function vSnarl(ctx, out, t, v, k) { vGrowl(ctx, out, t, v, k, 0.6); vScreech(ctx, out, t + 0.35, Object.assign({}, v, { pitch: v.pitch * 0.45 }), k * 0.7); }
+// A snake's hiss is an "sssss": bright white noise with almost nothing below
+// 4 kHz, a sibilant peak around 6-8 kHz, a sharp onset and a slight flutter as
+// the air is pushed out in pulses. (The shared noise buffer is dark and
+// breathy, which sounds like "hhhh", so the hiss has its own white noise.)
+function hissNoise(ctx) {
+  if (VOX.white && VOX.white.sampleRate === ctx.sampleRate) return VOX.white;
+  const b = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+  const d = b.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  VOX.white = b; return b;
+}
 function vHiss(ctx, out, t, v, k) {
-  const dur = 0.9 + v.size * 0.8;
-  const g = ctx.createGain(); vEnv(g.gain, t, 0.06, dur * 0.6, dur * 0.35, 0.35 + 0.2 * k);
-  const ns = ctx.createBufferSource(); ns.buffer = SND.noiseBuf; ns.playbackRate.value = 1.6;
-  const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2200;
-  const pk = ctx.createBiquadFilter(); pk.type = 'peaking'; pk.frequency.value = 4800 * v.form; pk.gain.value = 8;
-  ns.connect(hp).connect(pk).connect(g).connect(out); ns.start(t, Math.random()); ns.stop(t + dur + 0.1);
-  if (v.rough > 0.5) vGrowl(ctx, out, t + 0.1, v, k * 0.5, 0.8);
+  const dur = 1.0 + v.size * 0.9;
+  const g = ctx.createGain(); vEnv(g.gain, t, 0.035, dur * 0.65, dur * 0.3, 0.3 + 0.15 * k);
+  const ns = ctx.createBufferSource(); ns.buffer = hissNoise(ctx); ns.loop = true;
+  // steep high-pass: two stages so the breathy low end is really gone
+  const hp1 = ctx.createBiquadFilter(); hp1.type = 'highpass'; hp1.frequency.value = 4200; hp1.Q.value = 0.8;
+  const hp2 = ctx.createBiquadFilter(); hp2.type = 'highpass'; hp2.frequency.value = 4200; hp2.Q.value = 0.8;
+  const sib = ctx.createBiquadFilter(); sib.type = 'peaking'; sib.frequency.value = clamp(6200 * v.form, 5200, 8800); sib.Q.value = 1.6; sib.gain.value = 12;
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 12500;
+  // flutter: the hiss wavers a little as it is forced out
+  const flut = ctx.createGain(); flut.gain.value = 0.85;
+  const lfo = ctx.createOscillator(); lfo.frequency.value = 9 + v.rough * 8; const lg = ctx.createGain(); lg.gain.value = 0.15;
+  lfo.connect(lg).connect(flut.gain);
+  ns.connect(hp1).connect(hp2).connect(sib).connect(lp).connect(flut).connect(g).connect(out);
+  ns.start(t, Math.random()); lfo.start(t);
+  ns.stop(t + dur + 0.1); lfo.stop(t + dur + 0.1);
 }
 function vClick(ctx, out, t, v, k) {
   // chitinous clatter: bursts of clicks with a resonant body
@@ -9021,6 +9071,43 @@ function voxCall(c, why, fromX, fromZ) {
     default: vRoar(ctx, out, t, v, k);
   }
 }
+// Something huge, far away: a slowed recording, dark and drowned in the valley's
+// echo, from a direction you cannot see. Sometimes another answers it.
+function voxDistant(kindHint) {
+  const ctx = SND.ctx; if (!ctx || !SFX.ready) return;
+  const t = ctx.currentTime + 0.05;
+  const r = Math.random();
+  const kind = kindHint || (r < 0.45 ? 'roar' : r < 0.65 ? 'scream' : r < 0.85 ? 'bellow' : r < 0.93 ? 'screech' : 'crash');
+  const pan = Math.random() * 1.8 - 0.9;
+  const out = ctx.createGain(); out.gain.value = 1;
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1500 + Math.random() * 1400;
+  const pn = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+  out.connect(lp);
+  const dry = ctx.createGain(); dry.gain.value = 0.35;
+  if (pn) { pn.pan.value = pan; lp.connect(pn); pn.connect(dry); } else lp.connect(dry);
+  dry.connect(SND.master);
+  const wet = ctx.createGain(); wet.gain.value = 0.9; lp.connect(wet); wet.connect(VOX.bigVerb);
+  const ec = ctx.createGain(); ec.gain.value = 0.7; lp.connect(ec); ec.connect(VOX.echo);
+  const v = { size: 1.3, form: 0.8 + Math.random() * 0.4, rough: Math.random(), pitch: 0.6, notes: 1, carn: true, flier: false, pick: (Math.random() * 1000) | 0 };
+  const loud = 0.38 + Math.random() * 0.22;   // loud but never swamping: a big recording slowed down carries a lot of energy
+  switch (kind) {
+    case 'roar': vSample(ctx, out, t, sfxPick('roar', v, 1), 0.5 + Math.random() * 0.25, v, 1, { gain: loud }); break;
+    case 'scream': vSample(ctx, out, t, sfxPick('scream', v, 1), 0.55 + Math.random() * 0.25, v, 1, { gain: loud }); break;
+    case 'bellow': vSample(ctx, out, t, sfxPick('call', v, 1), 0.42 + Math.random() * 0.15, v, 1, { gain: loud * 1.2, lp: 1400 }); break;
+    case 'screech': vSample(ctx, out, t, 'screech', 0.7 + Math.random() * 0.3, Object.assign(v, { size: 0.5 }), 1, { gain: loud * 0.7 }); break;
+    case 'crash': {
+      // a tree coming down somewhere: a crack, then a long low collapse
+      const ns = ctx.createBufferSource(); ns.buffer = SND.noiseBuf; ns.playbackRate.value = 0.45;
+      const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 500;
+      const g = ctx.createGain(); vEnv(g.gain, t + 0.25, 0.05, 0.5, 1.8, 1.4 * loud);
+      ns.connect(f).connect(g).connect(out); ns.start(t + 0.25, Math.random()); ns.stop(t + 3);
+      sndVoice((c2, o2, tt) => { const n2 = c2.createBufferSource(); n2.buffer = hissNoise(c2); const hp = c2.createBiquadFilter(); hp.type = 'bandpass'; hp.frequency.value = 2200; const g2 = c2.createGain(); g2.gain.setValueAtTime(0.25, tt); g2.gain.exponentialRampToValueAtTime(0.0001, tt + 0.12); n2.connect(hp).connect(g2).connect(o2); n2.start(tt); n2.stop(tt + 0.15); }, pan, t);
+      break;
+    }
+  }
+  // an answer from somewhere else on the island
+  if ((kind === 'roar' || kind === 'scream') && Math.random() < 0.4) setTimeout(() => voxDistant(Math.random() < 0.7 ? 'roar' : 'scream'), 2500 + Math.random() * 3500);
+}
 // Called every frame from sndTick: fights, pain and the island calling out
 function voxTick(dt) {
   const ctx = SND.ctx; if (!ctx || !SND.on || !world) return;
@@ -9042,6 +9129,13 @@ function voxTick(dt) {
       if (me && c !== me && c.ph.carnivory > 0.5 && d < 180 && (c.foe === me || c.target === me) && !c._voxWarned) { c._voxWarned = true; voxCall(c, 'threat'); }
       if (c._voxWarned && d > 300) c._voxWarned = false;
     }
+  }
+  // far beyond sight: echoing roars and noises, more of them in the dark
+  if (VOX.nextDistant == null) VOX.nextDistant = now + 6;
+  if (now > VOX.nextDistant) {
+    const dark = light < 0.4;
+    VOX.nextDistant = now + (dark ? 7 : 12) + Math.random() * (dark ? 10 : 16);
+    voxDistant();
   }
   // the island at large: someone, somewhere, is always calling. More at dusk and night.
   if (now > VOX.nextAmbient) {
@@ -9762,21 +9856,14 @@ function movePlayer(c, dt) {
       else { nx = c.x; ny = c.y; }
     }
   }
-  // Same tree-trunk solidity NPC creatures get in stepWorld (core.js) --
-  // without this you could walk straight through a trunk you can plainly see.
+  // Same tree-trunk solidity every other animal gets in stepWorld: the static
+  // forest plus any tree plants, with the body's visible half-width as clearance.
+  // Two passes so squeezing between two close trunks cannot push you into either.
   if (!p.canFly && world.pGrid) {
-    const cr = p.bodyRX || p.radius || 3;
-    let hit = null, hitD2 = Infinity, hitMinD = 0;
-    world.pGrid.around(nx, ny, (pl) => {
-      if (!pl.trunkR) return;
-      const dx = nx - pl.x, dy = ny - pl.y, d2 = dx * dx + dy * dy;
-      const minD = cr + pl.trunkR;
-      if (d2 < minD * minD && d2 < hitD2) { hitD2 = d2; hit = pl; hitMinD = minD; }
-    });
-    if (hit) {
-      let dx = nx - hit.x, dy = ny - hit.y, d = Math.sqrt(hitD2);
-      if (d < 1e-4) { dx = 1; dy = 0; d = 1; }
-      nx = hit.x + (dx / d) * hitMinD; ny = hit.y + (dy / d) * hitMinD;
+    for (let it = 0; it < 2; it++) {
+      const pushed = C.pushOutOfTrees(world.pGrid, nx, ny, C.trunkClearance(p));
+      if (!pushed) break;
+      nx = clamp(pushed[0], 1, WORLD_W - 1); ny = clamp(pushed[1], 1, WORLD_H - 1);
     }
   }
   c.x = nx; c.y = ny;
@@ -12323,7 +12410,7 @@ window.__G3D = {
   absorbFrom: (prey) => absorbPartFrom(prey),
   get ED() { return ED; }, get PROG() { return PROG; },
   openEditor: (m) => openEditor(m), closeEditor: (a) => closeEditor(a),
-  startAnim: (c, k, d) => startAnim(c, k, d), sndDbg: { voxCall: (c, w) => voxCall(c, w), roar: () => playerRoar(), get SND() { return SND; }, get SFX() { return SFX; }, voxOf: (c) => voxOf(c) }, setMove: (m) => { player.moveSel = m; },
+  startAnim: (c, k, d) => startAnim(c, k, d), sndDbg: { voxCall: (c, w) => voxCall(c, w), roar: () => playerRoar(), get SND() { return SND; }, get SFX() { return SFX; }, voxOf: (c) => voxOf(c), distant: (k) => voxDistant(k) }, setMove: (m) => { player.moveSel = m; },
   meshDbg: { designGeo, creaturePrims, meshPrims, get skinDraws() { return skinDraws.length; }, get boneN() { return boneN; }, get pool() { return meshPool ? meshPool.length : (meshPoolBroken ? -1 : 0); }, get FOL() { return FOL; } },
   edAddPart: (id, hit) => edAddPart(id, hit), edAddLimb: (id, hit) => edAddLimb(id, hit), edSetTip: (l, id) => edSetTip(l, id),
   edBodyHit: (x, y) => edBodyHit(x, y), edProject: (p) => edProject(p), edPick: (x, y) => edPick(x, y),
