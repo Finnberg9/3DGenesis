@@ -2,6 +2,12 @@
 
 Build: `dev/3dgenesis-dev-src.tgz` unpacks to the patch pipeline. `bash build.sh` (edit its `cd` to your folder) turns `g3.v3` + `src/patch_*.py` into `g3.html` (= `index.html`) and extracts `core.js` for node tests.
 
+## 2026-09-22 (night): Title and menu background
+
+- GENESIS is now the title of the screen, much larger than the menu heading under it: cast-concrete lettering built from fractal noise lit from the upper left, with grit, a displaced rough edge, and a short extrusion so it stands slightly off the page.
+- Three claw gouges rake diagonally across the word. They are cut out of the stone face, so the dark interior shows through, with torn light edges along the upper side of each cut.
+- Menu background rebuilt as a misty night swamp: a pale band of lit fog at eye level behind the trees, every rank of silhouettes washed in that fog so the far ones dissolve into it, five drifting ribbons of ground mist, a black foreground and a heavy vignette.
+
 ## 2026-09-22 (night): Diving, and finer parts
 
 ### Diving
