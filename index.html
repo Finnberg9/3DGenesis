@@ -89,7 +89,7 @@
     box-shadow:0 4px 18px rgba(0,0,0,.4);
     transition:width .16s ease,height .16s ease,border-color .16s ease,box-shadow .16s ease;
     cursor:crosshair}
-  #mini:hover{width:432px;height:270px;border-color:var(--cyan);
+  #mini:hover{width:min(1296px,72vw,128vh);height:auto;aspect-ratio:1.6;border-color:var(--cyan);
     box-shadow:0 8px 30px rgba(0,0,0,.55)}
   @media (prefers-reduced-motion:reduce){#mini{transition:none}}
   #act{position:fixed;left:50%;top:56%;transform:translateX(-50%);z-index:12;display:none;
@@ -298,7 +298,7 @@
 
 <div id="evt" class="panel"></div>
 
-<canvas id="mini" width="432" height="270"></canvas>
+<canvas id="mini" width="1296" height="810"></canvas>
 <div id="warn"></div>
 <div id="cross"></div>
 <div id="act"></div>
@@ -367,7 +367,7 @@
   <div class="keys">
     <b>WASD</b> move &nbsp;·&nbsp; <b>drag</b> look &nbsp;·&nbsp; <b>shift</b> sprint (burns energy)<br>
     <b>scroll</b> zoom out to third person &nbsp;·&nbsp; <b>C</b> toggle view<br>
-    <b>left click</b> / <b>F</b> attack &nbsp;·&nbsp; <b>X</b> switch attack &nbsp;·&nbsp; <b>M</b> mate &nbsp;·&nbsp; <b>E</b> eat<br>
+    <b>left click</b> / <b>F</b> attack &nbsp;·&nbsp; <b>X</b> switch attack &nbsp;·&nbsp; <b>R</b> roar &nbsp;·&nbsp; <b>N</b> sound &nbsp;·&nbsp; <b>M</b> mate &nbsp;·&nbsp; <b>E</b> eat<br>
     inner ring = your attack reach (<span style="color:#f04c38">red</span> target,
     <span style="color:#35e0d8">cyan</span> mate)<br>
     outer ring = predators nearby, at their real bearing<br>
@@ -8529,7 +8529,11 @@ function sndInit() {
   if (!AC) { SND.on = false; return; }
   try { SND.ctx = new AC(); } catch (e) { SND.on = false; return; }
   const ctx = SND.ctx;
-  SND.master = ctx.createGain(); SND.master.gain.value = 0.55; SND.master.connect(ctx.destination);
+  SND.master = ctx.createGain(); SND.master.gain.value = 0.55;
+  // a limiter so a close roar on top of a fight never clips
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -14; comp.knee.value = 10; comp.ratio.value = 8; comp.attack.value = 0.004; comp.release.value = 0.25;
+  SND.master.connect(comp).connect(ctx.destination);
   // two seconds of noise, reused by every noisy voice
   const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
   const d = buf.getChannelData(0);
@@ -8622,7 +8626,8 @@ function sndTick(dt) {
       o.connect(g).connect(out); o.start(tt); o.stop(tt + 0.05);
     }, pan, t + k * 0.06);
   }
-  if (t > SND.nextCall) { SND.nextCall = t + (night ? 7 : 14) + Math.random() * (night ? 12 : 22); sndCall(Math.random() * 1.6 - 0.8, night); }
+  if (t > SND.nextCall) { SND.nextCall = t + (night ? 12 : 24) + Math.random() * (night ? 14 : 26); sndCall(Math.random() * 1.6 - 0.8, night); }
+  voxTick(dt);
   // unseen movement nearby, and anything hungry closing in
   let threat = 0;
   if (c && c.alive && t > SND.nextRustle) {
@@ -8650,6 +8655,316 @@ function sndTick(dt) {
   if (SND.threat > 0.15) {
     SND.beatT -= dt;
     if (SND.beatT <= 0) { const bpm = 70 + 60 * SND.threat; SND.beatT = 60 / bpm; sndThump(0.12 + 0.2 * SND.threat); setTimeout(() => sndThump(0.08 + 0.14 * SND.threat), 140); }
+  }
+}
+
+// =====================================================================
+// PREHISTORIC VOICES: every animal has a voice synthesised from its body.
+// Big bodies roar and bellow low; small ones shriek and chitter. Meat eaters
+// roar, growl and snarl; plant eaters bellow, honk and moan; many-legged
+// bodies click and hiss; fliers screech. A species keeps one voice, so you
+// learn to recognise what is out there by ear.
+// Calls are placed in space: panned to where the animal is, quieter and
+// duller with distance, and washed in a long forest echo when far away.
+// R roars: smaller animals nearby scatter; big meat eaters take it as a challenge.
+// =====================================================================
+const VOX = { verb: null, verbIn: null, dry: null, shaper: null, nextAmbient: 3, nextLocal: 0, recent: 0 };
+function voxInit() {
+  const ctx = SND.ctx; if (!ctx || VOX.verb) return;
+  // long, dark echo: a decaying noise impulse, filtered so it sounds like trees not a hall
+  const len = Math.floor(ctx.sampleRate * 3.2);
+  const ir = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = ir.getChannelData(ch);
+    let lp = 0;
+    for (let i = 0; i < len; i++) {
+      const tt = i / ctx.sampleRate;
+      const n = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6) * Math.exp(-tt * 1.1);
+      lp = lp * 0.55 + n * 0.45;
+      d[i] = lp * (tt < 0.03 ? tt / 0.03 : 1);
+    }
+  }
+  VOX.verb = ctx.createConvolver(); VOX.verb.buffer = ir;
+  const vg = ctx.createGain(); vg.gain.value = 0.9;
+  VOX.verb.connect(vg).connect(SND.master);
+  // gentle saturation shared by throaty voices
+  VOX.shaper = (amt) => {
+    const ws = ctx.createWaveShaper(); const n = 1024, c = new Float32Array(n);
+    for (let i = 0; i < n; i++) { const x = i / (n - 1) * 2 - 1; c[i] = Math.tanh(x * amt) / Math.tanh(amt); }
+    ws.curve = c; ws.oversample = '2x'; return ws;
+  };
+}
+// A species' voice, derived once from its body and cached on the genome
+function voxOf(c) {
+  const g = c.genome;
+  if (g._vox) return g._vox;
+  const p = c.ph, des = g.design;
+  const plan = des ? des.plan | 0 : 0;
+  let h = ((c.speciesId || 1) * 2654435761) >>> 0; const r = () => { h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0; return (h & 0xffff) / 0xffff; };
+  // the species' adult body decides the voice (a baby just sounds higher)
+  let adult = p; try { adult = C.develop(g); } catch (e) { adult = p; }
+  const mass = Math.max(0.3, adult.mass || p.mass || 5);
+  const size = clamp(Math.log2(mass + 1) / 4.2, 0.2, 1.4);           // 0.2 tiny .. 1.4 huge
+  const carn = (adult.carnivory || p.carnivory || 0) > 0.5;
+  let kind;
+  if (plan === 4 || plan === 5) kind = r() < 0.6 ? 'click' : 'hiss';
+  else if (plan === 7 || p.canFly) kind = 'screech';
+  else if (plan === 3) kind = r() < 0.6 ? 'hiss' : 'growl';
+  else if (carn) kind = size > 0.6 ? 'roar' : r() < 0.5 ? 'snarl' : 'screech';
+  else kind = size > 0.62 ? (r() < 0.6 ? 'bellow' : 'honk') : r() < 0.4 ? 'honk' : r() < 0.7 ? 'moan' : 'yelp';
+  g._vox = { kind, size, carn, pitch: (0.85 + r() * 0.3) / (0.55 + size * 0.75), form: 0.8 + r() * 0.45, rough: r(), notes: 1 + ((r() * 3) | 0), howls: !carn ? false : r() < 0.5 };
+  return g._vox;
+}
+// Output chain for one call: pan, distance loudness and muffling, echo send
+function voxOut(ctx, dist, pan, when, loud) {
+  const g = ctx.createGain();
+  const near = 1 / (1 + dist / 260);
+  g.gain.value = loud * near;
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass';
+  lp.frequency.value = clamp(9000 / (1 + dist / 350), 500, 9000);
+  const pn = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+  if (pn) pn.pan.value = pan * clamp(0.3 + dist / 400, 0.3, 1);
+  g.connect(lp);
+  const dry = ctx.createGain(); dry.gain.value = clamp(1 - dist / 2400, 0.25, 1);
+  if (pn) { lp.connect(pn); pn.connect(dry); } else lp.connect(dry);
+  dry.connect(SND.master);
+  const wet = ctx.createGain(); wet.gain.value = clamp(0.15 + dist / 1800, 0.15, 0.85);
+  lp.connect(wet); wet.connect(VOX.verb);
+  return g;
+}
+const vEnv = (param, t, a, hold, rel, peak) => {
+  param.cancelScheduledValues(t); param.setValueAtTime(0.0001, t);
+  param.exponentialRampToValueAtTime(peak, t + a);
+  param.setValueAtTime(peak, t + a + hold);
+  param.exponentialRampToValueAtTime(0.0001, t + a + hold + rel);
+};
+// The instruments. out: destination node; t: start; v: voice; k: intensity 0..1
+function vRoar(ctx, out, t, v, k, len) {
+  // two detuned saws through a saturating throat and three vocal formants, a
+  // rasping noise layer, and a fast tremolo for the rattle in the chest
+  const f0 = 70 * v.pitch * (0.9 + 0.2 * k), dur = (len || 1.6) * (0.8 + 0.5 * v.size);
+  const body = ctx.createGain(); vEnv(body.gain, t, 0.12, dur * 0.45, dur * 0.55, 0.5 + 0.4 * k);
+  const trem = ctx.createGain(); trem.gain.value = 0.7;
+  const lfo = ctx.createOscillator(); lfo.frequency.value = 18 + v.rough * 22; const lg = ctx.createGain(); lg.gain.value = 0.3 + v.rough * 0.25;
+  lfo.connect(lg).connect(trem.gain);
+  const sh = VOX.shaper(3 + v.rough * 5);
+  for (const det of [1, 1.013, 0.497]) {
+    const o = ctx.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(f0 * det * 0.8, t);
+    o.frequency.linearRampToValueAtTime(f0 * det * 1.25, t + dur * 0.3);
+    o.frequency.exponentialRampToValueAtTime(f0 * det * 0.62, t + dur);
+    const og = ctx.createGain(); og.gain.value = det < 0.6 ? 0.5 : 0.35;
+    o.connect(og).connect(sh); o.start(t); o.stop(t + dur + 0.1);
+  }
+  sh.connect(trem);
+  for (const [f, q, gn] of [[280, 5, 0.9], [720, 6, 0.55], [1500, 8, 0.25]]) {
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f * v.form / (0.7 + v.size * 0.4); bp.Q.value = q;
+    const fg = ctx.createGain(); fg.gain.value = gn;
+    trem.connect(bp).connect(fg).connect(body);
+  }
+  const ns = ctx.createBufferSource(); ns.buffer = SND.noiseBuf; ns.playbackRate.value = 0.6;
+  const nf = ctx.createBiquadFilter(); nf.type = 'bandpass'; nf.frequency.value = 900 * v.form; nf.Q.value = 0.8;
+  const ng = ctx.createGain(); ng.gain.value = 0.35 + v.rough * 0.3;
+  ns.connect(nf).connect(ng).connect(body); ns.start(t, Math.random()); ns.stop(t + dur + 0.1);
+  lfo.start(t); lfo.stop(t + dur + 0.1);
+  body.connect(out);
+}
+function vBellow(ctx, out, t, v, k, honk) {
+  // a long hollow bellow (or short honks, like a crested hadrosaur) through
+  // an 'oo' formant with slow vibrato
+  const notes = honk ? v.notes + 1 : 1;
+  let tt = t;
+  for (let n = 0; n < notes; n++) {
+    const f0 = 58 * v.pitch * (n === notes - 1 && notes > 1 ? 0.8 : 1) * (honk ? 1.6 : 1);
+    const dur = honk ? 0.42 + v.size * 0.25 : 1.6 + v.size * 1.4;
+    const g = ctx.createGain(); vEnv(g.gain, tt, honk ? 0.05 : 0.3, dur * 0.5, dur * 0.5, 0.55 + 0.3 * k);
+    const o = ctx.createOscillator(); o.type = 'triangle';
+    const o2 = ctx.createOscillator(); o2.type = 'sawtooth';
+    o.frequency.setValueAtTime(f0, tt); o.frequency.linearRampToValueAtTime(f0 * (honk ? 0.92 : 0.8), tt + dur);
+    o2.frequency.setValueAtTime(f0 * 2.003, tt); o2.frequency.linearRampToValueAtTime(f0 * (honk ? 1.84 : 1.6), tt + dur);
+    const vib = ctx.createOscillator(); vib.frequency.value = 4.2 + v.rough * 2; const vg = ctx.createGain(); vg.gain.value = f0 * 0.025;
+    vib.connect(vg); vg.connect(o.frequency); vg.connect(o2.frequency);
+    const mix = ctx.createGain(); const g2 = ctx.createGain(); g2.gain.value = 0.25;
+    o.connect(mix); o2.connect(g2).connect(mix);
+    const f1 = ctx.createBiquadFilter(); f1.type = 'lowpass'; f1.frequency.value = (honk ? 900 : 480) * v.form; f1.Q.value = 6;
+    const f2 = ctx.createBiquadFilter(); f2.type = 'peaking'; f2.frequency.value = 220 * v.form; f2.gain.value = 9; f2.Q.value = 2;
+    mix.connect(f1).connect(f2).connect(g).connect(out);
+    o.start(tt); o2.start(tt); vib.start(tt); o.stop(tt + dur + 0.1); o2.stop(tt + dur + 0.1); vib.stop(tt + dur + 0.1);
+    tt += dur * (honk ? 0.95 : 1) + 0.08;
+  }
+}
+function vScreech(ctx, out, t, v, k) {
+  // a tearing, falling shriek with fast warble and a harsh edge
+  const f0 = 1500 * v.pitch * (0.9 + 0.3 * k), dur = 0.55 + v.size * 0.6;
+  const g = ctx.createGain(); vEnv(g.gain, t, 0.02, dur * 0.3, dur * 0.7, 0.28 + 0.2 * k);
+  const o = ctx.createOscillator(); o.type = 'sawtooth';
+  o.frequency.setValueAtTime(f0 * 0.8, t); o.frequency.exponentialRampToValueAtTime(f0 * 1.15, t + dur * 0.15); o.frequency.exponentialRampToValueAtTime(f0 * 0.45, t + dur);
+  const fm = ctx.createOscillator(); fm.frequency.value = 38 + v.rough * 40; const fg = ctx.createGain(); fg.gain.value = f0 * 0.12;
+  fm.connect(fg).connect(o.frequency);
+  const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 600;
+  const bp = ctx.createBiquadFilter(); bp.type = 'peaking'; bp.frequency.value = 2600 * v.form; bp.gain.value = 10; bp.Q.value = 3;
+  const sh = VOX.shaper(4);
+  o.connect(sh).connect(hp).connect(bp).connect(g).connect(out);
+  o.start(t); fm.start(t); o.stop(t + dur + 0.05); fm.stop(t + dur + 0.05);
+}
+function vHowl(ctx, out, t, v, k) {
+  // long rising-and-falling howl that carries across the valley at night
+  const f0 = 330 * v.pitch, dur = 2.6 + v.size;
+  const g = ctx.createGain(); vEnv(g.gain, t, 0.5, dur * 0.4, dur * 0.4, 0.22 + 0.12 * k);
+  const o = ctx.createOscillator(); o.type = 'triangle';
+  o.frequency.setValueAtTime(f0 * 0.7, t); o.frequency.linearRampToValueAtTime(f0 * 1.15, t + dur * 0.35); o.frequency.setValueAtTime(f0 * 1.15, t + dur * 0.55); o.frequency.exponentialRampToValueAtTime(f0 * 0.6, t + dur);
+  const vib = ctx.createOscillator(); vib.frequency.value = 5.5; const vg = ctx.createGain(); vg.gain.value = f0 * 0.018;
+  vib.connect(vg).connect(o.frequency);
+  const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = f0 * 2.2; f.Q.value = 1.2;
+  const dry = ctx.createGain(); dry.gain.value = 0.6;
+  o.connect(f).connect(g); o.connect(dry).connect(g); g.connect(out);
+  o.start(t); vib.start(t); o.stop(t + dur + 0.1); vib.stop(t + dur + 0.1);
+}
+function vGrowl(ctx, out, t, v, k, len) {
+  // a low rumble, amplitude-chopped like air rattling over a big throat
+  const dur = (len || 1.4) * (0.8 + v.size * 0.4);
+  const g = ctx.createGain(); vEnv(g.gain, t, 0.2, dur * 0.5, dur * 0.3, 0.55 + 0.3 * k);
+  const ns = ctx.createBufferSource(); ns.buffer = SND.noiseBuf; ns.playbackRate.value = 0.35;
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 260 + 200 * (1 - v.size); lp.Q.value = 4;
+  const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = 42 * v.pitch;
+  const og = ctx.createGain(); og.gain.value = 0.5;
+  const chop = ctx.createGain(); chop.gain.value = 0.5;
+  const lfo = ctx.createOscillator(); lfo.frequency.value = 22 + v.rough * 18; const lg = ctx.createGain(); lg.gain.value = 0.5;
+  lfo.connect(lg).connect(chop.gain);
+  ns.connect(lp); o.connect(og).connect(lp); lp.connect(chop).connect(g).connect(out);
+  ns.start(t, Math.random()); o.start(t); lfo.start(t);
+  ns.stop(t + dur + 0.1); o.stop(t + dur + 0.1); lfo.stop(t + dur + 0.1);
+}
+function vSnarl(ctx, out, t, v, k) { vGrowl(ctx, out, t, v, k, 0.6); vScreech(ctx, out, t + 0.35, Object.assign({}, v, { pitch: v.pitch * 0.45 }), k * 0.7); }
+function vHiss(ctx, out, t, v, k) {
+  const dur = 0.9 + v.size * 0.8;
+  const g = ctx.createGain(); vEnv(g.gain, t, 0.06, dur * 0.6, dur * 0.35, 0.35 + 0.2 * k);
+  const ns = ctx.createBufferSource(); ns.buffer = SND.noiseBuf; ns.playbackRate.value = 1.6;
+  const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2200;
+  const pk = ctx.createBiquadFilter(); pk.type = 'peaking'; pk.frequency.value = 4800 * v.form; pk.gain.value = 8;
+  ns.connect(hp).connect(pk).connect(g).connect(out); ns.start(t, Math.random()); ns.stop(t + dur + 0.1);
+  if (v.rough > 0.5) vGrowl(ctx, out, t + 0.1, v, k * 0.5, 0.8);
+}
+function vClick(ctx, out, t, v, k) {
+  // chitinous clatter: bursts of clicks with a resonant body
+  const n = 8 + ((v.rough * 14) | 0);
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1800 * v.form * v.pitch; bp.Q.value = 12;
+  const g = ctx.createGain(); g.gain.value = 0.9 + k; bp.connect(g).connect(out);
+  for (let i = 0; i < n; i++) {
+    const tt = t + i * (0.035 + v.rough * 0.03) + (i > n / 2 ? 0.12 : 0);
+    const s = ctx.createBufferSource(); s.buffer = SND.noiseBuf;
+    const e = ctx.createGain(); e.gain.setValueAtTime(0.0001, tt); e.gain.exponentialRampToValueAtTime(0.5, tt + 0.002); e.gain.exponentialRampToValueAtTime(0.0001, tt + 0.03);
+    s.connect(e).connect(bp); s.start(tt, Math.random() * 1.5); s.stop(tt + 0.04);
+  }
+}
+function vYelp(ctx, out, t, v, k) {
+  const f0 = 700 * v.pitch, dur = 0.35;
+  for (let i = 0; i < 1 + v.notes; i++) {
+    const tt = t + i * 0.28;
+    const g = ctx.createGain(); vEnv(g.gain, tt, 0.01, 0.08, 0.25, 0.25 + 0.2 * k);
+    const o = ctx.createOscillator(); o.type = 'square';
+    o.frequency.setValueAtTime(f0 * 1.4, tt); o.frequency.exponentialRampToValueAtTime(f0 * 0.7, tt + dur);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2400;
+    o.connect(lp).connect(g).connect(out); o.start(tt); o.stop(tt + dur + 0.05);
+  }
+}
+// what a voice says, given why it is calling: 'call' (ambient), 'attack', 'pain', 'win', 'threat'
+function voxCall(c, why, fromX, fromZ) {
+  const ctx = SND.ctx; if (!ctx || !SND.on || !c || !c.ph) return;
+  voxInit();
+  if (VOX.recent > 5) return;                       // never a wall of noise
+  const v0 = voxOf(c);
+  // juveniles call higher and thinner
+  const grow = clamp(c._growthAvg != null ? c._growthAvg : 1, 0, 1);
+  const v = grow < 0.95 ? Object.assign({}, v0, { pitch: v0.pitch * (1 + (1 - grow) * 0.9), size: v0.size * (0.5 + 0.5 * grow) }) : v0;
+  const lx = fromX != null ? fromX : (player.c ? player.c.x : player.camX), lz = fromZ != null ? fromZ : (player.c ? player.c.y : player.camZ);
+  const dx = c.x - lx, dz = c.y - lz, dist = c === player.c ? 30 : Math.hypot(dx, dz);
+  if (dist > 3200) return;
+  const pan = c === player.c ? 0 : sndPan(dx, dz);
+  const k = why === 'pain' ? 1 : why === 'win' ? 1 : why === 'attack' ? 0.8 : 0.6;
+  const loud = (why === 'pain' ? 0.9 : 1.1) * (0.6 + 0.6 * v.size);
+  const out = voxOut(ctx, dist, pan, ctx.currentTime, loud);
+  const t = ctx.currentTime + 0.02 + Math.min(1.5, dist / 1200) * 0.5;   // far calls arrive late
+  VOX.recent++;
+  setTimeout(() => { VOX.recent = Math.max(0, VOX.recent - 1); }, 1800);
+  const night = (world.light != null ? world.light : 1) < 0.3;
+  let kind = v.kind;
+  if (why === 'pain') kind = v.size > 0.8 ? 'bellowPain' : kind === 'click' ? 'click' : 'screech';
+  else if (why === 'threat') kind = kind === 'click' || kind === 'hiss' ? kind : 'growl';
+  else if (why === 'call' && night && v.howls && Math.random() < 0.6) kind = 'howl';
+  switch (kind) {
+    case 'roar': vRoar(ctx, out, t, v, k, why === 'win' ? 2.4 : 1.6); break;
+    case 'bellow': vBellow(ctx, out, t, v, k, false); break;
+    case 'bellowPain': vRoar(ctx, out, t, Object.assign({}, v, { pitch: v.pitch * 1.6 }), 1, 0.9); break;
+    case 'honk': vBellow(ctx, out, t, v, k, true); break;
+    case 'moan': vBellow(ctx, out, t, Object.assign({}, v, { pitch: v.pitch * 1.8 }), k, false); break;
+    case 'screech': vScreech(ctx, out, t, v, k); break;
+    case 'snarl': vSnarl(ctx, out, t, v, k); break;
+    case 'howl': vHowl(ctx, out, t, v, k); break;
+    case 'growl': vGrowl(ctx, out, t, v, k); break;
+    case 'hiss': vHiss(ctx, out, t, v, k); break;
+    case 'click': vClick(ctx, out, t, v, k); break;
+    case 'yelp': vYelp(ctx, out, t, v, k); break;
+    default: vRoar(ctx, out, t, v, k);
+  }
+}
+// Called every frame from sndTick: fights, pain and the island calling out
+function voxTick(dt) {
+  const ctx = SND.ctx; if (!ctx || !SND.on || !world) return;
+  voxInit();
+  const now = ctx.currentTime;
+  const me = player.c;
+  const lx = me ? me.x : player.camX, lz = me ? me.y : player.camZ;
+  const light = world.light != null ? world.light : 1;
+  // fights and injuries you can hear: anything within earshot that just struck or was struck
+  if (now > VOX.nextLocal) {
+    VOX.nextLocal = now + 0.15;
+    for (const c of world.creatures) {
+      if (!c.alive || !c.ph) continue;
+      const d = Math.hypot(c.x - lx, c.y - lz);
+      if (d > 1400) continue;
+      if (c._voxHit !== c._hitSeq) { if (c._voxHit != null && Math.random() < 0.8) voxCall(c, 'pain'); c._voxHit = c._hitSeq; }
+      if (c._voxStrike !== c._strikeSeq) { if (c._voxStrike != null && c !== me && Math.random() < 0.55) voxCall(c, 'attack'); c._voxStrike = c._strikeSeq; }
+      // a meat eater closing on you warns you first
+      if (me && c !== me && c.ph.carnivory > 0.5 && d < 180 && (c.foe === me || c.target === me) && !c._voxWarned) { c._voxWarned = true; voxCall(c, 'threat'); }
+      if (c._voxWarned && d > 300) c._voxWarned = false;
+    }
+  }
+  // the island at large: someone, somewhere, is always calling. More at dusk and night.
+  if (now > VOX.nextAmbient) {
+    const dusk = light < 0.55;
+    VOX.nextAmbient = now + (dusk ? 2.5 : 5) + Math.random() * (dusk ? 5 : 9);
+    const pool = [];
+    for (const c of world.creatures) {
+      if (!c.alive || !c.ph || c === me) continue;
+      const d = Math.hypot(c.x - lx, c.y - lz);
+      if (d > 250 && d < 3000) pool.push(c);
+    }
+    if (pool.length) {
+      const c = pool[(Math.random() * pool.length) | 0];
+      voxCall(c, 'call');
+      // sometimes another of its kind answers from elsewhere
+      if (Math.random() < 0.45) {
+        const kin = pool.filter(o => o !== c && o.speciesId === c.speciesId);
+        if (kin.length) { const o = kin[(Math.random() * kin.length) | 0]; setTimeout(() => voxCall(o, 'call'), 1200 + Math.random() * 2500); }
+      }
+    }
+  }
+}
+// Your own roar. Smaller animals nearby scatter; big meat eaters answer it.
+function playerRoar() {
+  const c = player.c; if (!c || !c.alive) return;
+  if ((player.roarCD || 0) > performance.now()) return;
+  player.roarCD = performance.now() + 2500;
+  if (!SND.ctx) sndInit();
+  voxCall(c, 'win');
+  startAnim(c, 'bite', 0.9);
+  for (const o of world.creatures) {
+    if (o === c || !o.alive || !o.ph) continue;
+    const d = Math.hypot(o.x - c.x, o.y - c.y);
+    if (d > 260) continue;
+    if (o.ph.mass < c.ph.mass * 0.9 && o.ph.carnivory <= 0.5) { o.foe = c; o.foeT = 5; o.react = 'flee'; o.fear = 1; }
+    else if (o.ph.carnivory > 0.5 && o.ph.mass >= c.ph.mass * 0.8) { o.foe = c; o.foeT = 6; o.react = 'fight'; setTimeout(() => voxCall(o, 'attack'), 700 + Math.random() * 600); }
   }
 }
 
@@ -9889,6 +10204,7 @@ function bindInput() {
     if (k === 'f') tryAttack();
     if (k === 'x') cycleMove();
     if (k === 'n') sndToggle();
+    if (k === 'r') playerRoar();
     if (k === 'm') tryMate();
     if (k === 'e') tryEat();
     if (k === ' ' && !player.spectator) tryJump();
@@ -11690,6 +12006,7 @@ function preyItems(prey) {
 function edOnKill(prey) {
   PROG.kills++;
   objOnKill(prey);
+  if (player.c) setTimeout(() => voxCall(player.c, 'win'), 400);
   saveProgress();
   const opts = preyItems(prey);
   if (!opts.length) { toast('Killed it. +' + KILL_SPACE + ' genome space.', 2600); return; }
@@ -11893,7 +12210,7 @@ window.__G3D = {
   absorbFrom: (prey) => absorbPartFrom(prey),
   get ED() { return ED; }, get PROG() { return PROG; },
   openEditor: (m) => openEditor(m), closeEditor: (a) => closeEditor(a),
-  startAnim: (c, k, d) => startAnim(c, k, d), setMove: (m) => { player.moveSel = m; },
+  startAnim: (c, k, d) => startAnim(c, k, d), sndDbg: { voxCall: (c, w) => voxCall(c, w), roar: () => playerRoar(), get SND() { return SND; }, voxOf: (c) => voxOf(c) }, setMove: (m) => { player.moveSel = m; },
   meshDbg: { designGeo, creaturePrims, meshPrims, get skinDraws() { return skinDraws.length; }, get boneN() { return boneN; }, get pool() { return meshPool ? meshPool.length : (meshPoolBroken ? -1 : 0); }, get FOL() { return FOL; } },
   edAddPart: (id, hit) => edAddPart(id, hit), edAddLimb: (id, hit) => edAddLimb(id, hit), edSetTip: (l, id) => edSetTip(l, id),
   edBodyHit: (x, y) => edBodyHit(x, y), edProject: (p) => edProject(p), edPick: (x, y) => edPick(x, y),
