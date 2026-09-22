@@ -1,0 +1,117 @@
+# 3DGenesis roadmap: future game modes (Finn's vision, noted 2026-09-22)
+
+Not being built yet. Recorded so every daily run knows where the game is headed and keeps the code compatible with it.
+
+## Two modes from the main menu
+1. **Free roam** (single player): the current game. Live on the island, evolve, mate, die and continue your line.
+2. **Online**: a Fortnite-style battle royale. Matches last about 15 minutes, and a new one starts right after.
+
+## Online match flow
+1. **Cages (pre-match lobby).** Every player starts in their own dim-lit, enclosed metal cage. The cages sit on a huge ring around the entire map. Each cage has a bay number on top and a giant gate. You can walk around inside your cage until the match starts.
+2. **Gates open.** Everyone leaves their cage at once.
+3. **Grace period (first 5 minutes).** You cannot hurt other online players. You can kill the island's creatures (bots) and loot old skeleton remains for parts (legs, horns, jaws, etc.) to build your beast.
+4. **Open combat.** After the grace period, players can attack and kill each other, as well as bots.
+5. **Killing a player:**
+   - You eat them and grow slightly in size.
+   - You can equip parts from their inventory.
+   - The loser chooses to either **spectate** you, or **join your pack** as a baby descendant of yours.
+   - Pack members cannot hurt each other and must fight together to win.
+6. **The fog (shrinking zone).** A thick fog slowly creeps in from the edges of the island toward the centre.
+   - You can walk into it, but deep inside it starts killing you.
+   - Visibility in the fog is only about 2 feet.
+   - This shrinks the playable map over time and forces fights.
+7. **Victory.** The last player (or last pack) alive wins the round. The win is recorded on their public account, together with their winning creature.
+8. The next match begins.
+
+## Implications to keep in mind now
+- **Parts as inventory:** loot and equipped body parts must be data that can be sent over the network. Designs are already plain JSON (`genome.design`); keep it that way.
+- **Skeleton remains as loot:** each remains entry should carry its creature's design parts so they can be picked up (the `REMAINS` list in `src/remains.js` is the hook).
+- **Rules the server decides:** damage must stay deterministic, with the server settling hits so players can't cheat.
+  - The core sim is already DOM-free.
+  - Combat goes through `world.hitFilter` (`src/fight.js`), which is the natural place for grace-period and pack rules.
+- **Fog zone:** needs a zone radius over time, a damage-per-second band, and very dense fog rendering (this can reuse the drowning damage path and the fog uniforms).
+- **Online backend (to be decided):** game server, matchmaking, and accounts/leaderboard (wins and winning creatures).
+
+## Water world (noted 2026-09-22, next up for the daily runs)
+- **No trees in water.** Trees (mangroves and palms included) must never grow in water.
+  - Today the static forest can place mangroves in `marsh`/`shallow`, and some trees end up standing in the sea.
+  - Fix in `buildForest`: skip any cell below water level.
+- **Pure swimmers.** There should almost always be at least one fully aquatic species that cannot go on land at all and lives only in the water.
+  - Seed aquatic founders (fish body plan, fins, gills, no legs).
+  - Land access comes from anatomy, not a species flag. A body with no legs cannot leave the water. But a fish that kills a shore animal and takes its legs (or evolves them) can crawl out onto land.
+  - Legless fish stay water-bound; the move from water to land is earned through parts.
+  - The player gets the same rule: a fish player who steals legs can walk ashore.
+  - Protect them so the population doesn't die out, e.g. reseed if the aquatic population hits zero.
+  - Other water animals: tiny schooling fish (ambient, huge numbers, cheap to draw) as well as larger swimmers and predators.
+- **Underwater detail at the same level as above ground:**
+  - coral reefs in warm shallows
+  - seaweed and kelp swaying with the current
+  - rocks, sand ripples and shells on the sea floor
+  - light shafts (caustics) through the surface
+  - an underwater fog and colour grade once the camera is below the surface
+  - bubbles
+- **Underwater caves** to explore, which means real geometry beyond the heightmap: cave meshes or carved-out volumes.
+- **Swimming for the player:** diving and surfacing, and a breath meter for anything without gills (this ties into the existing drowning system). Gills should be a collectable body part.
+
+## Prehistoric ecosystem (noted 2026-09-22, top of the queue for the daily runs)
+Reference: ZBrush-style dinosaur sculpt sets (T-rex, triceratops, ankylosaur, stegosaur, hadrosaur/parasaurolophus, sauropod, spinosaur/sail-back, pterosaur, plesiosaur, mosasaur). The aim is a prehistoric ecosystem of dinosaur-inspired creatures, not generic blobs.
+
+### More starting body shapes (the builder's body tab)
+Current: 10. Add at least these, each with its own proportions, stance, neck/tail and default limb pose:
+- **Theropod** (T-rex): huge head, deep jaw, short arms, thick digitigrade legs, heavy counterweight tail.
+- **Raptor**: small theropod, long stiff tail, lean legs, sickle-claw feet.
+- **Sauropod**: barrel body, very long neck and tail, column legs.
+- **Ceratopsian** (triceratops): heavy shoulders, short tail, frill and horn anchors on the skull.
+- **Ankylosaur**: low and wide, armoured back, tail club anchor.
+- **Stegosaur**: arched back, small head, plate row along the spine, tail spikes.
+- **Hadrosaur**: duck-billed, crest anchor, walks on twos or fours.
+- **Sail-back** (spinosaur/dimetrodon): long jaw, tall sail along the spine.
+- **Pterosaur**: light body, huge wing membranes on long finger bones, long crested head, folds its wings to walk.
+- **Shark** (water only): torpedo body, tall dorsal fin, crescent tail, stiff pectorals.
+- **Whale** (water only): huge smooth body, horizontal tail fluke, blowhole, flippers.
+- **Plesiosaur / mosasaur** (water only): long neck with paddles, or a heavy-jawed swimmer with a fluked tail.
+Water-only shapes have no legs, so they are water-bound until they take legs from something (see the water world section).
+
+### Mouths and jaws
+Today's mouths look like a lump. They should be real jaws:
+- An upper and lower jaw with actual thickness, a hinge at the back, and a gape angle that animates (the jaw bone already exists in the skinned rig).
+- Rows of teeth that follow the jaw line: sizes vary by species (dagger teeth on hunters, leaf teeth on grazers, a beak on others), with a tongue and a dark throat inside.
+- The gape opens when biting, roaring, eating and threatening, and the teeth interlock when closed.
+- Bigger jaws bite harder, which the damage numbers already read from the parts.
+
+### Flight
+The current flight (hold space to climb, ctrl to dive, otherwise sink) is too simple. Replace with a real flight model:
+- **Flapping** costs stamina and gives thrust and lift; hold or tap space to flap, with the wingbeat animation and sound driven by it.
+- **Gliding** when not flapping: you trade height for speed and can ride the air.
+- **Swooping**: pitch down to dive and pick up speed, then pull up to convert that speed back into height.
+- **Banking turns** that roll the body into the turn instead of turning flat.
+- **Thermals** rising over open sunlit ground and cliffs, so a big flier can circle upward without flapping.
+- **Stall** when too slow, and a run-up or a cliff needed to take off with a heavy body.
+- Wing area and body mass decide climb rate, turn radius and how long you can stay up. A pterosaur-sized flier should feel heavy and fast, not like a hovering insect.
+- Landing: flare, fold the wings, and walk.
+
+### Colour and skin for the prehistoric look
+Second reference set (coloured models): the palette and skin matter as much as the shapes.
+- Muted, natural hides: olive and moss greens, dust browns, sand and grey, with darker backs fading to pale bellies (countershading).
+- Markings: stripes down the back and tail, dappled spots, a bright warning flash on crests, frills, sails and throats.
+- Skin reads at a distance: pebbled scales on big bodies, fine scales on small ones, a scute row along the spine, wrinkles gathering at the joints and neck.
+- Crests, frills and sails carry the brightest colour, as they do on real display animals.
+
+### Mouth reference detail (ZBrush skull sculpts: T-rex, carnotaurus, spinosaur, hadrosaur)
+What those heads have that the current mouths do not:
+- **The jaw is part of the skull, not a bolted-on lump.** The muzzle is a long box that narrows to the snout, with a distinct upper lip line, a cheek behind it, and a lower jaw that tucks inside the upper when shut.
+- **Teeth vary along the jaw:** long fangs at the front, smaller ones toward the back, slightly curved and angled backward, upper and lower rows interlocking. A spinosaur has conical, evenly-spaced, forward-flared teeth; a hadrosaur has a toothless beak in front and grinding rows behind; a carnotaurus has a short deep muzzle with small teeth.
+- **The gape is deep.** A hunter's mouth opens 40 to 60 degrees, showing the whole tooth row, a pale tongue, gum lines and a dark throat.
+- **Around the mouth:** nostril openings on top of the snout, a bony brow ridge over the eye, cheek and jaw muscle bulges, loose skin folding under the chin and along the throat, and horn or knob ridges over the eyes and nose (carnotaurus horns, T-rex brow knobs).
+- **Skin over the skull** is heavy pebbled scale with big scutes on the snout, packing tighter around the eye and lips, and wrinkles gathering where the jaw hinges.
+- **Scale with the body:** the same jaw on a large body should read as massive (thicker bone, blunter teeth), and on a small body as needle-toothed and quick.
+- Jaw types to build as separate mouth parts: **deep crushing jaw** (T-rex), **long fish-catching jaw** (spinosaur/croc), **short deep muzzle** (carnotaurus), **duck beak with grinding rows** (hadrosaur), plus the beaks and grazing mouths already in the game.
+
+## Bones: parts economy and paid bundles (noted 2026-09-22)
+- **Bones** are the currency. You earn **5 bones per kill**. They persist on your account.
+- **Unlock prices by part tier:** weak 50, solid 100, super 200, ultra 500, alpha 2000 bones.
+- **Bundles** (real money): 100 bones $2, 500 bones $5, 10000 bones $30.
+- **Selling:** any part you own and do not want sells back for 25% of its bone value.
+- **Rarity in the wild matches the tier:** weak parts are common on wild animals, alpha parts are almost never seen, so the same ladder governs both what you find and what you pay.
+- **Per-world rarity roll:** some islands/matches generate with no alpha parts at all, and some with no ultra parts either, so a run with an alpha part in it is an event.
+- Fits what exists now: parts are already unlocked one at a time from kills and stored per browser (`PROG.unlocked`, `PROG.kills`). Bones need a tier table per item, a balance, a shop screen in the builder (buy, sell, prices), and eventually server-side accounts so the balance and purchases are not local.

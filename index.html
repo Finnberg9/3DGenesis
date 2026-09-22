@@ -22,6 +22,20 @@
   #gfxsel button:hover{border-color:var(--cyan)}
   #gfxsel button.on{background:var(--cyan);color:#04100e;font-weight:700;border-color:var(--cyan)}
   body.editing #gfxsel{display:none}
+  .edname{display:inline-flex;align-items:center;gap:4px;margin-left:8px}
+  .edname input{font:inherit;font-size:13px;width:180px;color:#dff3ec;background:#06201c;border:1px solid #2c4b45;border-radius:6px;padding:4px 8px}
+  .edname button{margin-left:4px}
+  #edTabBar{display:flex;align-items:center;gap:8px;margin:2px 2px}
+  #edTabBar button{width:30px;height:30px;font-size:17px;line-height:1;border-radius:9px;padding:0}
+  #edTabBar #edTabTitle{flex:1;text-align:center;margin:0}
+  #edTabHint{margin:0 4px 10px;font-size:11.5px;color:#7fb9c9;text-align:center}
+  .edgrid.cards{grid-template-columns:repeat(2,1fr);gap:12px}
+  .edcard{display:flex;flex-direction:column;gap:2px;cursor:grab}
+  .edcard .edtile{aspect-ratio:1.25}
+  .edcname{font-size:12.5px;font-weight:700;color:#dff3ec;letter-spacing:.02em}
+  .edcuse{font-size:10.5px;line-height:1.35;color:#8fb8c6;min-height:28px}
+  .edccost{font-size:10px;color:#6d97a4}
+  .edcard.locked .edcname{color:#8aa3ab}
   body.editing #objective{display:none !important}
   #env{right:14px;top:14px;min-width:210px;text-align:right}
   #evt{left:50%;transform:translateX(-50%);bottom:96px;text-align:center;opacity:0;transition:opacity .4s;
@@ -33,30 +47,46 @@
   .k{color:var(--dim)}
   .v{color:var(--ink);font-weight:600}
   b.t{color:var(--cyan);font-weight:700;letter-spacing:.06em}
-  #start{position:fixed;inset:0;display:flex;justify-content:center;align-items:flex-start;overflow-y:auto;
-    background:#010303;z-index:20;cursor:pointer}
+  #start{position:fixed;inset:0;background:#05080a;z-index:20;cursor:default;overflow:hidden}
   #startbg{position:fixed;inset:0;width:100vw;height:100vh;display:block}
-  #start .flow{position:relative;max-width:820px;padding:9vh 28px 12vh;text-align:center;color:#b9d3cc;
-    text-shadow:0 2px 12px #000,0 0 30px #000}
-  #start .fl{opacity:0;transform:translateY(-18px);animation:ssdrop 1.4s cubic-bezier(.2,.7,.2,1) forwards}
-  @keyframes ssdrop{to{opacity:1;transform:none}}
-  @media (prefers-reduced-motion:reduce){#start .fl{animation:none;opacity:1;transform:none}}
-  #start h1{margin:0 0 18px;font-size:clamp(40px,7vw,78px);letter-spacing:.34em;color:#9fe3cf;font-weight:700;
-    text-shadow:0 0 40px rgba(60,200,160,.35),0 4px 18px #000}
-  #start p{margin:10px auto;font-size:15px;line-height:1.75;max-width:680px}
-  #start p.lead{font-size:19px;color:#d8efe8}
-  #start .dim{color:#6f9088}
-  #start .small{font-size:12px;margin-top:6px}
-  #start .keysg{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:10px 34px;margin:30px 0 8px;text-align:left}
-  #start .grp h3{margin:0 0 6px;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#6fb8a6;font-weight:600}
-  #start .kr{display:flex;gap:12px;align-items:baseline;font-size:13.5px;line-height:1.55;margin:3px 0}
-  #start .kk{flex:0 0 150px;text-align:right;white-space:nowrap}
-  #start kbd{font-family:inherit;font-size:12px;color:#e4f4ef;background:rgba(10,30,26,.55);border:1px solid rgba(90,160,140,.35);
-    border-radius:4px;padding:1px 6px}
-  #start .moves{font-size:13.5px;color:#9dbdb5}
-  #start .go{margin-top:30px;font-size:20px;letter-spacing:.3em;text-transform:uppercase;color:#d4f7ec;
-    animation:ssdrop 1.4s cubic-bezier(.2,.7,.2,1) forwards,sspulse 2.6s ease-in-out 2.2s infinite}
-  @keyframes sspulse{50%{opacity:.45}}
+  #start .mm{position:absolute;left:clamp(28px,6vw,110px);top:14vh;max-width:640px}
+  #start .mmkicker{display:block;font-size:12px;letter-spacing:.55em;color:#b3140c;margin-bottom:2px}
+  #start .mmhead h1{margin:0 0 34px;font-size:clamp(34px,5.6vw,64px);letter-spacing:.1em;color:#eef6f2;font-weight:700;
+    text-shadow:0 4px 26px #000;transition:opacity .18s}
+  #mmNav{display:flex;flex-direction:column;gap:2px;align-items:flex-start}
+  .mmItem{position:relative;font:inherit;font-size:clamp(15px,1.5vw,19px);letter-spacing:.2em;color:#9db3ab;background:none;border:0;
+    padding:9px 18px 9px 40px;cursor:pointer;transition:transform .16s cubic-bezier(.2,.8,.2,1),color .16s}
+  .mmItem .mmLabel{position:relative;z-index:2}
+  .mmItem .mmBrush{position:absolute;left:8px;top:50%;translate:0 -50%;width:calc(100% - 8px);height:26px;background:#b3140c;
+    clip-path:polygon(0 38%,6% 12%,16% 44%,27% 8%,38% 40%,52% 14%,66% 46%,78% 16%,90% 42%,100% 20%,97% 78%,86% 96%,72% 66%,58% 92%,44% 62%,30% 94%,18% 64%,8% 90%,2% 70%);
+    transform:scaleX(0);transform-origin:left center;transition:transform .22s cubic-bezier(.2,.8,.2,1);opacity:.9}
+  .mmItem:hover,.mmItem.on{color:#fff;transform:translateX(10px)}
+  .mmItem.on .mmBrush{transform:scaleX(1)}
+  .mmItem:hover .mmBrush{transform:scaleX(1)}
+  @media (prefers-reduced-motion:reduce){.mmItem,.mmItem .mmBrush{transition:none}}
+  #mmFoot{position:absolute;right:clamp(20px,4vw,70px);bottom:8vh;max-width:420px;text-align:right;color:#a9c0b8}
+  #mmDesc{font-size:14px;line-height:1.6;border-right:2px solid #b3140c;padding-right:14px;min-height:44px}
+  #mmFoot .mmhint{margin-top:14px;font-size:11px;letter-spacing:.18em;color:#6d8781}
+  #mmFoot .mmhint b{color:#cfe3dc;background:rgba(255,255,255,.07);border:1px solid #2c4b45;border-radius:4px;padding:1px 6px}
+  #mmPage{position:absolute;inset:0;display:none;overflow-y:auto;padding:7vh clamp(28px,7vw,140px);
+    background:linear-gradient(90deg,rgba(3,8,8,.97),rgba(3,8,8,.82));color:#cfe3dc;z-index:3}
+  #mmPage.show{display:block}
+  #mmPage h2{margin:0 0 20px;font-size:26px;letter-spacing:.34em;color:#eef6f2}
+  #mmPage p{max-width:720px;line-height:1.7;font-size:14px}
+  #mmPage .keysg{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:10px 34px;text-align:left;max-width:1100px}
+  #mmPage .grp h3{margin:14px 0 6px;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#6fb8a6}
+  #mmPage .kr{display:flex;gap:12px;align-items:baseline;font-size:13.5px;line-height:1.55;margin:3px 0}
+  #mmPage .kk{flex:0 0 150px;text-align:right;white-space:nowrap}
+  #mmPage kbd{font-family:inherit;font-size:12px;color:#e4f4ef;background:rgba(10,30,26,.55);border:1px solid rgba(90,160,140,.35);border-radius:4px;padding:1px 6px}
+  #mmPage .moves{margin-top:18px;color:#9dbdb5;font-size:13.5px}
+  .mmopt{max-width:720px}
+  .mmrow{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:11px 0;border-bottom:1px solid #16302b;font-size:14px}
+  .mmnote{color:#6d8781;font-size:12px}
+  .mmb{font:inherit;font-size:13px;color:#dff3ec;background:#0a201d;border:1px solid #2c4b45;border-radius:6px;padding:5px 11px;margin-left:6px;cursor:pointer}
+  .mmb:hover{border-color:#b3140c;color:#fff}
+  .mmb.wide{display:block;width:100%;text-align:left;margin:6px 0}
+  .mmb.back{margin-top:26px}
+  .mmsaved{max-width:520px}
   #resetbtn{position:fixed;right:14px;bottom:58px;z-index:22;font:inherit;font-size:12px;color:#ffd9d2;cursor:pointer;
     background:rgba(40,8,6,.78);border:1px solid #7a2a20;border-radius:8px;padding:6px 12px;backdrop-filter:blur(6px)}
   #resetbtn:hover{border-color:#ff6b5e}
@@ -209,7 +239,7 @@
   #edRoot button:disabled { opacity: .4; cursor: default; }
   #edRoot button.warn { color: #ffb2a6; border-color: #7a3a33; background: linear-gradient(180deg, #4a1d1a, #2c0f0d); }
   #edRoot button.on { color: #041b24; background: linear-gradient(180deg, #8ef3ea, #3ec9c0); border-color: #aefcf4; }
-  #edTop { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; align-items: center;
+  #edTop { position: absolute; top: 12px; left: 12px; max-width: calc(100vw - 440px); display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
     padding: 8px 10px; border-radius: 16px; background: linear-gradient(180deg, rgba(14,44,66,.92), rgba(6,24,38,.92));
     border: 1px solid #2d6f86; box-shadow: 0 8px 30px rgba(0,0,0,.35); }
   #edTop .edsp { width: 14px; }
@@ -219,10 +249,6 @@
   #edPal { position: absolute; top: 12px; right: 12px; bottom: 12px; width: 404px; display: flex; flex-direction: column;
     border-radius: 18px; padding: 12px; background: linear-gradient(180deg, rgba(20,52,82,.94), rgba(8,26,44,.95));
     border: 1px solid #2f6f8c; box-shadow: 0 10px 40px rgba(0,0,0,.45), inset 0 1px 0 rgba(160,230,255,.12); }
-  #edTabs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
-  #edTabs .edtab { height: 48px; padding: 6px; border-radius: 12px; color: #9fd8e8; display: flex; align-items: center; justify-content: center; }
-  #edTabs .edtab svg { width: 30px; height: 30px; }
-  #edTabs .edtab.on { color: #062432; }
   #edTabTitle { margin: 12px 4px 8px; font-size: 13px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #8ef3ea; }
   #edGrid { flex: 1; overflow-y: auto; padding: 2px 4px 8px 0; }
   #edGrid::-webkit-scrollbar { width: 8px } #edGrid::-webkit-scrollbar-thumb { background: #2a5f78; border-radius: 4px }
@@ -236,10 +262,11 @@
   .edtile img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
   .edtile canvas { width: 100%; height: 100%; }
   .edtile .edph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 11px; color: #9fc6d6; padding: 6px; }
-  .edtile.locked img { filter: grayscale(1) brightness(.45); }
+  .edtile.locked img { filter: grayscale(.7) brightness(.82) contrast(1.05); opacity: .9; }
   .edtile.locked { cursor: not-allowed; }
-  .edlock { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #d6e8f0; }
-  .edlock svg { width: 34px; height: 34px; filter: drop-shadow(0 2px 3px rgba(0,0,0,.6)); }
+  .edlock { position: absolute; left: 6px; top: 6px; display: flex; align-items: center; justify-content: center;
+    color: #e8f3f8; background: rgba(6,18,24,.62); border-radius: 7px; padding: 3px; }
+  .edlock svg { width: 15px; height: 15px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
   .edcost { position: absolute; right: 7px; bottom: 6px; min-width: 20px; height: 20px; border-radius: 10px; font-size: 11px; font-weight: 700;
     display: flex; align-items: center; justify-content: center; color: #062432; background: #8ef3ea; padding: 0 5px; }
   .edsec { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
@@ -393,17 +420,15 @@
 </div>
 
 
-<div id="start"><canvas id="startbg"></canvas><div class="flow">
-  <h1 class="fl">GENESIS</h1>
-  <p class="fl lead">You are not watching this island. You live on it.</p>
-  <p class="fl">You hatch as a newborn with a real genome and a real metabolism, among animals that evolved on their own and will hunt you. Eat to grow. Kill to take their parts into your body. Mate and your line goes on in your children. When you die, you are reborn as your nearest kin.</p>
-  <p class="fl">Nothing here was designed. Every animal you meet came out of mutation and natural selection, so no two islands are the same.</p>
-  <p class="fl dim">Wear headphones. Footsteps, growls and roars come from where the animal really is, even behind you.</p>
-  <div class="keysg"><div class="grp fl"><h3>Move</h3><div class="kr"><span class="kk"><kbd>W A S D</kbd></span><span>walk</span></div><div class="kr"><span class="kk"><kbd>hold Shift</kbd></span><span>sprint (uses stamina)</span></div><div class="kr"><span class="kk"><kbd>Space</kbd></span><span>jump; fliers climb</span></div><div class="kr"><span class="kk"><kbd>Ctrl</kbd></span><span>fliers dive</span></div><div class="kr"><span class="kk"><kbd>drag</kbd> <kbd>L</kbd></span><span>look around / lock the mouse</span></div></div><div class="grp fl"><h3>Fight</h3><div class="kr"><span class="kk"><kbd>left click</kbd> <kbd>F</kbd></span><span>attack with your body</span></div><div class="kr"><span class="kk"><kbd>X</kbd></span><span>switch attack</span></div><div class="kr"><span class="kk"><kbd>Q (hold)</kbd></span><span>guard: raise it as the marker over an attacker turns yellow to parry</span></div><div class="kr"><span class="kk"><kbd>Z</kbd> <kbd>tap Shift</kbd></span><span>dodge roll</span></div><div class="kr"><span class="kk"><kbd>T</kbd> <kbd>middle click</kbd></span><span>lock on to a target</span></div></div><div class="grp fl"><h3>Survive</h3><div class="kr"><span class="kk"><kbd>E</kbd></span><span>eat plants, fruit or the dead</span></div><div class="kr"><span class="kk"><kbd>M</kbd></span><span>mate: you become the offspring</span></div><div class="kr"><span class="kk"><kbd>R</kbd></span><span>roar: small animals scatter, big ones answer</span></div><div class="kr"><span class="kk"><kbd>B</kbd></span><span>creature builder, any time</span></div></div><div class="grp fl"><h3>See and hear</h3><div class="kr"><span class="kk"><kbd>C</kbd> <kbd>scroll</kbd></span><span>first or third person</span></div><div class="kr"><span class="kk"><kbd>V</kbd></span><span>detach the camera</span></div><div class="kr"><span class="kk"><kbd>N</kbd></span><span>sound on or off</span></div><div class="kr"><span class="kk"><kbd>Tab</kbd></span><span>control panel</span></div><div class="kr"><span class="kk"><kbd>[ ]</kbd></span><span>simulation speed</span></div><div class="kr"><span class="kk"><kbd>Esc</kbd></span><span>release the mouse</span></div></div></div>
-  <p class="fl moves">Your attacks come from your body: a <b>head-butt</b> by default, a <b>bite</b> with jaws, a <b>gore</b> with horns, a <b>claw</b> swipe, a <b>tail sweep</b>, a <b>spike slam</b> or a <b>punch</b> with arms. Bigger bodies and bigger parts hit harder.</p>
-  <div class="go fl">click to begin</div>
-  <div class="fl dim small">you will design your creature first</div>
-</div></div>
+<div id="start"><canvas id="startbg"></canvas>
+  <div class="mm">
+    <div class="mmhead"><span class="mmkicker">GENESIS</span><h1 id="mmBig">NEW GAME</h1></div>
+    <nav id="mmNav"></nav>
+  </div>
+  <div id="mmFoot"><div id="mmDesc"></div><div class="mmhint">move <b>&#8593;</b> <b>&#8595;</b> &nbsp; choose <b>Enter</b> &nbsp; back <b>Esc</b></div></div>
+  <div id="mmPage"></div>
+  <div id="mmKeysSrc" style="display:none"><div class="keysg"><div class="grp fl"><h3>Move</h3><div class="kr"><span class="kk"><kbd>W A S D</kbd></span><span>walk</span></div><div class="kr"><span class="kk"><kbd>hold Shift</kbd></span><span>sprint (uses stamina)</span></div><div class="kr"><span class="kk"><kbd>Space</kbd></span><span>jump; in the air, flap</span></div><div class="kr"><span class="kk"><kbd>G</kbd></span><span>rear up on your hind legs to reach high food</span></div><div class="kr"><span class="kk"><kbd>drag</kbd> <kbd>L</kbd></span><span>look around / lock the mouse</span></div></div><div class="grp fl"><h3>Fly</h3><div class="kr"><span class="kk"><kbd>Space</kbd></span><span>flap: costs stamina, big wings beat slower</span></div><div class="kr"><span class="kk"><kbd>look</kbd></span><span>dive to gain speed, pull up to swoop and climb</span></div><div class="kr"><span class="kk"><kbd>A D</kbd></span><span>bank into a turn</span></div><div class="kr"><span class="kk"><kbd>W</kbd></span><span>tuck to dive faster</span></div><div class="kr"><span class="kk"><kbd>S</kbd></span><span>flare to slow down and land</span></div><div class="kr"><span class="kk"><kbd>thermals</kbd></span><span>rising air over open sunlit ground and hillsides</span></div></div><div class="grp fl"><h3>Fight</h3><div class="kr"><span class="kk"><kbd>left click</kbd> <kbd>F</kbd></span><span>attack with your body</span></div><div class="kr"><span class="kk"><kbd>X</kbd></span><span>switch attack</span></div><div class="kr"><span class="kk"><kbd>Q (hold)</kbd></span><span>guard: raise it as the marker over an attacker turns yellow to parry</span></div><div class="kr"><span class="kk"><kbd>Z</kbd> <kbd>tap Shift</kbd></span><span>dodge roll</span></div><div class="kr"><span class="kk"><kbd>T</kbd> <kbd>middle click</kbd></span><span>lock on to a target</span></div></div><div class="grp fl"><h3>Survive</h3><div class="kr"><span class="kk"><kbd>E</kbd></span><span>eat plants, fruit or the dead</span></div><div class="kr"><span class="kk"><kbd>M</kbd></span><span>mate: you become the offspring</span></div><div class="kr"><span class="kk"><kbd>R</kbd></span><span>roar: small animals scatter, big ones answer</span></div><div class="kr"><span class="kk"><kbd>B</kbd></span><span>creature builder, any time</span></div></div><div class="grp fl"><h3>See and hear</h3><div class="kr"><span class="kk"><kbd>C</kbd> <kbd>scroll</kbd></span><span>first or third person</span></div><div class="kr"><span class="kk"><kbd>V</kbd></span><span>detach the camera</span></div><div class="kr"><span class="kk"><kbd>N</kbd></span><span>sound on or off</span></div><div class="kr"><span class="kk"><kbd>Tab</kbd></span><span>control panel</span></div><div class="kr"><span class="kk"><kbd>[ ]</kbd></span><span>simulation speed</span></div><div class="kr"><span class="kk"><kbd>Esc</kbd></span><span>release the mouse</span></div></div></div><p class="fl moves">Your attacks come from your body: a <b>head-butt</b> by default, a <b>bite</b> with jaws, a <b>gore</b> with horns, a <b>claw</b> swipe, a <b>tail sweep</b>, a <b>spike slam</b> or a <b>punch</b> with arms. Bigger bodies and bigger parts hit harder.</p></div>
+</div>
 
 <div id="err"><div>
   <p>This build needs <code>WebGPU</code>, which this browser did not provide.</p>
@@ -3180,6 +3205,10 @@
     m_jaws:     { t: 'MOUTH', mode: 'carn', w: 0.8, cost: 2 },
     m_maw:      { t: 'MOUTH', mode: 'carn', w: 1.0, cost: 3, atk: 3 },
     m_hook:     { t: 'MOUTH', mode: 'scav', w: 0.8, cost: 2 },
+    m_rex:      { t: 'MOUTH', mode: 'carn', w: 1.2, cost: 4, atk: 6 },
+    m_spino:    { t: 'MOUTH', mode: 'carn', w: 1.0, cost: 3, atk: 4, reach: 5 },
+    m_short:    { t: 'MOUTH', mode: 'carn', w: 0.9, cost: 3, atk: 4 },
+    m_duck:     { t: 'MOUTH', mode: 'herb', w: 0.9, cost: 2, reach: 3 },
     e_round:    { t: 'EYE', w: 0.6, cost: 1 },
     e_big:      { t: 'EYE', w: 0.9, cost: 2, sense: 8 },
     e_slit:     { t: 'EYE', w: 0.7, cost: 1 },
@@ -3242,6 +3271,19 @@
     { a: 0.95, b: 0.72, seg: 11, prof: 'animal', arch: 0.14, droop: 0.05, wide: 0,    neck: 0.55, nx: 0.62, ny: 0.85, ns: 3, head: 0.46, snx: 0.62, snr: 0.50, tail: 0.8, tailR: 0.24, ts: 6, stand: 1.10 },
     { a: 1.20, b: 1.02, seg: 11, prof: 'animal', arch: 0.10, droop: 0.04, wide: 0.42, neck: 0.20, nx: 0.85, ny: 0.45, ns: 2, head: 0.56, snx: 0.55, snr: 0.72, tail: 0.5, tailR: 0.32, ts: 5, stand: 1.00 },
     { a: 1.30, b: 0.85, seg: 11, prof: 'blob',   arch: 0.22, droop: 0.00, wide: 0.45, neck: 0.10, nx: 0.9,  ny: 0.5,  ns: 2, head: 0.50, snx: 0.40, snr: 0.62, tail: 0.4, tailR: 0.40, ts: 4, stand: 0.62 },
+    // ---- prehistoric plans -------------------------------------------------
+    { a: 1.15, b: 0.78, seg: 11, prof: 'animal', arch: 0.12, droop: 0.02, wide: 0,    neck: 0.55, nx: 0.60, ny: 0.75, ns: 3, head: 0.62, snx: 0.72, snr: 0.50, tail: 1.7, tailR: 0.34, ts: 8, stand: 1.75 },  // 10 theropod
+    { a: 0.95, b: 0.55, seg: 11, prof: 'animal', arch: 0.10, droop: 0.00, wide: 0,    neck: 0.60, nx: 0.58, ny: 0.80, ns: 3, head: 0.40, snx: 0.80, snr: 0.42, tail: 1.9, tailR: 0.20, ts: 8, stand: 1.20 },  // 11 raptor
+    { a: 1.60, b: 1.05, seg: 13, prof: 'animal', arch: 0.18, droop: 0.05, wide: 0.20, neck: 2.60, nx: 0.45, ny: 0.88, ns: 8, head: 0.30, snx: 0.70, snr: 0.50, tail: 2.4, tailR: 0.30, ts: 10, stand: 2.40 }, // 12 sauropod
+    { a: 1.20, b: 1.00, seg: 11, prof: 'animal', arch: 0.12, droop: 0.02, wide: 0.35, neck: 0.15, nx: 0.85, ny: 0.50, ns: 2, head: 0.70, snx: 0.60, snr: 0.62, tail: 0.6, tailR: 0.30, ts: 5, stand: 1.15 },  // 13 ceratopsian
+    { a: 1.35, b: 0.95, seg: 11, prof: 'blob',   arch: 0.20, droop: 0.00, wide: 0.50, neck: 0.15, nx: 0.90, ny: 0.35, ns: 2, head: 0.42, snx: 0.55, snr: 0.60, tail: 1.4, tailR: 0.32, ts: 7, stand: 0.75 },  // 14 ankylosaur
+    { a: 1.30, b: 0.90, seg: 11, prof: 'animal', arch: 0.28, droop: 0.02, wide: 0.20, neck: 0.40, nx: 0.70, ny: 0.55, ns: 3, head: 0.32, snx: 0.60, snr: 0.50, tail: 1.5, tailR: 0.28, ts: 7, stand: 1.30 },  // 15 stegosaur
+    { a: 1.20, b: 0.82, seg: 11, prof: 'animal', arch: 0.14, droop: 0.03, wide: 0,    neck: 0.80, nx: 0.60, ny: 0.80, ns: 4, head: 0.45, snx: 0.85, snr: 0.58, tail: 1.6, tailR: 0.30, ts: 8, stand: 1.55 },  // 16 hadrosaur
+    { a: 1.45, b: 0.80, seg: 12, prof: 'animal', arch: 0.12, droop: 0.02, wide: 0,    neck: 0.70, nx: 0.62, ny: 0.78, ns: 3, head: 0.52, snx: 0.95, snr: 0.40, tail: 2.0, tailR: 0.30, ts: 9, stand: 1.50 },  // 17 sail-back
+    { a: 0.85, b: 0.60, seg: 9,  prof: 'animal', arch: 0.08, droop: 0.00, wide: 0,    neck: 0.90, nx: 0.60, ny: 0.85, ns: 4, head: 0.55, snx: 1.05, snr: 0.34, tail: 0.3, tailR: 0.16, ts: 4, stand: 0.90 },  // 18 pterosaur
+    { a: 1.80, b: 0.66, seg: 13, prof: 'fish',   arch: 0.05, droop: 0.00, wide: 0,    neck: 0.00, nx: 0.90, ny: 0.20, ns: 2, head: 0.50, snx: 0.75, snr: 0.50, tail: 1.0, tailR: 0.30, ts: 6, stand: 0.70 },  // 19 shark
+    { a: 2.10, b: 1.00, seg: 13, prof: 'fish',   arch: 0.06, droop: 0.00, wide: 0.10, neck: 0.00, nx: 0.90, ny: 0.25, ns: 2, head: 0.72, snx: 0.80, snr: 0.70, tail: 1.2, tailR: 0.34, ts: 6, stand: 0.90 },  // 20 whale
+    { a: 1.35, b: 0.85, seg: 11, prof: 'fish',   arch: 0.08, droop: 0.00, wide: 0.15, neck: 2.20, nx: 0.50, ny: 0.80, ns: 7, head: 0.34, snx: 0.70, snr: 0.45, tail: 0.9, tailR: 0.24, ts: 6, stand: 0.80 },  // 21 plesiosaur
   ];
   const BODY_RANGE = { len: [0.6, 1.6], girth: [0.7, 1.45], neck: [0, 2.2], tail: [0, 1.8] };
   function planProfile(kind, u) {
@@ -3653,6 +3695,19 @@
     { base: [0.86, 0.46, 0.26], coat: [0.98, 0.89, 0.72], detail: [0.36, 0.16, 0.10], pat: 0 },
     { base: [0.50, 0.52, 0.58], coat: [0.78, 0.75, 0.72], detail: [0.30, 0.30, 0.36], pat: 3 },
     { base: [0.95, 0.78, 0.26], coat: [0.99, 0.95, 0.72], detail: [0.62, 0.36, 0.10], pat: 2 },
+    // prehistoric: muted hides, dark backs, pale bellies, bright display parts
+    { base: [0.34, 0.31, 0.22], coat: [0.72, 0.68, 0.54], detail: [0.52, 0.20, 0.12], pat: 2 },  // theropod
+    { base: [0.38, 0.40, 0.26], coat: [0.78, 0.74, 0.55], detail: [0.72, 0.42, 0.14], pat: 1 },  // raptor
+    { base: [0.40, 0.42, 0.30], coat: [0.74, 0.72, 0.58], detail: [0.26, 0.28, 0.20], pat: 0 },  // sauropod
+    { base: [0.44, 0.36, 0.26], coat: [0.80, 0.72, 0.56], detail: [0.66, 0.30, 0.18], pat: 3 },  // ceratopsian
+    { base: [0.36, 0.34, 0.28], coat: [0.62, 0.58, 0.46], detail: [0.24, 0.22, 0.18], pat: 0 },  // ankylosaur
+    { base: [0.34, 0.40, 0.28], coat: [0.70, 0.70, 0.52], detail: [0.62, 0.44, 0.16], pat: 2 },  // stegosaur
+    { base: [0.42, 0.40, 0.32], coat: [0.80, 0.76, 0.60], detail: [0.50, 0.34, 0.48], pat: 1 },  // hadrosaur
+    { base: [0.40, 0.32, 0.24], coat: [0.76, 0.66, 0.50], detail: [0.70, 0.36, 0.16], pat: 2 },  // sail-back
+    { base: [0.44, 0.34, 0.28], coat: [0.78, 0.70, 0.58], detail: [0.64, 0.26, 0.20], pat: 1 },  // pterosaur
+    { base: [0.30, 0.34, 0.38], coat: [0.82, 0.84, 0.82], detail: [0.16, 0.18, 0.22], pat: 0 },  // shark
+    { base: [0.26, 0.30, 0.34], coat: [0.74, 0.78, 0.78], detail: [0.14, 0.16, 0.18], pat: 0 },  // whale
+    { base: [0.28, 0.36, 0.36], coat: [0.76, 0.80, 0.76], detail: [0.18, 0.22, 0.24], pat: 1 },  // plesiosaur
   ];
   function surfaceAt(sk, tx, ty, tz, dx, dy, dz) {
     const l = Math.hypot(dx, dy, dz) || 1; dx /= l; dy /= l; dz /= l;
@@ -3660,7 +3715,7 @@
     return raySkin(sk, tx + dx * D, ty + dy * D, tz + dz * D, -dx, -dy, -dz, D * 2);
   }
   // Skin covering per plan: 0 smooth, 1 scales, 2 feathers, 3 fur, 4 armour plates.
-  const PLAN_SKIN = [1, 3, 1, 1, 3, 4, 1, 2, 4, 0];
+  const PLAN_SKIN = [1, 3, 1, 1, 3, 4, 1, 2, 4, 0,  1, 2, 1, 1, 4, 1, 1, 1, 2, 0, 0, 0];
   // opt (all optional): body {len,girth,neck,tail}; eye / mouth / tip(id)->id overrides.
   function defaultDesign(planIdx, opt) {
     opt = opt || {};
@@ -3795,6 +3850,82 @@
         eyeAt('e_stalk', 1, 0.7, 0.2, 0.4); mouthAt('m_grazer', 1);
         put('s_knob', -a * 0.2, b * 1.3, 0, 0, 1, 0, 1, false);
         break;
+      case 10: // theropod: huge head, tiny arms, heavy legs
+        eyeAt('e_slit', 0.9, 0.5, 0.3, 0.6); mouthAt('m_rex', 1.15);
+        limb('l_thick', -a * 0.1, -b * 0.3, b * 0.55, a * 0.05, -st, b * 0.62, 0.3, 0.06, 0.05, 't_talon', 1.35);
+        limb('l_thin', a * 0.55, b * 0.05, b * 0.6, a * 0.85, -b * 0.5, b * 0.5, 0.05, -0.2, 0.1, 't_claw', 0.5);
+        break;
+      case 11: // raptor: light, fast, sickle claws
+        eyeAt('e_round', 0.85, 0.5, 0.35, 0.58); mouthAt('m_jaws', 0.95);
+        put('d_crest', head.x - hr * 0.15, head.y + hr, 0, -0.2, 1, 0, 0.8, false);
+        limb('l_leg', -a * 0.05, -b * 0.3, b * 0.5, a * 0.08, -st, b * 0.5, 0.28, 0.05, 0.04, 't_talon', 1.05);
+        limb('l_thin', a * 0.55, b * 0.05, b * 0.55, a * 0.8, -b * 0.55, b * 0.5, 0.05, -0.2, 0.08, 't_claw', 0.6);
+        break;
+      case 12: // sauropod: column legs under a barrel body
+        eyeAt('e_round', 0.7, 0.45, 0.3, 0.6); mouthAt('m_grazer', 0.8);
+        limb('l_thick', a * 0.55, -b * 0.25, b * 0.6, a * 0.6, -st, b * 0.7, 0.05, 0, 0.02, 't_hoof', 1.5);
+        limb('l_thick', -a * 0.55, -b * 0.25, b * 0.6, -a * 0.6, -st, b * 0.7, -0.05, 0, 0.02, 't_hoof', 1.6);
+        break;
+      case 13: // ceratopsian: frill, brow horns and a nose horn
+        eyeAt('e_round', 0.8, 0.45, 0.25, 0.62); mouthAt('m_duck', 0.95);
+        put('d_frill', head.x - hr * 0.55, head.y + hr * 0.7, 0, -0.5, 1, 0, 1.3, false);
+        put('h_straight', head.x + hr * 0.2, head.y + hr * 0.85, hr * 0.42, 0.25, 1, 0.35, 0.8, true);
+        put('h_rhino', snout.x + snout.r * 0.35, snout.y + snout.r * 0.85, 0, 0.4, 1, 0, 0.9, false);
+        limb('l_thick', a * 0.5, -b * 0.3, b * 0.6, a * 0.55, -st, b * 0.72, 0.1, 0, 0.03, 't_hoof', 1.3);
+        limb('l_thick', -a * 0.5, -b * 0.3, b * 0.6, -a * 0.55, -st, b * 0.72, -0.1, 0, 0.03, 't_hoof', 1.25);
+        break;
+      case 14: // ankylosaur: armoured and low, with a tail club
+        eyeAt('e_round', 0.7, 0.4, 0.3, 0.6); mouthAt('m_duck', 0.85);
+        for (const u of [0.45, 0.05, -0.4]) put('s_plate', a * u, b * 0.85, b * 0.45, 0, 0.85, 0.5, 1.1, true);
+        for (const u of [0.3, -0.2]) put('s_spike', a * u, b * 0.5, b * 0.95, 0, 0.35, 1, 0.9, true);
+        tailPut('s_club', 1.2);
+        limb('l_thick', a * 0.5, -b * 0.25, b * 0.7, a * 0.52, -st, b * 0.85, 0.08, 0, 0.03, 't_hoof', 1.2);
+        limb('l_thick', -a * 0.5, -b * 0.25, b * 0.7, -a * 0.52, -st, b * 0.85, -0.08, 0, 0.03, 't_hoof', 1.2);
+        break;
+      case 15: // stegosaur: plate row and tail spikes
+        eyeAt('e_round', 0.65, 0.4, 0.3, 0.6); mouthAt('m_beak', 0.8);
+        for (const u of [0.45, 0.2, -0.05, -0.3]) put('s_plate', a * u, b * 1.15, 0, 0, 1, 0, 1.4, false);
+        tailPut('s_spike', 1.3);
+        limb('l_leg', a * 0.5, -b * 0.3, b * 0.55, a * 0.55, -st * 0.7, b * 0.62, 0.12, 0, 0.03, 't_hoof', 1.0);
+        limb('l_thick', -a * 0.5, -b * 0.3, b * 0.55, -a * 0.55, -st, b * 0.68, -0.12, 0, 0.03, 't_hoof', 1.35);
+        break;
+      case 16: // hadrosaur: duck bill and a head crest
+        eyeAt('e_round', 0.8, 0.45, 0.3, 0.6); mouthAt('m_duck', 1.05);
+        put('d_crest', head.x - hr * 0.5, head.y + hr * 0.9, 0, -0.6, 1, 0, 1.5, false);
+        limb('l_leg', -a * 0.1, -b * 0.3, b * 0.5, a * 0.02, -st, b * 0.58, 0.26, 0.04, 0.04, 't_hoof', 1.2);
+        limb('l_thin', a * 0.5, -b * 0.05, b * 0.55, a * 0.72, -st * 0.75, b * 0.55, 0.1, -0.1, 0.06, 't_hoof', 0.7);
+        break;
+      case 17: // sail-back: long fishing jaw and a tall sail
+        eyeAt('e_slit', 0.85, 0.45, 0.3, 0.55); mouthAt('m_spino', 1.1);
+        for (const u of [0.45, 0.25, 0.05, -0.15, -0.35]) put('f_dorsal', a * u, b * 1.1, 0, 0, 1, 0, 1.6 - Math.abs(u) * 0.8, false);
+        limb('l_leg', -a * 0.1, -b * 0.3, b * 0.52, a * 0.02, -st, b * 0.6, 0.28, 0.05, 0.04, 't_talon', 1.15);
+        limb('l_thin', a * 0.55, b * 0.0, b * 0.55, a * 0.85, -b * 0.7, b * 0.5, 0.05, -0.2, 0.08, 't_claw', 0.7);
+        break;
+      case 18: // pterosaur: huge membrane wings, walks folded up
+        eyeAt('e_big', 0.8, 0.45, 0.3, 0.55); mouthAt('m_spino', 0.9);
+        put('d_crest', head.x - hr * 0.2, head.y + hr, 0, -0.3, 1, 0, 1.4, false);
+        put('w_bat', a * 0.1, b * 0.5, b * 0.6, 0, 0.6, 0.8, 1.8, true);
+        limb('l_thin', -a * 0.25, -b * 0.35, b * 0.4, -a * 0.2, -st, b * 0.5, 0.2, 0.02, 0.04, 't_talon', 0.6);
+        break;
+      case 19: // shark: dorsal fin, pectorals, crescent tail
+        eyeAt('e_round', 0.7, 0.3, 0.35, 0.6); mouthAt('m_maw', 1.0);
+        put('f_fin', a * 0.3, -b * 0.35, b * 0.95, 0, -0.3, 1, 1.4, true);
+        put('f_fin', -a * 0.45, -b * 0.2, b * 0.8, 0, -0.2, 1, 0.8, true);
+        put('f_dorsal', a * 0.05, b * 1.15, 0, 0, 1, 0, 1.5, false);
+        tailPut('f_fluke', 1.3);
+        break;
+      case 20: // whale: flippers, blowhole, broad fluke
+        eyeAt('e_round', 0.6, 0.15, 0.45, 0.62); mouthAt('m_grazer', 1.3);
+        put('f_fin', a * 0.35, -b * 0.4, b * 0.9, 0, -0.35, 1, 1.5, true);
+        put('s_knob', a * 0.35, b * 1.05, 0, 0, 1, 0, 0.5, false);
+        tailPut('f_fluke', 1.6);
+        break;
+      case 21: // plesiosaur: long neck and four paddles
+        eyeAt('e_round', 0.7, 0.4, 0.3, 0.6); mouthAt('m_jaws', 0.85);
+        put('f_fin', a * 0.45, -b * 0.3, b * 0.9, 0, -0.3, 1, 1.5, true);
+        put('f_fin', -a * 0.45, -b * 0.3, b * 0.9, 0, -0.3, 1, 1.4, true);
+        tailPut('f_fluke', 0.8);
+        break;
     }
     return d;
   }
@@ -3814,7 +3945,8 @@
     for (const e of list) { r -= e[1]; if (r <= 0) return e[0]; }
     return list[list.length - 1][0];
   }
-  const FOUNDER_PLANS = [[0, 3], [1, 1.5], [2, 1.5], [3, 1.5], [4, 1], [5, 1.2], [7, 1.2], [8, 1.5], [9, 1.2]];
+  const FOUNDER_PLANS = [[0, 2.2], [1, 1.2], [2, 1.2], [3, 1.2], [4, 0.8], [5, 1], [7, 1], [8, 1.2], [9, 1],
+                         [10, 1.6], [11, 1.4], [12, 1.2], [13, 1.3], [14, 1.1], [15, 1.1], [16, 1.3], [17, 1.2], [18, 1.1], [19, 0.9], [20, 0.6], [21, 0.8]];
   function randomColours(rng, pi) {
     // mostly earthy and natural, now and then something vivid
     const vivid = rng() < 0.22;
@@ -4401,8 +4533,8 @@ fn shade(col: vec3<f32>, nrm: vec3<f32>, wpos: vec3<f32>) -> vec3<f32> {
   let sky = 0.5 + 0.5 * N.y;                       // hemisphere ambient
   let bounce = max(0.0, -N.y) * 0.18;              // light kicking back off the ground
   let day = g.params.z;
-  let ambCol = mix(vec3<f32>(0.16, 0.19, 0.26), vec3<f32>(0.42, 0.52, 0.66), day);
-  let sunCol = mix(vec3<f32>(0.20, 0.24, 0.34), vec3<f32>(1.06, 0.98, 0.86), day);
+  let ambCol = mix(vec3<f32>(0.055, 0.070, 0.105), vec3<f32>(0.42, 0.52, 0.66), day);
+  let sunCol = mix(vec3<f32>(0.09, 0.11, 0.17), vec3<f32>(1.06, 0.98, 0.86), day);
   let shd = shadowAt(wpos, N);
   var lit = col * (ambCol * (0.55 + 0.45 * sky) * (0.82 + 0.18 * shd) + sunCol * sun * 0.85 * shd + col * bounce);
   // soft specular sheen gives curved surfaces a readable highlight
@@ -6158,7 +6290,7 @@ function drawCreature(c, t, camDist) {
     }
     bob += rear;
   }
-  const bodyY = groundY + stand + bob;
+  const bodyY = groundY + stand * (1 + 0.55 * (c._rear || 0)) + bob;
 
   // body-local (x fwd, y up, z lateral) -> world
   const wx = (lx, lz) => c.x + (lx + lungeX) * cy - lz * sy;
@@ -7005,6 +7137,10 @@ const VIS = {
     for (let i = 0; i < 6; i++) g.cn(-0.34 - o * 0.5, 0.6, (i - 2.5) * 0.2, 1, 0.1, 0, 0.065, 0.3, IVORY);
     for (const s of [1, -1]) g.cn(-0.34 - o * 0.5, 0.62, s * 0.62, 1, 0.2, 0, 0.1, 0.5, IVORY);
   } },
+  m_rex: { name: 'crushing jaw', cat: 'mouth', size: 0.5, col: 'base', use: 'a deep bone-cracking bite: the heaviest damage of any mouth, and the most genome space', draw(g, c, e) { dinoJawHard(g, c, e, jawShape('m_rex')); } },
+  m_spino: { name: 'fishing jaw', cat: 'mouth', size: 0.44, col: 'base', use: 'long crocodile jaws full of conical teeth: extra reach, good in water', draw(g, c, e) { dinoJawHard(g, c, e, jawShape('m_spino')); } },
+  m_short: { name: 'short muzzle', cat: 'mouth', size: 0.42, col: 'base', use: 'a short deep bulldog muzzle: fast, strong bites at close range', draw(g, c, e) { dinoJawHard(g, c, e, jawShape('m_short')); } },
+  m_duck: { name: 'duck bill', cat: 'mouth', size: 0.44, col: 'base', use: 'a broad beak with grinding rows behind it: strips plants fast and reaches further', draw(g, c, e) { dinoJawHard(g, c, e, jawShape('m_duck')); } },
   m_hook: { name: 'hooked beak', cat: 'mouth', size: 0.36, col: [0.36, 0.30, 0.26], draw(g, c) {
     g.sp(0, 0.1, 0, 0, 1, 0, 0.6, 0.4, 0.62, colMul(c, 1.2));
     let p = [0.2, 0.1, 0], d = [0, 1, 0];
@@ -7336,6 +7472,119 @@ const VIS = {
     g.sp(0, 0.05, 0, 0, 1, 0, 0.6, 0.12, 0.6, e.base);
   } },
 };
+// =====================================================================
+// DINOSAUR JAWS: a real skull mouth instead of a lump. An upper jaw that is
+// part of the muzzle, a lower jaw hinged at the back that swings open, teeth
+// that vary along the jaw line and interlock when shut, a tongue, gums and a
+// dark throat. One builder drives every mouth: a deep crushing jaw, a long
+// fish-catching jaw, a short deep muzzle, a duck bill, and the older ones.
+//
+// Local frame: x forward (snout), y up, z across. The part is scaled by its
+// VIS size, so these numbers are relative to the head.
+// =====================================================================
+// S: len (snout length), deep (jaw depth), wide (half width), teeth (pairs),
+// tooth (tooth length), fang (front fang multiplier), beak (bony beak tip),
+// grind (flat grinding rows), gape (extra opening), curve (snout downturn)
+function jawShape(id) {
+  switch (id) {
+    case 'm_rex':    return { len: 1.55, deep: 0.62, wide: 0.55, teeth: 7, tooth: 0.34, fang: 1.7, gape: 0.95, curve: 0.05, brow: 1 };
+    case 'm_spino':  return { len: 2.25, deep: 0.40, wide: 0.36, teeth: 10, tooth: 0.26, fang: 1.5, gape: 0.8, curve: 0.12, croc: 1 };
+    case 'm_short':  return { len: 1.05, deep: 0.70, wide: 0.58, teeth: 6, tooth: 0.2, fang: 1.2, gape: 1.0, curve: 0.02, brow: 1 };
+    case 'm_duck':   return { len: 1.5, deep: 0.42, wide: 0.6, teeth: 8, tooth: 0.08, fang: 1, gape: 0.6, curve: 0.18, beak: 1, grind: 1 };
+    case 'm_maw':    return { len: 1.25, deep: 0.58, wide: 0.6, teeth: 7, tooth: 0.3, fang: 1.8, gape: 1.0, curve: 0.04 };
+    default:         return { len: 1.05, deep: 0.46, wide: 0.46, teeth: 6, tooth: 0.22, fang: 1.3, gape: 0.85, curve: 0.04 };
+  }
+}
+// half width and depth of the muzzle at u = 0 (hinge) .. 1 (tip)
+function jawProfile(S, u) {
+  const taper = S.croc ? 0.85 - 0.35 * u * u : S.beak ? 0.9 - 0.15 * u + 0.5 * Math.pow(u, 6) : 1 - 0.55 * u * u;
+  return { w: S.wide * taper, d: S.deep * (S.croc ? 0.9 - 0.3 * u : 1 - 0.45 * u * u) };
+}
+// the skin/flesh half of a jaw: the muzzle above, the mandible below (F.jaw()
+// marks the pieces that ride the jaw bone, so they swing when it opens)
+function dinoJawFlesh(F, S) {
+  const N = 5;
+  for (let i = 0; i <= N; i++) {
+    const u = i / N, x = -0.35 + u * (S.len + 0.35);
+    const p = jawProfile(S, u);
+    const y = 0.42 - S.curve * u * u * 1.4;
+    F.e(x, y + p.d * 0.30, 0, 0.12, 1, 0, 1, 0, 0, p.w * 1.02, p.d * 0.62, p.w, 0.22);   // upper muzzle
+  }
+  if (S.brow) for (const s of [1, -1]) F.e(-0.15, 0.95, s * S.wide * 0.8, 0, 1, 0, 1, 0, 0, 0.36, 0.2, 0.28, 0.16);
+  F.jaw();
+  for (let i = 0; i <= N; i++) {
+    const u = i / N, x = -0.35 + u * (S.len + 0.3);
+    const p = jawProfile(S, u);
+    const y = 0.30 - S.curve * u * u * 1.2;
+    F.e(x, y - p.d * 0.34, 0, 0.1, 1, 0, 1, 0, 0, p.w * 0.9, p.d * 0.5, p.w * 0.88, 0.18);  // mandible
+  }
+  F.e(-0.42, 0.06, 0, 0, 1, 0, 1, 0, 0, 0.5, 0.3, 0.42, 0.2);                               // throat pouch under the chin
+  F.main();
+}
+// the hard half: teeth, gums, tongue, throat, beak and horn ridges
+function dinoJawHard(g, c, e, S) {
+  const open = (e.jaw || 0) * (S.gape || 1);
+  const j = g.rotated(0, 0, 1, open);                  // the mandible swings about the hinge
+  const gum = colMul(c, 0.55), bone = colMul(c, 0.9);
+  // palette icon: in game the muzzle flesh comes from the mesh builder, so the
+  // icon has to grow its own or it reads as a floating set of teeth
+  if (e.thumb) {
+    const N = 5, low = colMul(c, 0.92);
+    for (let i = 0; i <= N; i++) {
+      const u = i / N, p = jawProfile(S, u);
+      g.sp(-0.35 + u * (S.len + 0.35), 0.42 - S.curve * u * u * 1.4 + p.d * 0.30, 0, 0.12, 1, 0, p.w * 1.02, p.d * 0.62, p.w, c);
+      j.sp(-0.35 + u * (S.len + 0.3), 0.30 - S.curve * u * u * 1.2 - p.d * 0.34, 0, 0.1, 1, 0, p.w * 0.9, p.d * 0.5, p.w * 0.88, low);
+    }
+    g.sp(-0.42, 0.06, 0, 0, 1, 0, 0.5, 0.3, 0.42, low);
+    if (S.brow) for (const s of [1, -1]) g.sp(-0.15, 0.95, s * S.wide * 0.8, 0, 1, 0, 0.36, 0.2, 0.28, c);
+  }
+  // dark throat behind the teeth, so an open mouth reads as a hole
+  g.sp(-0.12, 0.30, 0, 0, 1, 0, 0.34, 0.42 + open * 0.5, S.wide * 0.85, MAW);
+  // tooth rows: front fangs longest, tapering back; the lower row interlocks
+  const n = S.teeth;
+  for (let i = 0; i < n; i++) {
+    const u = 0.12 + (i / Math.max(1, n - 1)) * 0.84;          // along the jaw
+    const p = jawProfile(S, u);
+    const x = -0.3 + u * (S.len + 0.3);
+    const front = Math.pow(1 - u, 0.8);
+    const size = S.tooth * (0.55 + 0.9 * front) * (i === 0 || i === 1 ? S.fang : 1);
+    const yU = 0.42 - S.curve * u * u * 1.4 - p.d * 0.1;
+    const yL = 0.30 - S.curve * u * u * 1.2 - p.d * 0.05;
+    for (const s of [1, -1]) {
+      const z = s * p.w * (S.beak ? 0.82 : 0.92);
+      if (S.beak && u < 0.55) continue;                        // a duck bill is toothless in front
+      if (S.grind) {
+        g.sp(x, yU - 0.04, z, 0, 1, 0, 0.1, 0.06, 0.08, IVORY);
+        j.sp(x - 0.06, yL + 0.04, z * 0.95, 0, 1, 0, 0.1, 0.06, 0.08, IVORY);
+        continue;
+      }
+      // upper teeth point down and rake backward; lower teeth point up
+      g.cn(x, yU, z, -0.18, -1, 0, size * 0.34, size, IVORY);
+      j.cn(x - 0.05, yL, z * 0.95, -0.12, 1, 0, size * 0.3, size * 0.85, IVORY);
+      if (!e.lod) {
+        g.sp(x, yU + 0.03, z, 0, 1, 0, size * 0.4, 0.05, size * 0.3, gum);
+        j.sp(x - 0.05, yL - 0.03, z * 0.95, 0, 1, 0, size * 0.36, 0.05, size * 0.28, gum);
+      }
+    }
+  }
+  // tongue along the floor of the mouth
+  j.sp(0.1, 0.24, 0, 0.1, 1, 0, 0.16, 0.5, S.wide * 0.5, TONGUE);
+  // beak tip (duck bill) or a bony snout tip
+  if (S.beak) {
+    const p = jawProfile(S, 1);
+    g.sp(S.len * 0.95, 0.34 - S.curve * 1.4, 0, 0.2, 1, 0, p.w * 1.35, 0.12, p.w * 1.5, bone);
+    j.sp(S.len * 0.9, 0.2 - S.curve * 1.2, 0, 0.2, 1, 0, p.w * 1.2, 0.1, p.w * 1.3, colMul(bone, 0.9));
+  } else {
+    g.sp(S.len * 0.98, 0.42 - S.curve * 1.4, 0, 1, 0.1, 0, 0.14, 0.18, jawProfile(S, 1).w * 0.9, bone);
+  }
+  // nostrils on top of the snout, and brow knobs over the eyes
+  if (!e.lod) {
+    for (const s of [1, -1]) g.ball(S.len * (S.croc ? 0.72 : 0.78), 0.68 - S.curve, s * jawProfile(S, 0.8).w * 0.45, 0.055, BLACKP);
+    if (S.brow) for (const s of [1, -1]) g.sp(-0.1, 0.96, s * S.wide * 0.8, 0.2, 1, 0, 0.3, 0.16, 0.2, bone);
+    if (S.croc) for (let i = 0; i < 4; i++) g.sp(-0.1 + i * S.len * 0.24, 0.72 - S.curve * 0.6, 0, 0, 1, 0, 0.1, 0.07, jawProfile(S, i / 4).w * 0.7, bone);
+  }
+}
+
 // Shared eye: eyeball, iris and pupil turned toward where the body looks,
 // and an eyelid in the skin colour that blinks.
 // An animal eye: a mostly-iris eyeball seated in the skin (the lids are flesh,
@@ -7384,9 +7633,17 @@ function drawEye(g, c, e, k, style) {
   } else if (shut) g.sp(0, cy, 0, f[0], f[1], f[2], R * 1.06, R * 1.06, R * 1.06, lid, up[0], up[1], up[2]);
 }
 const VIS_CATS = [
-  { id: 'body', label: 'body' }, { id: 'mouth', label: 'mouths' }, { id: 'eyes', label: 'eyes' },
-  { id: 'horns', label: 'horns' }, { id: 'armor', label: 'spikes & armour' }, { id: 'limbs', label: 'limbs, feet & hands' },
-  { id: 'fins', label: 'fins' }, { id: 'wings', label: 'wings' }, { id: 'details', label: 'details' }, { id: 'paint', label: 'paint' },
+  { id: 'body', label: 'body shape', hint: 'the skeleton everything else hangs on' },
+  { id: 'shape', label: 'proportions', hint: 'stretch the body, neck and tail' },
+  { id: 'paint', label: 'colour & skin', hint: 'hide colour, pattern and covering' },
+  { id: 'limbs', label: 'limbs, feet & hands', hint: 'legs carry you, arms grab and strike' },
+  { id: 'eyes', label: 'eyes', hint: 'how far you see danger and food' },
+  { id: 'mouth', label: 'mouths & jaws', hint: 'what you can eat and how hard you bite' },
+  { id: 'horns', label: 'horns', hint: 'attack, and the gore move' },
+  { id: 'armor', label: 'spikes & armour', hint: 'defence, and damage to whatever bites you' },
+  { id: 'fins', label: 'fins', hint: 'swimming, and steering in water' },
+  { id: 'wings', label: 'wings', hint: 'flight, once the wings beat your weight' },
+  { id: 'details', label: 'details', hint: 'crests, frills and display pieces' },
 ];
 // Nothing is unlocked at the start: every part is earned by killing an animal
 // that has one. Your current body's own parts stay usable while you edit it.
@@ -8004,8 +8261,12 @@ const jawFlesh = (F, big) => {
   F.e(0.3 * k, 0.4, 0, 0.15, 1, 0, 1, 0, 0, 0.34 * k, 0.68 * k, 0.9 * k, 0.28);
   F.jaw(); F.e(-0.42 * k, 0.34, 0, -0.1, 1, 0, 1, 0, 0, 0.3 * k, 0.6 * k, 0.82 * k, 0.16); F.main();
 };
-FLESH.m_jaws = (F) => jawFlesh(F, false);
-FLESH.m_maw = (F) => jawFlesh(F, true);
+FLESH.m_jaws = (F) => dinoJawFlesh(F, jawShape('m_jaws'));
+FLESH.m_maw = (F) => dinoJawFlesh(F, jawShape('m_maw'));
+FLESH.m_rex = (F) => dinoJawFlesh(F, jawShape('m_rex'));
+FLESH.m_spino = (F) => dinoJawFlesh(F, jawShape('m_spino'));
+FLESH.m_short = (F) => dinoJawFlesh(F, jawShape('m_short'));
+FLESH.m_duck = (F) => dinoJawFlesh(F, jawShape('m_duck'));
 const jawHard = (g, e, big) => {
   const k = big ? 1.18 : 1;
   const j = g.rotated(0, 0, 1, e.jaw);
@@ -8019,8 +8280,12 @@ const jawHard = (g, e, big) => {
   if (big) for (const s of [1, -1]) { g.cn(0.2 * k, 0.7, s * 0.52 * k, -1, 0.18, 0, 0.12 * k, 0.72 * k, IVORY); j.cn(-0.3 * k, 0.66, s * 0.6 * k, 1, 0.2, 0, 0.1 * k, 0.5 * k, IVORY); }
   j.sp(-0.16 * k, 0.42, 0, 0, 1, 0, 0.12 * k, 0.34 * k, 0.38 * k, TONGUE);
 };
-HARD.m_jaws = (g, c, e) => jawHard(g, e, false);
-HARD.m_maw = (g, c, e) => jawHard(g, e, true);
+HARD.m_jaws = (g, c, e) => dinoJawHard(g, c, e, jawShape('m_jaws'));
+HARD.m_maw = (g, c, e) => dinoJawHard(g, c, e, jawShape('m_maw'));
+HARD.m_rex = (g, c, e) => dinoJawHard(g, c, e, jawShape('m_rex'));
+HARD.m_spino = (g, c, e) => dinoJawHard(g, c, e, jawShape('m_spino'));
+HARD.m_short = (g, c, e) => dinoJawHard(g, c, e, jawShape('m_short'));
+HARD.m_duck = (g, c, e) => dinoJawHard(g, c, e, jawShape('m_duck'));
 FLESH.m_hook = (F) => { F.e(0, 0.1, 0, 0, 1, 0, 1, 0, 0, 0.62, 0.36, 0.66, 0.26); };
 HARD.m_hook = (g, c, e) => {
   let p = [0.2, 0.12, 0], d = [0, 1, 0];
@@ -8918,6 +9183,7 @@ function drawDesignedCreature(c, t, camDist, A) {
     tQ = clamp(Math.atan2(hR - hL, 2 * W), -0.35, 0.35);
   }
   const ke = Math.min(1, (typeof frameDt === 'number' ? frameDt : 1 / 60) * 6);
+  if (c._rear > 0.01) tP -= 0.95 * c._rear;      // up on the hind legs
   c._tiltP = c._tiltP == null ? tP : c._tiltP + (tP - c._tiltP) * ke;
   c._tiltQ = c._tiltQ == null ? tQ : c._tiltQ + (tQ - c._tiltQ) * ke;
   const cP = Math.cos(c._tiltP), sP = Math.sin(c._tiltP), cQ = Math.cos(c._tiltQ), sQ = Math.sin(c._tiltQ);
@@ -8946,7 +9212,8 @@ function drawDesignedCreature(c, t, camDist, A) {
     quality: isPlayer ? 2 : camDist < 420 * GFX.crit ? 1 : 0, sync: false, meshFar: true, far: A.far, lod: camDist > 650 * GFX.crit ? 2 : camDist > 420 * GFX.crit ? 1 : 0,
     hide: fpHide(c, deadTypes(c)), fpHead: c === player.c && isFirstPerson(), gaitPhase: A.phase0, tailSwing: A.tailSwing * rig.tailMul,
     tailAmp: 0.35 + 0.65 * A.gaitAmt, flexAmp: 0.10 + 0.22 * A.gaitAmt,
-    flap: Math.sin(t * (airborne ? 6.5 : 3.4) + c.id) * (airborne ? 0.62 : (p.canFly ? 0.18 : 0.08)),
+    flap: (isPlayer && c._flapDrive != null && (p.canFly || false)) ? c._flapDrive
+        : Math.sin(t * (airborne ? 6.5 : 3.4) + c.id) * (airborne ? 0.62 : (p.canFly ? 0.18 : 0.08)),
     chomp: rig.chomp != null ? rig.chomp : A.bite > 0 ? A.bite : 0.12 + 0.12 * Math.sin(t * 1.7 + c.id),
     grip: clamp(c._grab || 0, 0, 1),
     tint: A.flinch > 0.01 ? [1, 0.25, 0.22] : null, tintK: A.flinch * 0.55,
@@ -9934,7 +10201,7 @@ function respawn() {
 // could happen. This is the interaction range for every action, and it is what
 // the ring on the ground draws.
 function interactRange(p) {
-  return p.radius + p.reach * 1.6 + 34;
+  return (p.radius + p.reach * 1.6 + 34) * (typeof rearReach === 'function' ? rearReach(p) : 1);
 }
 function pickTarget() {
   const c = player.c;
@@ -10276,7 +10543,16 @@ function movePlayer(c, dt) {
   FIGHT.sprinting = false;
   if (len < 1e-6) { c.vx = 0; c.vy = 0; return; }
   const inWater = terrain.isWater(c.x, c.y);
-  const airborne = p.canFly && player.fly > 0.5;
+  const airborne = flightAirborne();
+  if (airborne) {
+    // in the air you go where you are pointed, at the speed the wing is making
+    const gs = flightGroundSpeed();
+    c.vx = Math.cos(player.yaw) * gs; c.vy = Math.sin(player.yaw) * gs;
+    const ts0 = world.params.timeScale != null ? world.params.timeScale : 0.12;
+    const md = dt * clamp(ts0 / 0.12, 1, 8);
+    c.x = clamp(c.x + c.vx * md, 1, WORLD_W - 1); c.y = clamp(c.y + c.vy * md, 1, WORLD_H - 1);
+    return;
+  }
   let sp = airborne ? Math.max(p.speedAir, p.speedLand)
          : (inWater && p.canSwim) ? p.speedWater : p.speedLand;
   if (!airborne) sp *= terrain.speedMul(c.x, c.y, p.canFly, p.canSwim);
@@ -10287,7 +10563,7 @@ function movePlayer(c, dt) {
   const sprint = !dodgeV && (shiftHeld || (!airborne && !!keys[' '] && !!keys['w'])) && fightCanSprint();
   FIGHT.sprinting = sprint;
   if (sprint) sp *= (1 + C.GAIT_BOOST);
-  sp *= PLAYER_SPEED * (dodgeV ? 1 : fightSpeedMul());
+  sp *= PLAYER_SPEED * (dodgeV ? 1 : fightSpeedMul()) * (1 - 0.75 * (player.rear || 0));
   if (dodgeV) { c.vx = fx; c.vy = fz; }
   else { c.vx = (fx / len) * sp; c.vy = (fz / len) * sp; }
   // The core deliberately keeps physical movement on real time so you can
@@ -10332,23 +10608,7 @@ function movePlayer(c, dt) {
 // A flier gets an altitude, not a hover offset. Space climbs, ctrl dives, and
 // letting go sinks slowly instead of dropping you out of the sky. Climbing is
 // charged at the core's own gait rate, so staying up costs food.
-function updateFlight(dt) {
-  const c = player.c;
-  if (!c || !c.alive || !c.ph.canFly || player.spectator) {
-    if (player.fly > 0) player.fly = Math.max(0, player.fly - FLY_DIVE * dt);
-    return;
-  }
-  const p = c.ph;
-  const up = !!keys[' '], down = !!keys['control'] || !!keys['c'];
-  let v = -FLY_SINK;
-  if (up) v = FLY_CLIMB * clamp(0.55 + (p.wingEff || 0) * 0.30, 0.55, 1.6);
-  else if (down) v = -FLY_DIVE;
-  player.fly = clamp(player.fly + v * dt, 0, FLY_CEIL);
-  if (up && player.fly > 0.01) {
-    const bdt = dt * (world.params.timeScale != null ? world.params.timeScale : 0.01);
-    c.energy = Math.max(0, c.energy - p.upkeep * C.GAIT_COST * 1.4 * bdt);
-  }
-}
+function updateFlight(dt) { flightTick(dt); rearTick(dt); }
 
 function updateJump(dt) {
   if (!player.c || !player.c.alive) { player.jumpY = 0; player.jumpV = 0; player.grounded = true; return; }
@@ -10959,6 +11219,11 @@ function gfxBind() {
 function gfxPlace() {
   const el = document.getElementById('gfxsel'), tab = document.getElementById('ptab');
   if (!el) return;
+  const st = document.getElementById('start');
+  const menuUp = st && st.style.display !== 'none';
+  el.style.display = menuUp ? 'none' : '';
+  const rb0 = document.getElementById('resetbtn'); if (rb0) rb0.style.display = menuUp ? 'none' : '';
+  if (menuUp) return;
   const open = tab && !tab.classList.contains('closed') && document.getElementById('panel') &&
                getComputedStyle(document.getElementById('panel')).display !== 'none';
   el.style.right = open ? '454px' : '14px';
@@ -12206,6 +12471,257 @@ function r2DrawSky(pass, fog, aspect) {
   pass.setPipeline(SKY.pipe); pass.setBindGroup(0, SKY.bg); pass.draw(3);
 }
 
+// =====================================================================
+// FLIGHT: a real glider, not a lift. You fly where you look. Diving trades
+// height for speed, pulling up trades speed back for height, so you can swoop.
+// Flapping costs stamina and buys thrust and lift; big wings beat slowly and
+// carry more. Turning banks the body, and the turn rate comes from the bank
+// and your speed. Thermals rise over open sunlit ground and cliff faces, so a
+// big flier can circle up without a wingbeat. Too slow and you stall.
+// Heavy bodies need a flap or a drop to get off the ground.
+// =====================================================================
+const FL = { spd: 0, vy: 0, roll: 0, rollT: 0, beat: 0, phase: 0, thrust: 0, stall: 0, lastG: null, msg: 0, glide: 0 };
+const FLIGHT_G = 140;      // the gravity a wing fights: far gentler than the walking one, so gliding is possible at these speeds
+function flightWing(p) { return clamp((p.wingEff || 0) * 1.2 + 0.25, 0.25, 2.2); }
+function flightCruise(p) { return Math.max(230, (p.speedAir || 110) * 2.1); }
+// rising air: over open sunlit ground (no canopy) and along steep slopes,
+// in slowly drifting columns
+function thermalAt(x, z) {
+  if (!world) return 0;
+  const day = world.light != null ? world.light : 1;
+  if (day < 0.25) return 0;
+  const drift = (world.bt || 0) * 6;
+  const cx = x + drift, cz = z - drift * 0.4;
+  let h = (Math.imul(Math.floor(cx / 620) * 73856093, 1) ^ Math.imul(Math.floor(cz / 620), 19349663)) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 2246822519) >>> 0;
+  const cell = ((h ^ (h >>> 15)) >>> 0) / 4294967296;
+  if (cell > 0.42) return 0;                                  // only some cells hold a thermal
+  const fx = ((cx % 620) + 620) % 620 - 310, fz = ((cz % 620) + 620) % 620 - 310;
+  const r = Math.hypot(fx, fz);
+  const core = 1 - clamp(r / 230, 0, 1);
+  if (core <= 0) return 0;
+  const open = 1 - clamp(forestCanopyAt(x, z), 0, 1);
+  // slope lift: air pushed up the windward face of a hill
+  const h0 = groundAt(x, z), slope = clamp((Math.abs(groundAt(x + 40, z) - h0) + Math.abs(groundAt(x, z + 40) - h0)) / 40, 0, 1.4);
+  return (60 + 120 * open + 90 * slope) * core * core * day;
+}
+function flightAirborne() { return !!(player.c && player.c.ph.canFly && player.fly > 0.6); }
+function flightTick(dt) {
+  const c = player.c;
+  if (!c || !c.alive || player.spectator || !c.ph.canFly) {
+    if (player.fly > 0) player.fly = Math.max(0, player.fly - 180 * dt);
+    FL.spd = 0; FL.vy = 0; FL.roll = 0; FL.lastG = null;
+    return;
+  }
+  const p = c.ph;
+  const wing = flightWing(p), cruise = flightCruise(p);
+  const stallSpd = cruise * 0.5, maxSpd = cruise * 2.8;
+  const mass = clamp((p.mass || 5) / 8, 0.35, 4);
+  // walking off a drop puts you in the air without a flap
+  const gy = groundAt(c.x, c.y);
+  if (FL.lastG != null && player.fly <= 0.6 && gy < FL.lastG - 0.5) player.fly += (FL.lastG - gy);
+  FL.lastG = gy;
+  const airborne = player.fly > 0.6;
+  const pitch = clamp(player.pitch, -1.25, 1.05);
+  // ---- flapping
+  FL.beat -= dt;
+  FL.thrust = Math.max(0, FL.thrust - dt * 3);
+  const period = 0.9 - 0.3 * clamp(wing, 0, 1.4);
+  if (keys[' '] && FL.beat <= 0 && !FIGHT.exhausted && FIGHT.stam > 3) {
+    FL.beat = period;
+    fightSpend(4 + 3 * mass);
+    FL.thrust = 1;
+    FL.vy += (120 + 110 * wing) / Math.sqrt(mass) * (airborne ? 1 : 1.5);
+    FL.spd += 42 * wing / Math.sqrt(mass);
+    if (SND.ctx && SND.on) sndWingbeat(0, p.mass || 5, 0.22);
+  }
+  FL.phase += dt * (6.5 - 3 * clamp(wing - 0.5, 0, 1)) * (0.45 + 0.85 * FL.thrust + (airborne ? 0.35 : 0));
+  if (!airborne) {
+    // on the ground: run, and only leave it when a beat lifts you
+    FL.spd = Math.max(FL.spd * (1 - dt * 2), Math.hypot(c.vx || 0, c.vy || 0));
+    if (player.fly > 0.6) FL.vy = Math.max(FL.vy, 0);
+    else { FL.vy = Math.max(0, FL.vy - GRAV * dt * 0.5); FL.roll = 0; }
+    player.fly = Math.max(0, player.fly + FL.vy * dt);
+    if (player.fly <= 0) FL.vy = 0;
+    return;
+  }
+  // ---- glide: gravity along the flight path, drag, and the wing's sink rate
+  const tuck = keys['w'] ? 1 : 0, brake = keys['s'] ? 1 : 0;
+  const drag = (0.30 - 0.12 * tuck + 0.75 * brake) * FLIGHT_G * (FL.spd * FL.spd) / (cruise * cruise);
+  FL.spd += (-Math.sin(pitch) * FLIGHT_G - drag) * dt;
+  FL.spd = clamp(FL.spd, 0, maxSpd);
+  // vertical: you go where you point, minus the sink of the wing, which grows
+  // sharply as you slow toward the stall
+  const slow = clamp(stallSpd / Math.max(20, FL.spd), 0.4, 3);
+  const sink = clamp(FLIGHT_G * 0.22 * slow * slow / (0.6 + wing), 8, 300);
+  let vy = Math.sin(pitch) * FL.spd - sink;
+  FL.stall = FL.spd < stallSpd ? Math.min(1, FL.stall + dt * 2) : Math.max(0, FL.stall - dt * 2);
+  if (FL.stall > 0.5) { vy -= 180 * FL.stall; FL.spd += FLIGHT_G * 0.9 * dt; }   // the nose drops and speed builds back
+  vy += thermalAt(c.x, c.y) * (0.5 + 0.5 * wing) * dt * 8;
+  FL.vy += (vy - FL.vy) * Math.min(1, dt * 6);                                   // ease, so it never snaps
+  player.fly = clamp(player.fly + FL.vy * dt, 0, FLY_CEIL);
+  // ---- banking turns: roll with A/D, and the bank is what turns you
+  const want = (keys['a'] ? -1 : 0) + (keys['d'] ? 1 : 0);
+  FL.roll += (want * 0.85 - FL.roll) * Math.min(1, dt * 4);
+  if (Math.abs(FL.roll) > 0.02) player.yaw += (FLIGHT_G * Math.tan(FL.roll * 0.9) / Math.max(150, FL.spd)) * dt;
+  c._tiltQ = -FL.roll * 0.9;                                                     // the body leans into the turn
+  c._flapDrive = Math.sin(FL.phase) * (0.35 + 0.65 * FL.thrust) * (0.8 + 0.4 * wing);
+  // ---- landing
+  if (player.fly <= 0.8 && FL.vy <= 0) {
+    player.fly = 0; FL.vy = 0; FL.roll = 0; c._tiltQ = 0;
+    if (FL.spd > cruise * 1.6) { FIGHT.stagger = Math.max(FIGHT.stagger, 0.5); toast('Hard landing.', 1200); }
+    FL.spd *= 0.4;
+  }
+  // ---- warnings
+  FL.msg -= dt;
+  if (FL.stall > 0.6 && FL.msg <= 0) { FL.msg = 2.5; toast('STALL: point the nose down or flap.', 1400); }
+  if (FIGHT.exhausted && FL.msg <= 0 && FL.spd < cruise) { FL.msg = 3; toast('Too tired to flap: find a thermal or glide down.', 1600); }
+}
+// speed the body actually travels over the ground while flying
+function flightGroundSpeed() {
+  const pitch = clamp(player.pitch, -1.25, 1.05);
+  return Math.max(0, Math.cos(pitch)) * FL.spd;
+}
+function flightHud() {
+  const c = player.c;
+  if (!c || !c.alive || !c.ph.canFly) return '';
+  const st = FL.stall > 0.5 ? ' <span style="color:#ff6b5e">STALL</span>' : '';
+  const th = thermalAt(c.x, c.y) > 40 ? ' <span style="color:#7ee787">lift</span>' : '';
+  return `<br><span class="k">altitude</span> <span class="v">${player.fly.toFixed(0)}</span> · ` +
+         `<span class="k">airspeed</span> <span class="v">${FL.spd.toFixed(0)}</span>${st}${th}` +
+         `<br><span class="k">space</span> flap · <span class="k">look</span> to dive and climb · <span class="k">A D</span> bank · <span class="k">W</span> tuck · <span class="k">S</span> flare`;
+}
+
+// =====================================================================
+// REARING UP: hold G to rise onto the hind legs, which nearly doubles your
+// reach so you can strip the canopy, and makes you taller in a fight. It
+// costs stamina to hold and you can barely move while you are up there.
+// =====================================================================
+function rearTick(dt) {
+  const c = player.c;
+  if (!c || !c.alive) { player.rear = 0; return; }
+  const p = c.ph;
+  const able = !c.ph.canFly && (p.dLegs || 0) >= 2 && !flightAirborne() && FIGHT.stagger <= 0 && FIGHT.dodgeT <= 0;
+  const want = able && !!keys['g'] && !FIGHT.exhausted;
+  player.rear = clamp((player.rear || 0) + (want ? dt * 2.2 : -dt * 3), 0, 1);
+  if (player.rear > 0.05 && want) fightSpend(6 * dt);
+  c._rear = player.rear;
+}
+function rearReach(p) { return 1 + 0.85 * (player.rear || 0); }
+
+// =====================================================================
+// MAIN MENU: a list you move through, with a torn brush mark behind the
+// highlighted line, the chosen entry's name set large above it and a short
+// description of what it does at the bottom. Continue, new game, load a saved
+// creature, controls, options and credits. Mouse or arrow keys.
+// =====================================================================
+const MENU = { i: 0, page: null, items: [] };
+function menuItems() {
+  const out = [];
+  if (PROG.last) out.push({ id: 'continue', label: 'CONTINUE', desc: 'Play ' + (PROG.last.name || 'your last creature') + ' again on a fresh island.' });
+  out.push({ id: 'new', label: 'NEW GAME', desc: 'Build a creature from scratch and hatch it into a new island.' });
+  out.push({ id: 'load', label: 'LOAD CREATURE', desc: 'Pick one of the creatures you have saved and play it.' });
+  out.push({ id: 'controls', label: 'CONTROLS', desc: 'Every key and what it does: moving, fighting, flying and surviving.' });
+  out.push({ id: 'options', label: 'OPTIONS', desc: 'Graphics quality, render scale, sound and the world settings.' });
+  out.push({ id: 'credits', label: 'ABOUT', desc: 'What this game is and how its animals are made.' });
+  return out;
+}
+function menuRender() {
+  const nav = document.getElementById('mmNav');
+  if (!nav) return;
+  MENU.items = menuItems();
+  MENU.i = clamp(MENU.i, 0, MENU.items.length - 1);
+  nav.innerHTML = MENU.items.map((it, k) =>
+    `<button class="mmItem${k === MENU.i ? ' on' : ''}" data-mi="${k}"><span class="mmBrush"></span><span class="mmLabel">${it.label}</span></button>`).join('');
+  const cur = MENU.items[MENU.i];
+  const big = document.getElementById('mmBig'), desc = document.getElementById('mmDesc');
+  if (big) big.textContent = cur.label;
+  if (desc) desc.textContent = cur.desc;
+}
+function menuMove(d) {
+  MENU.i = (MENU.i + d + MENU.items.length) % MENU.items.length;
+  menuRender();
+}
+function menuPage(id) {
+  MENU.page = id;
+  const el = document.getElementById('mmPage');
+  if (!el) return;
+  if (!id) { el.classList.remove('show'); el.innerHTML = ''; return; }
+  let h = '';
+  if (id === 'controls') {
+    h = '<h2>CONTROLS</h2>' + (document.getElementById('mmKeysSrc') ? document.getElementById('mmKeysSrc').innerHTML : '');
+  } else if (id === 'options') {
+    h = '<h2>OPTIONS</h2><div class="mmopt">' +
+      '<div class="mmrow"><span>graphics</span><span>' +
+      ['low', 'medium', 'high', 'ultra'].map(q => `<button class="mmb" data-gfx="${q}">${q}</button>`).join('') + '</span></div>' +
+      '<div class="mmrow"><span>auto resolution</span><span><button class="mmb" data-auto="1">on / off</button></span></div>' +
+      '<div class="mmrow"><span>sound</span><span><button class="mmb" data-snd="1">on / off</button></span></div>' +
+      '<div class="mmrow"><span>world settings</span><span class="mmnote">press Tab in game for population, plants, day length and the rest</span></div>' +
+      '<div class="mmrow"><span>reset saved progress</span><span><button class="mmb" data-wipe="1">wipe unlocks and creatures</button></span></div>' +
+      '</div>';
+  } else if (id === 'credits') {
+    h = '<h2>ABOUT</h2><p>Every animal here is grown from a genome: a body plan, parts placed on it, a brain, and a metabolism. ' +
+        'Nothing is hand-placed. The island, the weather, the animals and their behaviour all come out of the simulation, so no two worlds are alike.</p>' +
+        '<p>You are one of those animals. Eat, grow, fight, take parts from what you kill, breed, and keep your line going.</p>' +
+        '<p class="mmnote">Built with WebGPU. Made by Finn Berg.</p>';
+  } else if (id === 'load') {
+    const list = (PROG.saved || []);   // { name, design }
+    h = '<h2>LOAD CREATURE</h2>' + (list.length
+      ? '<div class="mmsaved">' + list.map((s, k) => `<button class="mmb wide" data-load="${k}">${(s.name || 'unnamed creature')}</button>`).join('') + '</div>'
+      : '<p class="mmnote">You have no saved creatures yet. Save one from the creature builder with "my creatures".</p>');
+  }
+  el.innerHTML = h + '<button class="mmb back" data-back="1">back</button>';
+  el.classList.add('show');
+}
+function menuChoose() {
+  const it = MENU.items[MENU.i];
+  if (!it) return;
+  if (it.id === 'continue') { becomeDesigned(C.cloneDesign(PROG.last)); menuStart(); return; }
+  if (it.id === 'new') { const st = document.getElementById('start'); if (st) st.style.display = 'none'; openEditor('start'); return; }
+  menuPage(it.id);
+}
+function menuStart() {
+  started = true;
+  const st = document.getElementById('start');
+  if (st) st.style.display = 'none';
+  menuPage(null);
+}
+function menuBind() {
+  const st = document.getElementById('start');
+  if (!st) return;
+  menuRender();
+  const nav = document.getElementById('mmNav');
+  nav.addEventListener('mousemove', (e) => {
+    const b = e.target.closest ? e.target.closest('[data-mi]') : null;
+    if (b) { const k = +b.dataset.mi; if (k !== MENU.i) { MENU.i = k; menuRender(); } }
+  });
+  nav.addEventListener('click', (e) => {
+    const b = e.target.closest ? e.target.closest('[data-mi]') : null;
+    if (!b) return;
+    e.stopPropagation();
+    MENU.i = +b.dataset.mi; menuRender(); menuChoose();
+  });
+  const page = document.getElementById('mmPage');
+  page.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const t = e.target.closest ? e.target.closest('button') : null;
+    if (!t) return;
+    if (t.dataset.back != null) { menuPage(null); return; }
+    if (t.dataset.gfx) { gfxSet(t.dataset.gfx); return; }
+    if (t.dataset.auto) { R2.auto = !R2.auto; toast('auto resolution ' + (R2.auto ? 'on' : 'off'), 1200); return; }
+    if (t.dataset.snd) { sndToggle(); return; }
+    if (t.dataset.wipe) { try { localStorage.removeItem(PROG_KEY); } catch (err) { /* nothing saved */ } location.reload(); return; }
+    if (t.dataset.load != null) { const s = (PROG.saved || [])[+t.dataset.load]; if (s && s.design) { becomeDesigned(C.cloneDesign(s.design)); menuStart(); } return; }
+  });
+  addEventListener('keydown', (e) => {
+    if (started || ED.open || st.style.display === 'none') return;
+    if (MENU.page) { if (e.key === 'Escape') { menuPage(null); e.preventDefault(); } return; }
+    if (e.key === 'ArrowDown' || e.key === 's') { menuMove(1); e.preventDefault(); }
+    else if (e.key === 'ArrowUp' || e.key === 'w') { menuMove(-1); e.preventDefault(); }
+    else if (e.key === 'Enter' || e.key === ' ') { menuChoose(); e.preventDefault(); }
+  });
+}
+
 function stepSim(dt) {
   if (player.atkCD > 0) player.atkCD = Math.max(0, player.atkCD - dt);
   fightTick(dt);
@@ -12417,7 +12933,8 @@ function updateHUD() {
     if (p.canFly) tags.push('flier'); else if ((p.wingEff || 0) > 0.05) tags.push('vestigial wings');
     if (p.canSwim) tags.push('swimmer'); else if ((p.finEff || 0) > 0.05) tags.push('vestigial fins');
     if (p.apex) tags.push('apex');
-    $('v-name').textContent = `${diet.toUpperCase()} · sp${c.speciesId} · gen ${player.generation}`;
+    const nm = (c.genome && c.genome.design && c.genome.design.name) || '';
+    $('v-name').textContent = (nm ? nm + ' · ' : '') + `${diet.toUpperCase()} · sp${c.speciesId} · gen ${player.generation}`;
     $('v-e').style.width = clamp(c.energy / Math.max(1, p.storage) * 100, 0, 100) + '%';
     $('v-g').style.width = clamp((c._growthAvg || 0) * 100, 0, 100) + '%';
     $('v-stats').innerHTML =
@@ -12428,8 +12945,8 @@ function updateHUD() {
       `<span class="k">age</span> <span class="v">${c.age.toFixed(0)}/${c.maxAge.toFixed(0)}</span> · ` +
       `<span class="k">cells</span> <span class="v">${(p.parts || []).length}</span>` +
       (tags.length ? ` · <span class="v">${tags.join(' ')}</span>` : '') +
-      (p.canFly ? `<br><span class="k">altitude</span> <span class="v">${player.fly.toFixed(0)}</span>` +
-                  ` <span class="k">(space climb, ctrl dive)</span>` : '');
+      (p.canFly ? flightHud() : '') +
+      ((player.rear || 0) > 0.05 ? `<br><span style="color:#7ee787">reared up: reach x${rearReach(p).toFixed(2)}</span>` : '');
   } else {
     $('v-name').textContent = player.spectator ? 'DETACHED CAMERA' : '-';
     $('v-stats').textContent = '';
@@ -12783,9 +13300,8 @@ function bindInput() {
     }
     const btn = e.target && e.target.closest ? e.target.closest('[data-arch]') : null;
     if (btn) { e.stopPropagation(); becomeArchetype(btn.getAttribute('data-arch')); beginPlay(); return; }
-    startEl.style.display = 'none';
-    openEditor('start');
   });
+  menuBind();
   const rb = $('resetbtn');
   if (rb) rb.addEventListener('click', (e) => { e.stopPropagation(); resetWorldClick(); });
   ssInit();
@@ -12932,13 +13448,13 @@ function buildHabitatFoliage() {
   const tint = () => [0.85 + rnd() * 0.25, 0.88 + rnd() * 0.2, 0.85 + rnd() * 0.2];
   // a ring of trunks: giants and canopy trees behind, palms and ferns nearer
   for (let i = 0; i < 46; i++) {
-    const a = rnd() * Math.PI * 2, r = 14 + Math.pow(rnd(), 0.7) * 70;
+    const a = rnd() * Math.PI * 2, r = 34 + Math.pow(rnd(), 0.7) * 60;
     const kind = r > 40 && rnd() < 0.2 ? 0 : rnd() < 0.55 ? 1 : rnd() < 0.5 ? 2 : rnd() < 0.5 ? 3 : 8;
     put(FOL.tree[kind][(rnd() * 3) | 0][r > 55 ? 1 : 0], Math.cos(a) * r, Math.sin(a) * r, rnd() * 6.28, W * (0.8 + rnd() * 0.5), tint());
   }
   // understory: dense toward the edges, a few plants reaching into the clearing
   for (let i = 0; i < 520; i++) {
-    const a = rnd() * Math.PI * 2, r = ED_POD_R + 0.4 + Math.pow(rnd(), 0.8) * 40;
+    const a = rnd() * Math.PI * 2, r = ED_POD_R + 3.5 + Math.pow(rnd(), 0.8) * 40;
     const k = rnd();
     const kind = k < 0.36 ? 2 : k < 0.56 ? 5 : k < 0.8 ? 0 : k < 0.9 ? 4 : 3;
     const s = (kind === 0 ? 0.28 : kind === 3 ? 0.22 : 0.3) * (0.7 + rnd() * 0.7) * (r < 9 ? 0.75 : 1);
@@ -13640,13 +14156,15 @@ async function edMakeThumbs() {
       view = [0.35, 0.35, 0.86];
     } else if (j.plan != null) {
       const d = C.defaultDesign(j.plan);
+      d.parts = (d.parts || []).filter(q => { const sim = C.ITEM_SIM[q.id]; return sim && (sim.t === 'FIN' || sim.t === 'WING'); });
+      d.col = { base: [0.62, 0.63, 0.64], coat: [0.78, 0.79, 0.80], detail: [0.45, 0.46, 0.48], pat: 0, skin: 0 };
       const { X } = edDesignX(d, 0.6, null, { toW: (l) => [l[0], l[1], l[2]], toL: (w) => [w[0], w[1], w[2]], blink: () => 0, sync: 'now', quality: 0 });
       drawDesign(d, X);
       view = [0.62, 0.30, 0.74];
     } else {
       thumbItem(j.id, neutral);
       const v = VIS[j.id];
-      if (v.cat === 'mouth') view = [0.9, 0.25, 0.55];
+      if (v.cat === 'mouth') view = [0.58, 0.26, 0.95];
       else if (v.kind === 'tip') view = [0.55, 0.45, 0.8];
     }
     // frame whatever was emitted
@@ -13726,7 +14244,7 @@ function instBounds(geo) {
 // One item on its own, in a sensible pose for its icon.
 function thumbItem(id, cols) {
   const v = VIS[id];
-  const env = { t: 0.8, seed: 0, base: cols.base, coat: cols.coat, detail: cols.detail, limb: cols.base, flap: 0.15, chomp: 0.35, grip: 0.3, blink: 0, lod: 0 };
+  const env = { t: 0.8, seed: 0, base: cols.base, coat: cols.coat, detail: cols.detail, limb: cols.base, flap: 0.15, chomp: 0.35, grip: 0.3, blink: 0, lod: 0, thumb: 1, jaw: 0.45 };
   const col = itemColor(id, null, cols);
   if (v.kind === 'limb') {
     const th = v.thick || 1;
@@ -13756,6 +14274,69 @@ function thumbItem(id, cols) {
   v.draw(g, col, env);
 }
 
+// Roll a random creature, using only what you are allowed to build with: every
+// unlocked part, plus as many of each locked part as your current body has.
+// Mirrored pairs stay together, a mouth is always kept, and the result is
+// trimmed to fit your genome space.
+function edRandomize() {
+  const cur = ED.des;
+  const allow = (id) => (SANDBOX || PROG.unlocked.has(id)) ? Infinity : ((ED.grantCount && ED.grantCount[id]) || 0);
+  const isMouth = (id) => C.ITEM_SIM[id] && C.ITEM_SIM[id].t === 'MOUTH';
+  const curMouth = (cur.parts || []).find(p => isMouth(p.id));
+  const rng = C.makeRNG((Math.random() * 4294967296) >>> 0);
+  let d = null;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    d = C.randomDesign(rng, { diversity: 0.4 + Math.random() * 0.5, diet: Math.random() < 0.3 ? 'carn' : 'herb' });
+    const used = {};
+    const take = (id, n) => { if ((used[id] || 0) + n > allow(id)) return false; used[id] = (used[id] || 0) + n; return true; };
+    // parts, keeping mirrored pairs together; a locked mouth becomes one you own
+    const groups = new Map();
+    for (const p of d.parts || []) { const k = p.m ? 'm' + p.m : p; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p); }
+    const parts = [];
+    for (const g of groups.values()) {
+      const id = g[0].id;
+      if (isMouth(id) && !parts.some(q => isMouth(q.id))) {
+        const mid = allow(id) >= g.length ? id : curMouth ? curMouth.id : null;
+        if (mid && take(mid, g.length)) { for (const p of g) { p.id = mid; parts.push(p); } }
+        continue;
+      }
+      if (take(id, g.length)) parts.push(...g);
+    }
+    d.parts = parts;
+    // limbs (pairs together); tips you do not have are left off
+    const lg = new Map();
+    for (const l of d.limbs || []) { const k = l.m ? 'm' + l.m : l; if (!lg.has(k)) lg.set(k, []); lg.get(k).push(l); }
+    const limbs = [];
+    for (const g of lg.values()) {
+      if (!take(g[0].id, g.length)) continue;
+      for (const l of g) if (l.tip && !take(l.tip.id, 1)) l.tip = null;
+      limbs.push(...g);
+    }
+    d.limbs = limbs;
+    // skin covering: keep yours if the rolled one is locked
+    const sk = SKIN_ITEMS[skinOf(d)];
+    if (sk && allow(sk) < 1) { d.col = d.col || {}; d.col.skin = skinOf(cur); }
+    if (!d.parts.some(p => isMouth(p.id))) continue;          // needs a mouth to eat: roll again
+    // fit the genome space: shed the costliest non-mouth pieces
+    let guard = 64;
+    while (C.designCost(d) > edCapacity(d) && guard-- > 0) {
+      const pk = d.parts.filter(p => !isMouth(p.id));
+      if (d.limbs.length > 2 && (Math.random() < 0.5 || !pk.length)) {
+        const l = d.limbs[d.limbs.length - 1];
+        d.limbs = d.limbs.filter(q => q !== l && !(l.m && q.m === l.m));
+      } else if (pk.length) {
+        const p = pk[(Math.random() * pk.length) | 0];
+        d.parts = d.parts.filter(q => q !== p && !(p.m && q.m === p.m));
+      } else break;
+    }
+    if (C.designCost(d) <= edCapacity(d)) break;
+  }
+  if (!d || !d.parts.some(p => isMouth(p.id))) { edFlash('Could not roll a creature from your parts. Unlock more by killing animals.'); return; }
+  edPushUndo();
+  ED.des = d; ED.sel = null; edTouch(); edRefreshUI();
+  edFlash('A random creature from your parts. Roll again, or edit it.');
+}
+
 // ---- editor UI ---------------------------------------------------------------------
 const SWATCHES = [
   [0.95, 0.95, 0.92], [0.78, 0.76, 0.70], [0.45, 0.43, 0.40], [0.14, 0.13, 0.13], [0.62, 0.12, 0.10], [0.90, 0.30, 0.22],
@@ -13776,6 +14357,7 @@ const TAB_ICONS = {
   wings: '<path d="M15 16C11 9 6 7 3 8c2 3 2 8 5 10 2-2 4-2 7-2zM15 16c4-7 9-9 12-8-2 3-2 8-5 10-2-2-4-2-7-2z"/>',
   details: '<path d="M15 4l2.6 7.4H25l-6 4.6 2.3 7.4L15 19l-6.3 4.4L11 16 5 11.4h7.4z"/>',
   paint: '<path d="M15 4c4 6 7 9 7 13a7 7 0 01-14 0c0-4 3-7 7-13z"/>',
+  shape: '<path d="M4 20h22M7 20V9M15 20V5M23 20v-7"/><circle cx="7" cy="9" r="2"/><circle cx="15" cy="5" r="2"/><circle cx="23" cy="13" r="2"/>',
 };
 const icon = (k) => '<svg viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + (TAB_ICONS[k] || '') + '</svg>';
 function effectText(id) {
@@ -13810,14 +14392,16 @@ function edBuildUI() {
   <div id="edTop" class="edp">
     <button id="edUndo" title="undo (ctrl+z)">undo</button><button id="edRedo" title="redo (ctrl+y)">redo</button>
     <button id="edMirror" title="mirror parts left and right (M)">mirror: on</button>
+    <button id="edRandom" title="roll a random creature from the parts you have unlocked">random</button>
     <button id="edView" title="reset the view (double-click the scene)">reset view</button>
     <button id="edSaved">my creatures</button>
+    <span class="edname"><input id="edName" maxlength="22" spellcheck="false" placeholder="name your species" title="what your species is called"><button id="edRollName" title="roll a name">roll</button></span>
     <span class="edsp"></span>
     <button id="edCancel">cancel</button><button id="edDone" class="go">done</button>
   </div>
   <div id="edPal" class="edp">
-    <div id="edTabs"></div>
-    <div id="edTabTitle"></div>
+    <div id="edTabBar"><button id="edPrev" title="previous (Q)">&#8249;</button><div id="edTabTitle"></div><button id="edNext" title="next (E)">&#8250;</button></div>
+    <div id="edTabHint"></div>
     <div id="edGrid"></div>
   </div>
   <div id="edStats" class="edp"></div>
@@ -13830,19 +14414,20 @@ function edBuildUI() {
   const dragImg = document.createElement('img');
   dragImg.id = 'edDragImg'; dragImg.alt = '';
   document.body.appendChild(dragImg);
-  ED.ui = { root, pal: $('edPal'), grid: $('edGrid'), tabs: $('edTabs'), stats: $('edStats'), insp: $('edInsp'),
+  ED.ui = { root, pal: $('edPal'), grid: $('edGrid'), stats: $('edStats'), insp: $('edInsp'),
             flash: $('edFlash'), tip: $('edTip'), dragImg, saved: $('edSavedBox'), title: $('edTabTitle') };
   $('edUndo').onclick = edUndo; $('edRedo').onclick = edRedo;
   $('edMirror').onclick = () => { ED.mirror = !ED.mirror; edRefreshUI(); };
   $('edView').onclick = () => { ED.cam.yaw = 0.95; ED.cam.pitch = 0.2; ED.cam.zoom = 1; };
+  $('edRandom').onclick = () => edRandomize();
+  $('edName').addEventListener('input', () => { ED.des.stem = edCleanStem($('edName').value); ED.des.name = speciesName(ED.des); edTouch(); });
+  $('edRollName').onclick = () => { ED.des.stem = rollStem(); $('edName').value = ED.des.stem; ED.des.name = speciesName(ED.des); edTouch(); };
   $('edCancel').onclick = () => closeEditor(false);
   $('edDone').onclick = () => closeEditor(true);
   $('edSaved').onclick = () => { ED.savedOpen = !ED.savedOpen; edRenderSaved(); };
-  ED.ui.tabs.innerHTML = VIS_CATS.map(c => `<button class="edtab" data-tab="${c.id}" title="${c.label}">${icon(c.id)}</button>`).join('');
-  ED.ui.tabs.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-tab]'); if (!b) return;
-    ED.tab = b.getAttribute('data-tab'); edRefreshUI();
-  });
+  const step = (d) => { const i = VIS_CATS.findIndex(c => c.id === ED.tab); ED.tab = VIS_CATS[(i + d + VIS_CATS.length) % VIS_CATS.length].id; edRefreshUI(); };
+  $('edPrev').onclick = () => step(-1);
+  $('edNext').onclick = () => step(1);
   edBindCanvas();
 }
 function edFlash(msg) {
@@ -13858,13 +14443,14 @@ function tileHTML(key, avail, extra) {
 function edRefreshUI() {
   if (!ED.ui) return;
   const U = ED.ui;
-  for (const b of U.tabs.querySelectorAll('.edtab')) b.classList.toggle('on', b.getAttribute('data-tab') === ED.tab);
   $('edMirror').textContent = 'mirror: ' + (ED.mirror ? 'on' : 'off');
   $('edMirror').classList.toggle('on', ED.mirror);
   $('edDone').textContent = ED.mode === 'start' ? 'play' : 'done';
+  { const ne = $('edName'); if (ne && document.activeElement !== ne) ne.value = ED.des.stem || ''; }
   $('edUndo').disabled = !ED.undo.length; $('edRedo').disabled = !ED.redo.length;
-  const cat = VIS_CATS.find(c => c.id === ED.tab);
-  U.title.textContent = cat ? cat.label : '';
+  const cat = VIS_CATS.find(c => c.id === ED.tab) || VIS_CATS[0];
+  U.title.textContent = cat.label;
+  { const hint = $('edTabHint'); if (hint) hint.textContent = cat.hint || ''; }
   let html = '';
   if (ED.tab === 'body') {
     // the body plan is chosen once per world; only a reset lets you pick another
@@ -13873,6 +14459,8 @@ function edRefreshUI() {
     for (let p = 0; p < C.PLANS.length; p++) html += `<div class="edtile plan${ED.des.plan === p ? ' cur' : ''}${planLocked && ED.des.plan !== p ? ' locked' : ''}" data-plan="${p}">${tileHTML('plan' + p, !planLocked || ED.des.plan === p)}</div>`;
     html += '</div>';
     if (planLocked) html += '<div class="edhint">your body shape is fixed for this world. reset the world to start as a different shape</div>';
+    else html += '<div class="edhint">pick the skeleton: it sets your size, stance, neck and tail, and where parts can go</div>';
+  } else if (ED.tab === 'shape') {
     const bd = ED.des.body;
     const sl = (k, label) => `<label class="edsl"><span>${label}</span><input type="range" data-body="${k}" min="${C.BODY_RANGE[k][0]}" max="${C.BODY_RANGE[k][1]}" step="0.01" value="${bd[k]}"></label>`;
     html += '<div class="edsec">' + sl('len', 'body length') + sl('girth', 'body thickness') + sl('neck', 'neck length') + sl('tail', 'tail length') + '</div>';
@@ -13890,11 +14478,15 @@ function edRefreshUI() {
     }).join('') + '</div>';
     html += '<div class="edhint">to colour a single part, click it on the creature. new skins are earned by killing animals that wear them</div>';
   } else {
-    const ids = Object.keys(VIS).filter(id => VIS[id].cat === ED.tab || (ED.tab === 'limbs' && VIS[id].cat === 'limbs'));
-    html += '<div class="edgrid">';
+    const ids = Object.keys(VIS).filter(id => VIS[id].cat === ED.tab);
+    html += '<div class="edgrid cards">';
     for (const id of ids) {
       const av = itemAvailable(id);
-      html += `<div class="edtile item${av ? '' : ' locked'}" data-item="${id}">${tileHTML(id, av, `<span class="edcost">${itemCost(id)}</span>`)}</div>`;
+      const v = VIS[id];
+      html += `<div class="edcard${av ? '' : ' locked'}" data-item="${id}">` +
+        `<div class="edtile item${av ? '' : ' locked'}" data-item="${id}">${tileHTML(id, av, `<span class="edcost">${itemCost(id)}</span>`)}</div>` +
+        `<div class="edcname">${v.name}</div><div class="edcuse">${v.use || effectText(id) || ''}</div>` +
+        `<div class="edccost">${itemCost(id)} genome space${av ? '' : ' · locked'}</div></div>`;
     }
     html += '</div>';
     if (ED.tab === 'limbs') html += '<div class="edhint">drag a limb onto the body, then drag its joints to shape it. drop feet, hands and claws onto the end of a limb</div>';
@@ -14116,7 +14708,7 @@ function edRenderSaved() {
   });
   el.innerHTML = h; el.style.display = 'block';
   $('edSaveNow').onclick = () => {
-    PROG.saved.unshift({ name: 'creature ' + (PROG.saved.length + 1), design: stripDesign(ED.des) });
+    PROG.saved.unshift({ name: speciesName(ED.des), design: stripDesign(ED.des) });
     PROG.saved = PROG.saved.slice(0, 24); saveProgress(); edRenderSaved(); edFlash('Saved.');
   };
   for (const b of el.querySelectorAll('[data-load]')) b.onclick = () => {
@@ -14355,6 +14947,7 @@ function closeEditor(apply) {
     if (!hasMouth) { edFlash('Your creature needs a mouth to eat. Add one from the mouths tab.'); ED.tab = 'mouth'; edRefreshUI(); return; }
     const used = C.designCost(ED.des), cap = edCapacity(ED.des);
     if (used > cap) { edFlash('Over genome space by ' + (used - cap) + '. Remove something first.'); return; }
+    if (!ED.des.name) ED.des.name = speciesName(ED.des);
     PROG.last = stripDesign(ED.des);
     saveProgress();
   }
@@ -14561,6 +15154,21 @@ function edHudLine() {
     (c && c.hurtT > 0 ? `<br><span style="color:#ff8a76">under attack: cannot eat for ${c.hurtT.toFixed(1)} s</span>` : '');
 }
 
+// ---- species names: whatever you type, or a rolled one ---------------------
+const NAME_BITS = ['tyranno', 'vela', 'stega', 'anky', 'brachio', 'cerato', 'allo', 'spino', 'megalo', 'dilopho', 'thero',
+                   'gorgo', 'carno', 'ptera', 'plesio', 'mosa', 'cryo', 'pyro', 'umbra', 'ferro', 'nocti', 'vora', 'sanguino', 'titano'];
+const NAME_TAIL = ['saurus', 'saurus', 'saurus', 'don', 'nyx', 'raptor', 'rex', 'venator', 'lophus', 'cephalo', 'therium'];
+function edCleanStem(v) { return String(v || '').toLowerCase().replace(/[^a-z '-]/g, '').replace(/\s+/g, ' ').slice(0, 22); }
+function rollStem() {
+  const r = () => Math.random();
+  return edCleanStem(NAME_BITS[(r() * NAME_BITS.length) | 0] + NAME_TAIL[(r() * NAME_TAIL.length) | 0]);
+}
+// title case, so "sanguino rex" reads as a name and not as typing
+function speciesName(d) {
+  const stem = edCleanStem(d && d.stem) || rollStem();
+  return stem.replace(/(^|[ '-])([a-z])/g, (m, a, b) => a + b.toUpperCase());
+}
+
 // ================================================================== boot
 let running = false, lastT = 0, simT = 0;
 function tick(dt, skipRender) {
@@ -14735,6 +15343,7 @@ window.__G3D = {
   get R2() { return R2; },
   get GFX() { return GFX; }, gfxSet: (n) => gfxSet(n), feedGrowth: (c, m) => feedGrowth(c, m),
   spat: { stepInterval, stepSurface, proxDraw, sndPlacer: (p) => SND.ctx && sndPlacer(SND.ctx, p, SND.master), get ok() { return SPAT.ok; } },
+  get FL() { return FL; }, thermalAt: (x, z) => thermalAt(x, z),
   get FIGHT() { return FIGHT; }, get simT() { return simT; },
   dodge: () => tryDodge(), lock: () => toggleLock(),
   fightFilter: (v, a, d) => fightHitFilter(v, a, d),

@@ -2,6 +2,44 @@
 
 Build: `dev/3dgenesis-dev-src.tgz` unpacks to the patch pipeline. `bash build.sh` (edit its `cd` to your folder) turns `g3.v3` + `src/patch_*.py` into `g3.html` (= `index.html`) and extracts `core.js` for node tests.
 
+## 2026-09-22 (late): Prehistoric pass
+
+Twelve new body plans, real jaws, a flight model that actually flies, rearing up, a main menu, and a rebuilt builder palette.
+
+### Body plans
+- Twelve prehistoric starting shapes on top of the originals: theropod, raptor, sauropod, ceratopsian, ankylosaur, stegosaur, hadrosaur, sail-back (spinosaur), pterosaur, shark, whale and plesiosaur. Shark and whale are water-only: no legs, so they cannot leave the water until they take legs from something they kill.
+- Founder species now draw from all 22 plans, so a new world has a much wider spread of animals in it.
+
+### Jaws
+- One jaw builder drives every mouth: an upper jaw that is part of the muzzle, a mandible hinged at the back that actually swings open, teeth that vary along the jaw line and interlock when shut, gums, a tongue and a dark throat so an open mouth reads as a hole.
+- Four new mouths: crushing jaw (deep, bone-cracking, heaviest damage), fishing jaw (long crocodile snout, extra reach, good in water), short muzzle (fast strong bites up close) and duck bill (broad beak with grinding rows, strips plants fast). The old jaws and fanged maw were rebuilt on the same builder.
+- Brow knobs over the eyes on the deep jaws, croc ridges along the snout on the fishing jaw, nostrils on top.
+
+### Flight
+- Rebuilt as a glider instead of a lift. You fly where you look: diving trades height for speed, pulling up trades speed back for height, so you can swoop. Space flaps (costs stamina, buys thrust and lift; big wings beat slower and carry more). A and D bank, and the bank is what turns you. W tucks, S flares. Thermals rise over open sunlit ground and steep slopes so a big flier can circle up without a wingbeat. Too slow and you stall: the nose drops until speed comes back. Walking off a drop puts you in the air. Landing fast staggers you.
+- Altitude, airspeed, stall and lift are on the HUD.
+
+### Rearing up
+- Hold G to rise onto the hind legs: nearly double reach so you can strip the canopy, and you are taller in a fight. Costs stamina to hold, and you can barely move while up there. Needs two or more hind legs and no wings in use.
+
+### Main menu
+- A proper front end: CONTINUE (your last creature), NEW GAME, LOAD CREATURE, CONTROLS, OPTIONS, ABOUT. The highlighted line gets a torn brush mark behind it, its name set large above, and a line of description at the bottom. Mouse or arrow keys plus Enter.
+- CONTROLS lists every key. OPTIONS has graphics quality, auto resolution, sound and wiping saved progress.
+
+### Naming
+- You name your species in the builder, or hit "roll" for one. The name is free text, not a forced -saurus; rolled names often end in -saurus anyway. It shows on your HUD and on your saved creatures.
+
+### Builder palette
+- The right-hand palette is one category at a time with a bar across the top: category name, left and right arrows to move between them, and a line saying what the category is for. The old icon strip is gone.
+- Categories are in build order: body shape, proportions, colour and pattern, skin, limbs, feet, eyes, mouths and jaws, horns and plates, wings, fins, tails, extras.
+- Every part is a card with a rendered image, its name, what it is for and what it costs in genome space. Locked parts stay readable (a small lock badge in the corner) instead of being blacked out.
+- The body-shape tab shows plain grey outlines of each shape instead of finished coloured creatures, so you pick the shape and then paint it.
+- The palm tree that rendered in front of the creature in the builder is gone, and the toolbar no longer runs underneath the palette.
+
+## 2026-09-22: Random creature button, darker nights
+- "random" button in the creature builder toolbar: rolls a whole random creature (body plan, parts, limbs, colours) from what you are allowed to build with, which is every unlocked part plus as many of each locked part as your current body already has. Mirrored pairs stay together, it always keeps a mouth, and it trims itself to fit your genome space. Undo restores the previous design.
+- Night is much darker: moonlight cut to about a third of what it was, so nights are genuinely dark and the moon is a light in the sky rather than a floodlight.
+
 ## 2026-09-22 (night): World detail pass
 - Sky: sun disk, moon with phases (8-day cycle), stars, drifting clouds, sunrise/sunset colours. The sun rises east, arcs over, sets west; noon height follows the season (about 88 deg in summer, 32 deg in winter). Shadows and light follow the sun by day and the moon by night.
 - Terrain: ~2000 boulders (solid, clustered, mostly small with a few huge), pebbles, stones and driftwood as ground cover; rock material with strata, cracks and lichen; bare rock on steep slopes; wet sand at the waterline; large-scale colour variation; softer, less neon ground colours.
