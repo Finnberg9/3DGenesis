@@ -3869,9 +3869,9 @@ const HEIGHT_SCALE = 2000;    // sim elevation (0..1, unitless) -> world Y units
 const GRID_STEP = 24;        // terrain mesh sample spacing, world units.
                              // At 20 the facets were larger than the animals
                              // standing on them and read as smooth blobs.
-const FAR = 11000;           // far plane, also the fog horizon
+const FAR = 14000;           // far plane, also the fog horizon
 const NEAR = 1.0;
-const FOG_DENSITY = 1 / 5200;
+const FOG_DENSITY = 1 / 6600;
 const LOD_FULL = 900;        // draw every body cell inside this radius
 const LOD_TORSO = 2600;      // torso cells only out to here
 const MAX_INST = 90000;      // hard ceiling on per-frame creature cell instances
@@ -5095,8 +5095,8 @@ const COVER_BY_BIOME = {
   forest: [[2, 0.55], [5, 0.3], [0, 0.35], [4, 0.2]], plains: [[0, 0.8], [4, 0.08]], savanna: [[1, 0.8], [4, 0.05]],
   marsh: [[3, 0.8], [0, 0.3]], taiga: [[2, 0.3], [4, 0.2], [0, 0.2]], beach: [[1, 0.12]], tundra: [[0, 0.1]], shallow: [[3, 0.4]],
 };
-const COVER_R = 620, COVER_CELL = 15;
-const TREE_LOD0 = 650, TREE_LOD1 = 2000;
+const COVER_R = 720, COVER_CELL = 15;
+const TREE_LOD0 = 750, TREE_LOD1 = 2400;
 // Rebuild the instance lists when the camera has moved or turned enough.
 function folUpdate(camX, camY, camZ, yaw) {
   if (!FOL.ready || !world || !world.forest) return;
@@ -6184,7 +6184,7 @@ const BARK = [0.42, 0.31, 0.22], BARK_PALE = [0.58, 0.48, 0.34];
 function buildPlantInstances(camX, camZ, t) {
   plantCount = 0;
   const T = terrain;
-  const NEARR = TREE_LOD * TREE_LOD, FARR = 3000 * 3000;
+  const NEARR = TREE_LOD * TREE_LOD, FARR = 3600 * 3600;
   for (const pl of world.plants) {
     if (plantCount + 40 >= MAX_PLANT_INST) break;
     const dx = pl.x - camX, dz = pl.y - camZ;
@@ -8656,7 +8656,7 @@ function sndTick(dt) {
       o.connect(g).connect(out); o.start(tt); o.stop(tt + 0.05);
     }, pan, t + k * 0.06);
   }
-  if (t > SND.nextCall) { SND.nextCall = t + (night ? 12 : 24) + Math.random() * (night ? 14 : 26); sndCall(Math.random() * 1.6 - 0.8, night); }
+  if (t > SND.nextCall) { SND.nextCall = t + (night ? 25 : 45) + Math.random() * (night ? 30 : 45); sndCall(Math.random() * 1.6 - 0.8, night); }
   voxTick(dt);
   // unseen movement nearby, and anything hungry closing in
   let threat = 0;
@@ -8716,13 +8716,13 @@ function voxValley(ctx) {
     }
   }
   VOX.bigVerb = ctx.createConvolver(); VOX.bigVerb.buffer = ir;
-  const bg = ctx.createGain(); bg.gain.value = 0.7;
+  const bg = ctx.createGain(); bg.gain.value = 0.45;
   VOX.bigVerb.connect(bg).connect(SND.master);
   // echoes thrown back by the hills: a darkening feedback delay, split left/right
   VOX.echo = ctx.createGain(); VOX.echo.gain.value = 1;
   const mk = (time, pan) => {
     const dl = ctx.createDelay(3); dl.delayTime.value = time;
-    const fb = ctx.createGain(); fb.gain.value = 0.42;
+    const fb = ctx.createGain(); fb.gain.value = 0.28;
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1600;
     const pn = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain();
     if (pn.pan) pn.pan.value = pan;
@@ -8793,9 +8793,9 @@ function voxOut(ctx, dist, pan, when, loud) {
   const dry = ctx.createGain(); dry.gain.value = clamp(1 - dist / 2400, 0.25, 1);
   if (pn) { lp.connect(pn); pn.connect(dry); } else lp.connect(dry);
   dry.connect(SND.master);
-  const wet = ctx.createGain(); wet.gain.value = clamp(0.25 + dist / 1200, 0.25, 1.1);
+  const wet = ctx.createGain(); wet.gain.value = clamp(0.15 + dist / 2000, 0.15, 0.6);
   lp.connect(wet); wet.connect(VOX.verb);
-  if (dist > 700 && VOX.echo) { const eg = ctx.createGain(); eg.gain.value = clamp((dist - 700) / 2000, 0, 0.6); lp.connect(eg); eg.connect(VOX.echo); }
+  if (dist > 700 && VOX.echo) { const eg = ctx.createGain(); eg.gain.value = clamp((dist - 700) / 3000, 0, 0.3); lp.connect(eg); eg.connect(VOX.echo); }
   return g;
 }
 const vEnv = (param, t, a, hold, rel, peak) => {
@@ -9086,8 +9086,8 @@ function voxDistant(kindHint) {
   const dry = ctx.createGain(); dry.gain.value = 0.35;
   if (pn) { pn.pan.value = pan; lp.connect(pn); pn.connect(dry); } else lp.connect(dry);
   dry.connect(SND.master);
-  const wet = ctx.createGain(); wet.gain.value = 0.9; lp.connect(wet); wet.connect(VOX.bigVerb);
-  const ec = ctx.createGain(); ec.gain.value = 0.7; lp.connect(ec); ec.connect(VOX.echo);
+  const wet = ctx.createGain(); wet.gain.value = 0.6; lp.connect(wet); wet.connect(VOX.bigVerb);
+  const ec = ctx.createGain(); ec.gain.value = 0.4; lp.connect(ec); ec.connect(VOX.echo);
   const v = { size: 1.3, form: 0.8 + Math.random() * 0.4, rough: Math.random(), pitch: 0.6, notes: 1, carn: true, flier: false, pick: (Math.random() * 1000) | 0 };
   const loud = 0.38 + Math.random() * 0.22;   // loud but never swamping: a big recording slowed down carries a lot of energy
   switch (kind) {
@@ -9106,7 +9106,7 @@ function voxDistant(kindHint) {
     }
   }
   // an answer from somewhere else on the island
-  if ((kind === 'roar' || kind === 'scream') && Math.random() < 0.4) setTimeout(() => voxDistant(Math.random() < 0.7 ? 'roar' : 'scream'), 2500 + Math.random() * 3500);
+  if ((kind === 'roar' || kind === 'scream') && Math.random() < 0.2) setTimeout(() => voxDistant(Math.random() < 0.7 ? 'roar' : 'scream'), 2500 + Math.random() * 3500);
 }
 // Called every frame from sndTick: fights, pain and the island calling out
 function voxTick(dt) {
@@ -9131,16 +9131,17 @@ function voxTick(dt) {
     }
   }
   // far beyond sight: echoing roars and noises, more of them in the dark
-  if (VOX.nextDistant == null) VOX.nextDistant = now + 6;
+  if (VOX.nextDistant == null) VOX.nextDistant = now + 20 + Math.random() * 30;
   if (now > VOX.nextDistant) {
     const dark = light < 0.4;
-    VOX.nextDistant = now + (dark ? 7 : 12) + Math.random() * (dark ? 10 : 16);
+    // rare and irregular: long silences make each one land
+    VOX.nextDistant = now + (dark ? 25 : 45) + Math.random() * (dark ? 45 : 75);
     voxDistant();
   }
   // the island at large: someone, somewhere, is always calling. More at dusk and night.
   if (now > VOX.nextAmbient) {
     const dusk = light < 0.55;
-    VOX.nextAmbient = now + (dusk ? 1.8 : 3.5) + Math.random() * (dusk ? 4 : 6);
+    VOX.nextAmbient = now + (dusk ? 7 : 12) + Math.random() * (dusk ? 12 : 18);
     const pool = [];
     for (const c of world.creatures) {
       if (!c.alive || !c.ph || c === me) continue;
@@ -9151,7 +9152,7 @@ function voxTick(dt) {
       const c = pool[(Math.random() * pool.length) | 0];
       voxCall(c, 'call');
       // sometimes another of its kind answers from elsewhere
-      if (Math.random() < 0.45) {
+      if (Math.random() < 0.25) {
         const kin = pool.filter(o => o !== c && o.speciesId === c.speciesId);
         if (kin.length) { const o = kin[(Math.random() * kin.length) | 0]; setTimeout(() => voxCall(o, 'call'), 1200 + Math.random() * 2500); }
       }
