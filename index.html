@@ -281,11 +281,13 @@
 </head>
 <body>
 <canvas id="gpu"></canvas>
+<div id="hurtfx" style="position:fixed;inset:0;pointer-events:none;opacity:0;z-index:4;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 45%,rgba(120,0,0,.55) 80%,rgba(70,0,0,.9) 100%)"></div>
 
 <div id="vitals" class="panel">
   <b class="t" id="v-name">-</b><br>
   <span class="k">energy</span><span class="bar"><i id="v-e" style="width:0%;background:linear-gradient(90deg,#2fa,#7ee787)"></i></span>
   <span class="k">growth</span><span class="bar"><i id="v-g" style="width:0%;background:linear-gradient(90deg,#3a8,#35e0d8)"></i></span>
+  <span class="k">stamina</span><span class="bar"><i id="v-s" style="width:100%;background:linear-gradient(90deg,#c90,#fd6)"></i></span>
   <div id="v-stats" class="k"></div>
   <div id="v-genome" class="k"></div>
 </div>
@@ -365,13 +367,15 @@
      Kill something and you absorb one part of its genome into your own body plan.
      When you die you are reborn as a newborn of your nearest surviving kin.</p>
   <div class="keys">
-    <b>WASD</b> move &nbsp;·&nbsp; <b>drag</b> look &nbsp;·&nbsp; <b>shift</b> sprint (burns energy)<br>
+    <b>WASD</b> move &nbsp;·&nbsp; <b>drag</b> look &nbsp;·&nbsp; hold <b>shift</b> sprint (stamina)<br>
     <b>scroll</b> zoom out to third person &nbsp;·&nbsp; <b>C</b> toggle view<br>
+    <b>Q</b> guard &nbsp;·&nbsp; <b>Z</b> / tap <b>shift</b> dodge &nbsp;·&nbsp; <b>T</b> / <b>middle click</b> lock on<br>
+    guard or dodge as an attacker's marker turns <span style="color:#ffd84a">yellow</span> to parry<br>
     <b>left click</b> / <b>F</b> attack &nbsp;·&nbsp; <b>X</b> switch attack &nbsp;·&nbsp; <b>R</b> roar &nbsp;·&nbsp; <b>N</b> sound &nbsp;·&nbsp; <b>M</b> mate &nbsp;·&nbsp; <b>E</b> eat<br>
-    inner ring = your attack reach (<span style="color:#f04c38">red</span> target,
+    ground arc = where your selected attack lands, refilling as it recovers (<span style="color:#f04c38">red</span> target,
     <span style="color:#35e0d8">cyan</span> mate)<br>
     outer ring = predators nearby, at their real bearing<br>
-    <b>space</b> jump &nbsp;·&nbsp; <b>space + W</b> or <b>shift</b> sprint<br>
+    <b>space</b> jump &nbsp;·&nbsp; <b>space + W</b> sprint<br>
     fliers: <b>space</b> climb, <b>ctrl</b> dive &nbsp;·&nbsp; hover the minimap to enlarge it<br>
     <b>drag</b> on the world to look (mouse stays free) &nbsp;·&nbsp; <b>L</b> lock mouse for FPS look<br>
     <b>Tab</b> controls panel &nbsp;·&nbsp; <b>B</b> creature editor, any time<br>
@@ -2490,6 +2494,11 @@
       updateGrowth(world, c, bdt); // v9.1: advance/refresh c.ph BEFORE p captures it below, so this tick sees live growth
       const p = c.ph; c.cooldown = Math.max(0, c.cooldown - dt); c.reproCD = Math.max(0, c.reproCD - bdt); c.age += bdt;
       if (c.hurtT > 0) c.hurtT = Math.max(0, c.hurtT - dt);
+      if (c.bleedT > 0) {
+        c.bleedT = Math.max(0, c.bleedT - dt);
+        c.energy -= (c.bleedR || 0) * dt;
+        if (c.bleedT <= 0) c.bleedR = 0;
+      }
       if (c.foe) { c.foeT -= dt; if (c.foeT <= 0 || !c.foe.alive) { c.foe = null; c.react = null; } }
 
       // Safety net: a finless creature that has somehow ended up past the
@@ -3016,9 +3025,18 @@
   // ---- being attacked ---------------------------------------------------
   const HURT_TIME = 5;      // seconds after the last hit during which nothing can be eaten
   const FOE_TIME = 7;       // how long a victim keeps reacting to its attacker
+  const BLEED_FRAC = 0.10;   // a hit above this share of storage opens a wound
+  const BLEED_MAX_T = 14;    // seconds a stacked wound can keep bleeding
   function onHit(victim, attacker, dmg) {
     if (!victim || !attacker) return;
-    victim.hurtT = HURT_TIME;
+    if (dmg > 0) victim.hurtT = HURT_TIME;
+    const st = victim.ph && victim.ph.storage > 0 ? victim.ph.storage : 100;
+    if (dmg > st * BLEED_FRAC) {
+      // total drain of a wound is ~35% of the hit that caused it
+      const t = Math.min(BLEED_MAX_T, (victim.bleedT || 0) + 6);
+      victim.bleedR = Math.min(st * 0.02, (victim.bleedR || 0) * 0.5 + dmg * 0.35 / 6);
+      victim.bleedT = t;
+    }
     victim.foe = attacker; victim.foeT = FOE_TIME;
     // meat eaters turn and fight; everything else runs
     victim.react = (victim.ph.carnivory > 0.5) ? 'fight' : 'flee';
@@ -3029,10 +3047,18 @@
   // A cornered carnivore's counter-attack. Floored at a slice of the target's
   // own reserve (scaled by size ratio) so a fight back is a real threat, not
   // the 1-damage trickle of the plain exchange.
+  // world.hitFilter(victim, attacker, dmg) -> dmg to apply now, or null to
+  // skip this exchange (the caller resolves it later its own way).
+  function filterHit(world, victim, att, dmg) {
+    const f = world.hitFilter;
+    return typeof f === 'function' ? f(victim, att, dmg) : dmg;
+  }
   function retaliate(world, att, foe, flags) {
     const a = att.ph, d = foe.ph;
     const ratio = clamp(a.mass / Math.max(0.01, d.mass), 0.15, 2.5);
-    const dmg = Math.max(a.attack - d.defense * 0.6, d.storage * 0.03 * ratio, 1);
+    let dmg = Math.max(a.attack - d.defense * 0.6, d.storage * 0.03 * ratio, 1);
+    dmg = filterHit(world, foe, att, dmg);
+    if (dmg === null) return;
     foe.energy -= dmg;
     att.energy -= (d.counter || 0) * 0.5; if (att.energy < 0) att.energy = 0;
     onHit(foe, att, dmg);
@@ -3044,6 +3070,8 @@
   function resolveAttack(world, att, prey, flags) {
     const a = att.ph, d = prey.ph;
     let dmg = a.attack - d.defense * 0.6; if (dmg <= 0) dmg = 1;
+    dmg = filterHit(world, prey, att, dmg);
+    if (dmg === null) return;
     prey.energy -= dmg;
     onHit(prey, att, dmg);
     att.energy -= d.counter * 0.5; if (att.energy < 0) att.energy = 0;
@@ -6074,33 +6102,6 @@ function drawThreatRing(t) {
   player.threatCount = count;
 }
 
-// A flat ring of markers on the ground at exactly the distance your attacks and
-// interactions reach, so range is shown rather than guessed. It turns red when
-// something hostile is targeted and cyan when the target could be a mate.
-function drawReachRing(t) {
-  const c = player.c;
-  if (!c || !c.alive || player.spectator) return;
-  const p = c.ph;
-  const rad = interactRange(p);
-  const tgt = player.target;
-  const mate = tgt && canMate(c, tgt);
-  const col = tgt ? (mate ? [0.20, 0.88, 0.82] : [0.95, 0.30, 0.22]) : [0.62, 0.72, 0.70];
-  const N = 40;
-  for (let i = 0; i < N; i++) {
-    const a = (i / N) * Math.PI * 2 + t * 0.25;
-    const x = c.x + Math.cos(a) * rad, z = c.y + Math.sin(a) * rad;
-    const y = groundAt(x, z) + 1.2;
-    const s2 = 1.5 + (tgt ? 0.6 * (0.5 + 0.5 * Math.sin(t * 4 + i)) : 0);
-    pushS(x, y, z, 0, 1, 0, s2, 0.45, s2, col);
-  }
-  if (tgt) {
-    // a marker over whatever you are about to act on
-    const ty = groundAt(tgt.x, tgt.y) + (tgt.ph.standH || tgt.ph.radius) * BODY_SCALE * 2.4
-             + 6 + Math.sin(t * 3) * 1.5;
-    pushC(tgt.x, ty, tgt.y, 0, -1, 0, 2.2, 6.0, col);
-  }
-}
-
 const bodyByMesh = new Map();
 let bodyCount = 0;
 function buildCreatureInstances(camX, camZ, t) {
@@ -6111,9 +6112,13 @@ function buildCreatureInstances(camX, camZ, t) {
   bodyByMesh.clear(); bodyCount = 0;
   pumpMeshQueue();
   player.target = pickTarget();
+  if (FIGHT.lock && FIGHT.lock.alive && player.c && player.c.alive &&
+      Math.hypot(FIGHT.lock.x - player.c.x, FIGHT.lock.y - player.c.y) <= interactRange(player.c.ph) + FIGHT.lock.ph.radius)
+    player.target = FIGHT.lock;
   drawReachRing(t);
   drawThreatRing(t);
   drawBirths(t);
+  drawFight(t);
   for (const c of world.creatures) {
     if (!c.alive || !c.ph) continue;
     if (c === player.c && isFirstPerson()) continue;
@@ -9746,67 +9751,7 @@ function tryEat() {
   toast('Nothing to eat in reach.', 1100);
 }
 
-function tryAttack() {
-  const c = player.c;
-  if (!c || !c.alive || (player.atkCD || 0) > 0) return;
-  const p = c.ph;
-  const nn = tallyParts(p);
-  const mv = playerMove(p), MD = MOVE_DEF[mv];
-  player.atkCD = MD.dur + 0.10;
-  startAnim(c, mv, MD.dur);
-  const fx = Math.cos(player.yaw), fz = Math.sin(player.yaw);
-  // interactRange(), the SAME function the reach ring draws. This previously
-  // used a narrower ad-hoc radius, so the ring promised a range the attack did
-  // not honour and swings missed things that were visibly inside the circle.
-  const rr = interactRange(p) * MD.reach;
-  // Direct scan rather than world.grid: the grid is only rebuilt inside a step,
-  // so anything that moved since the last one is in the wrong bucket and a swing
-  // would silently miss. An attack is a rare, player-driven event, so the linear
-  // pass costs nothing and is always correct.
-  let best = null, bestD = Infinity;
-  const list = world.creatures;
-  for (let i = 0; i < list.length; i++) {
-    const o = list[i];
-    if (o === c || !o.alive || !o.ph) continue;
-    const dx = o.x - c.x, dz = o.y - c.y;
-    const d = Math.hypot(dx, dz);
-    if (d > rr + o.ph.radius) continue;
-    if (d > 1e-6 && (dx * fx + dz * fz) / d < 0.25) continue;   // must be in front of you
-    if (d < bestD) { bestD = d; best = o; }
-  }
-  if (!best) { toast(MD.label + ' hits nothing.', 900); return; }
-  // The core's exchange floors at 1 damage, which between two creatures resolves
-  // over many ticks and is fine. For a player clicking once per swing it meant
-  // 84 clicks to kill something. The floor is now a fraction of the target's own
-  // reserve, scaled by how badly you are outmatched -- so an even fight ends in
-  // a handful of hits and a hopeless one is still hopeless.
-  let dmg = (p.attack - best.ph.defense * 0.6) * MD.dmg;
-  const ratio = clamp(p.mass / Math.max(0.01, best.ph.mass), 0.12, 3);
-  const floor = Math.max(1, best.ph.storage * 0.05 * ratio * MD.dmg);
-  if (dmg < floor) dmg = floor;
-  // the thing you hit flinches, and remembers you
-  startAnim(best, 'flinch', 0.35);
-  sndHit();
-  best.energy -= dmg;
-  C.onHit(best, c, dmg);
-  c.energy -= (best.ph.counter || 0) * 0.5;
-  if (c.energy < 0) c.energy = 0;
-  if (best.energy > 0) {
-    const hits = Math.ceil(best.energy / Math.max(0.01, dmg));
-    toast(MD.label.toUpperCase() + ' for ' + dmg.toFixed(0) + '. ' +
-          Math.max(0, best.energy).toFixed(0) + ' left (~' + hits + ' more).', 1200);
-    return;
-  }
-  best.alive = false; best.deathCause = 'predation';
-  const gain = (best.ph.mass * 8 + best.ph.mass * 2) * 0.6;
-  if (c.hurtT > 0) toast('Killed it, but you are still under attack and cannot feed on it.', 2400);
-  else c.energy = Math.min(p.storage, c.energy + Math.max(6, gain));
-  if (world.flags.toxins && best.ph.toxin > 0) {
-    c.energy -= best.ph.toxin * 22;
-    if (c.energy < 0) c.energy = 0;
-  }
-  edOnKill(best);
-}
+function tryAttack() { fightStartSwing(); }
 
 function blockedFor(p, lv0, bx, by) {
   if (terrain.isDeep(bx, by)) return !p.canSwim;
@@ -9824,7 +9769,10 @@ function movePlayer(c, dt) {
   if (keys['s']) { fx -= Math.cos(player.yaw); fz -= Math.sin(player.yaw); }
   if (keys['a']) { fx += Math.sin(player.yaw); fz -= Math.cos(player.yaw); }
   if (keys['d']) { fx -= Math.sin(player.yaw); fz += Math.cos(player.yaw); }
-  const len = Math.hypot(fx, fz);
+  let len = Math.hypot(fx, fz);
+  const dodgeV = fightDodgeVel(c);
+  if (dodgeV) { fx = dodgeV[0]; fz = dodgeV[1]; len = Math.hypot(fx, fz); }
+  FIGHT.sprinting = false;
   if (len < 1e-6) { c.vx = 0; c.vy = 0; return; }
   const inWater = terrain.isWater(c.x, c.y);
   const airborne = p.canFly && player.fly > 0.5;
@@ -9833,10 +9781,14 @@ function movePlayer(c, dt) {
   if (!airborne) sp *= terrain.speedMul(c.x, c.y, p.canFly, p.canSwim);
   // sprint: shift, or hold space while running forward. In the air space is
   // the climb control, so shift alone sprints.
-  const sprint = !!keys['shift'] || (!airborne && !!keys[' '] && !!keys['w']);
+  // a shift press only becomes a sprint once it is held past the dodge tap window
+  const shiftHeld = !!keys['shift'] && (FIGHT.shiftT0 < 0 || simT - FIGHT.shiftT0 > SHIFT_TAP);
+  const sprint = !dodgeV && (shiftHeld || (!airborne && !!keys[' '] && !!keys['w'])) && fightCanSprint();
+  FIGHT.sprinting = sprint;
   if (sprint) sp *= (1 + C.GAIT_BOOST);
-  sp *= PLAYER_SPEED;
-  c.vx = (fx / len) * sp; c.vy = (fz / len) * sp;
+  sp *= PLAYER_SPEED * (dodgeV ? 1 : fightSpeedMul());
+  if (dodgeV) { c.vx = fx; c.vy = fz; }
+  else { c.vx = (fx / len) * sp; c.vy = (fz / len) * sp; }
   // The core deliberately keeps physical movement on real time so you can
   // fast-forward generations without everything teleporting. For the body you
   // are steering that reads as being stuck in glue at high speed, so YOUR
@@ -9937,8 +9889,557 @@ function tryJump() {
   c.energy = Math.max(0, c.energy - p.upkeep * C.GAIT_COST * bdt);
 }
 
+// =====================================================================
+// FIGHT: stamina, guard/parry, dodge, lock-on, telegraphed strikes,
+// knockback, stagger, bleeding and blood.
+//
+// Incoming attacks on the player are no longer instant. When the core decides
+// an animal strikes you, world.hitFilter defers the hit into a wind-up whose
+// length scales with the attacker's mass. The attacker visibly rears back and
+// a marker over its head counts down, turning yellow in the parry window.
+// When the wind-up ends the strike lands only if you are still in its reach
+// and not inside a dodge's invulnerability frames; a raised guard facing it
+// cuts the damage, and a guard raised inside the parry window negates it and
+// staggers the attacker. Animal-vs-animal fights stay instant (core rules).
+// =====================================================================
+const STAM_MAX = 100;
+const STAM_REGEN = 26;          // per second at full energy
+const STAM_DELAY = 0.7;         // seconds after spending before regen resumes
+const STAM_SPRINT = 20;         // per second while sprinting
+const STAM_DODGE = 24;
+const STAM_RECOVER = 30;        // exhausted until stamina climbs back to this
+const DODGE_DUR = 0.40, DODGE_IFRAME = 0.28, DODGE_CD = 0.55, DODGE_SPEED = 2.8;
+const SHIFT_TAP = 0.22;         // shift released within this is a dodge, not a sprint
+const PARRY_WIN = 0.22;         // guard raised this close before impact = parry
+const BLOCK_MUL = 0.3;          // damage let through a successful block
+const BLOCK_COS = Math.cos(80 * Math.PI / 180);   // guard covers +-80 deg of facing
+const LOCK_RANGE = 800, LOCK_BREAK = 1050;
+const BLOOD_MAX = 420, SPLAT_MAX = 720, SPLAT_LIFE = 45;
+const FIGHT = {
+  stam: STAM_MAX, exhausted: false, stamDelay: 0, sprinting: false,
+  blockT0: -9, stagger: 0,
+  dodgeT: 0, dodgeCD: 0, dodgeDX: 0, dodgeDZ: 0, iframe: 0,
+  shiftT0: -1,
+  lock: null,
+  pending: [],        // incoming strikes on the player: { att, dmg, t, dur }
+  swing: null,        // the player's own swing, resolved at its impact frame
+  knocks: [],         // { c, vx, vz, t }
+  blood: [],          // airborne droplets
+  splats: new Array(SPLAT_MAX), splatN: 0,
+  hurtFx: 0, lastMsg: '', log: [], seen: new WeakMap(),
+};
+
+function fightWrapA(a) { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; }
+function fightBlocking() {
+  return !!keys['q'] && FIGHT.stagger <= 0 && FIGHT.dodgeT <= 0 && !!player.c && player.c.alive && !player.spectator;
+}
+function fightSpend(n) {
+  FIGHT.stam = Math.max(0, FIGHT.stam - n);
+  FIGHT.stamDelay = STAM_DELAY;
+  if (FIGHT.stam <= 0.01) FIGHT.exhausted = true;
+}
+function fightCanSprint() { return !FIGHT.exhausted && FIGHT.stam > 0 && FIGHT.stagger <= 0 && !fightBlocking(); }
+// multiplier on your move speed: guarding shuffles, a stagger nearly stops you
+function fightSpeedMul() {
+  let m = 1;
+  if (fightBlocking()) m *= 0.45;
+  if (FIGHT.stagger > 0) m *= 0.3;
+  return m;
+}
+function fightReset() {
+  FIGHT.pending.length = 0; FIGHT.swing = null; FIGHT.lock = null;
+  FIGHT.stam = STAM_MAX; FIGHT.exhausted = false; FIGHT.stagger = 0;
+  FIGHT.dodgeT = 0; FIGHT.iframe = 0; FIGHT.knocks.length = 0;
+}
+// height of a creature's body centre above the ground, world units
+function fightBodyY(c) {
+  return groundAt(c.x, c.y) + (c.ph.standH || c.ph.radius || 4) * BODY_SCALE * 1.3 +
+    (c === player.c ? (player.jumpY || 0) + (c.ph.canFly ? player.fly || 0 : 0) : 0);
+}
+function fightTopY(c) {
+  return groundAt(c.x, c.y) + (c.ph.standH || c.ph.radius || 4) * BODY_SCALE * 2.4 + 6 +
+    (c === player.c ? (player.jumpY || 0) : 0);
+}
+
+// ---------------------------------------------------------------- dodge
+function tryDodge() {
+  const c = player.c;
+  if (!c || !c.alive || player.spectator) return;
+  if (FIGHT.dodgeCD > 0 || FIGHT.stagger > 0) return;
+  if (FIGHT.exhausted || FIGHT.stam < STAM_DODGE * 0.5) { toast('Too exhausted to dodge.', 900); return; }
+  let fx = 0, fz = 0;
+  const cy = Math.cos(player.yaw), sy = Math.sin(player.yaw);
+  if (keys['w']) { fx += cy; fz += sy; }
+  if (keys['s']) { fx -= cy; fz -= sy; }
+  if (keys['a']) { fx += sy; fz -= cy; }
+  if (keys['d']) { fx -= sy; fz += cy; }
+  let l = Math.hypot(fx, fz);
+  if (l < 1e-6) { fx = -cy; fz = -sy; l = 1; }        // no direction held: hop back
+  FIGHT.dodgeDX = fx / l; FIGHT.dodgeDZ = fz / l;
+  FIGHT.dodgeT = DODGE_DUR; FIGHT.iframe = DODGE_IFRAME; FIGHT.dodgeCD = DODGE_CD;
+  fightSpend(STAM_DODGE);
+  if (typeof sndNoiseBurst === 'function' && SND.ctx && SND.on) sndNoiseBurst(700, 0.8, 0.22, 0.10, 0, 1.4);
+}
+// velocity override while a dodge is running; null when not dodging
+function fightDodgeVel(c) {
+  if (FIGHT.dodgeT <= 0) return null;
+  const p = c.ph;
+  const base = Math.max(p.speedLand || 0, p.canFly ? p.speedAir || 0 : 0, 40) * PLAYER_SPEED;
+  // fastest at the start of the roll, easing out
+  const k = FIGHT.dodgeT / DODGE_DUR;
+  const sp = base * DODGE_SPEED * (0.45 + 0.75 * k);
+  return [FIGHT.dodgeDX * sp, FIGHT.dodgeDZ * sp];
+}
+
+// ---------------------------------------------------------------- lock-on
+function fightLockScore(c, o) {
+  const dx = o.x - c.x, dz = o.y - c.y, d = Math.hypot(dx, dz);
+  if (d > LOCK_RANGE + o.ph.radius) return -1;
+  const fx = Math.cos(player.yaw), fz = Math.sin(player.yaw);
+  const dot = d > 1e-6 ? (dx * fx + dz * fz) / d : 1;
+  if (dot < 0.2) return -1;                            // roughly in view
+  const threat = (o.foe === c ? 0.6 : 0) + (o.ph.carnivory > 0.5 ? 0.2 : 0);
+  return dot * 1.2 + (1 - d / LOCK_RANGE) + threat;
+}
+function toggleLock() {
+  const c = player.c;
+  if (FIGHT.lock) { FIGHT.lock = null; toast('Lock released.', 800); return; }
+  if (!c || !c.alive || player.spectator) return;
+  let best = null, bs = -1;
+  for (const o of world.creatures) {
+    if (o === c || !o.alive || !o.ph) continue;
+    const s2 = fightLockScore(c, o);
+    if (s2 > bs) { bs = s2; best = o; }
+  }
+  if (!best) { toast('Nothing in view to lock on to.', 1000); return; }
+  FIGHT.lock = best;
+  toast('Locked on. T or middle click to release.', 1200);
+}
+
+// ---------------------------------------------------------------- knockback
+function fightKnock(c, dirx, dirz, dist) {
+  if (!c || !c.alive || !(dist > 0)) return;
+  const l = Math.hypot(dirx, dirz) || 1;
+  const dur = 0.22;
+  const v = Math.min(dist, 140) / dur;
+  FIGHT.knocks.push({ c, vx: dirx / l * v, vz: dirz / l * v, t: dur });
+}
+function fightApplyKnocks(dt) {
+  for (let i = FIGHT.knocks.length - 1; i >= 0; i--) {
+    const k = FIGHT.knocks[i];
+    const c = k.c;
+    k.t -= dt;
+    if (!c.alive || k.t <= -1e-6) { FIGHT.knocks.splice(i, 1); continue; }
+    const f = Math.max(0, Math.min(1, k.t / 0.22)) * 1.6;    // eases out
+    let nx = clamp(c.x + k.vx * f * dt, 1, WORLD_W - 1), ny = clamp(c.y + k.vz * f * dt, 1, WORLD_H - 1);
+    const p = c.ph;
+    if (!p.canFly) {
+      const lv0 = terrain.level(c.x, c.y);
+      if (blockedFor(p, lv0, nx, ny)) { FIGHT.knocks.splice(i, 1); continue; }   // hit a wall: stop dead
+    }
+    if (world.pGrid && C.pushOutOfTrees) {
+      const pushed = C.pushOutOfTrees(world.pGrid, nx, ny, C.trunkClearance(p));
+      if (pushed) { nx = clamp(pushed[0], 1, WORLD_W - 1); ny = clamp(pushed[1], 1, WORLD_H - 1); }
+    }
+    c.x = nx; c.y = ny;
+  }
+}
+
+// ---------------------------------------------------------------- blood
+function fightSpray(c, dmg, fromX, fromZ) {
+  if (!c || !c.ph) return;
+  const camD = Math.hypot(c.x - player.camX, c.y - player.camZ);
+  if (camD > 1400) return;
+  const frac = clamp(dmg / Math.max(1, c.ph.storage), 0, 1);
+  const n = Math.min(18, 4 + Math.round(frac * 60));
+  const y = fightBodyY(c);
+  let ax = c.x - (fromX != null ? fromX : c.x), az = c.y - (fromZ != null ? fromZ : c.y);
+  const al = Math.hypot(ax, az) || 1; ax /= al; az /= al;
+  const R = (c.ph.radius || 4) * BODY_SCALE;
+  for (let i = 0; i < n; i++) {
+    if (FIGHT.blood.length >= BLOOD_MAX) FIGHT.blood.shift();
+    const a = Math.random() * Math.PI * 2, s = 30 + Math.random() * 70;
+    FIGHT.blood.push({
+      x: c.x + ax * R * 0.6, y, z: c.y + az * R * 0.6,
+      vx: Math.cos(a) * s * 0.6 + ax * s, vy: 40 + Math.random() * 90, vz: Math.sin(a) * s * 0.6 + az * s,
+      r: 0.5 + Math.random() * (0.8 + frac * 3), life: 1.6,
+    });
+  }
+  fightSplat(c.x, c.y, (1.5 + frac * 10) * (0.7 + Math.random() * 0.6));
+}
+function fightSplat(x, z, r) {
+  const i = FIGHT.splatN % SPLAT_MAX;
+  FIGHT.splats[i] = { x, z, y: groundAt(x, z) + 0.35, r: Math.min(r, 14), t0: simT, rot: Math.random() * 6.283 };
+  FIGHT.splatN++;
+}
+function fightUpdateBlood(dt) {
+  const B = FIGHT.blood;
+  for (let i = B.length - 1; i >= 0; i--) {
+    const b = B[i];
+    b.vy -= GRAV * 0.9 * dt;
+    b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
+    b.life -= dt;
+    const g = groundAt(b.x, b.z);
+    if (b.y <= g || b.life <= 0) {
+      if (b.y <= g + 2 && Math.random() < 0.45) fightSplat(b.x, b.z, b.r * 1.8);
+      B.splice(i, 1);
+    }
+  }
+}
+
+// ---------------------------------------------------------------- incoming strikes
+// Installed as world.hitFilter. Return the damage to apply now, or null to
+// defer the hit (core then skips the exchange entirely).
+function fightHitFilter(victim, att, dmg) {
+  const c = player.c;
+  // the body you steer only attacks when you press the button
+  if (c && att === c && !player.spectator) return null;
+  if (victim !== c || !c || !c.alive || player.spectator) return dmg;
+  if (!att || !att.alive || !att.ph) return dmg;
+  if (att._stagT > simT) return null;                           // a staggered animal cannot strike
+  for (const s of FIGHT.pending) if (s.att === att) return null;  // already winding up
+  const windup = clamp(0.40 + 0.09 * Math.sqrt(Math.max(0.1, att.ph.mass)), 0.40, 0.85);
+  FIGHT.pending.push({ att, dmg, t: windup, dur: windup });
+  // the strike animation peaks (strikeCurve k ~ 0.5) exactly at impact
+  startAnim(att, bestMove(att.ph, tallyParts(att.ph)), windup / 0.5);
+  if (SND.ctx && SND.on) sndNoiseBurst(260 + 200 / Math.sqrt(Math.max(0.3, att.ph.mass)), 2.5, windup, 0.10, sndPan(att.x - c.x, att.y - c.y), 0.6);
+  return null;
+}
+function fightResolveStrike(s) {
+  const c = player.c, att = s.att;
+  if (!c || !c.alive || !att.alive) return;
+  const dx = att.x - c.x, dz = att.y - c.y, d = Math.hypot(dx, dz);
+  const reach = (c.ph.radius + att.ph.radius + (att.ph.reach || 0)) * 1.3 + 14;
+  if (d > reach) { fightMsg('Out of reach: it missed.', 700); return; }
+  if (FIGHT.iframe > 0) { fightMsg('Dodged!', 700); FIGHT.hurtFx = Math.max(FIGHT.hurtFx, 0.12); return; }
+  let dmg = s.dmg;
+  const fx = Math.cos(player.yaw), fz = Math.sin(player.yaw);
+  const front = d < 1e-6 || (dx * fx + dz * fz) / d >= BLOCK_COS;
+  let blocked = false;
+  if (fightBlocking() && front) {
+    if (simT - FIGHT.blockT0 <= PARRY_WIN) {
+      // parry: nothing gets through and the attacker reels
+      att._stagT = simT + 1.8;
+      att.cooldown = Math.max(att.cooldown || 0, 1.8);
+      startAnim(att, 'flinch', 0.6);
+      fightKnock(att, dx, dz, 40 + 30 * clamp(c.ph.mass / Math.max(0.05, att.ph.mass), 0.3, 2));
+      FIGHT.stam = Math.min(STAM_MAX, FIGHT.stam + 12);
+      FIGHT.pending = FIGHT.pending.filter(q => q.att !== att);
+      if (SND.ctx && SND.on) { sndNoiseBurst(2600, 9, 0.30, 0.22, 0, 1.0); sndThump(0.25); }
+      fightMsg('PARRY! It is staggered: strike now.', 1600);
+      return;
+    }
+    const cost = 10 + 70 * dmg / Math.max(1, c.ph.storage);
+    if (FIGHT.stam >= cost && !FIGHT.exhausted) {
+      fightSpend(cost);
+      dmg *= BLOCK_MUL; blocked = true;
+      if (SND.ctx && SND.on) { sndNoiseBurst(1500, 5, 0.20, 0.16, 0, 0.9); sndThump(0.2); }
+    } else {
+      fightSpend(FIGHT.stam);
+      FIGHT.stagger = 0.9; dmg *= 0.7;
+      fightMsg('Guard broken!', 1200);
+    }
+  }
+  c.energy -= dmg;
+  if (c.energy <= 0) { c.energy = 0; c._fatalBy = att; }
+  c._lastBlocked = blocked;
+  C.onHit(c, att, dmg);
+  att.energy -= (c.ph.counter || 0) * 0.5;       // spikes and armour still bite back on contact
+  if (att.energy < 0) att.energy = 0;
+  const frac = dmg / Math.max(1, c.ph.storage);
+  const ratio = clamp(att.ph.mass / Math.max(0.05, c.ph.mass), 0.25, 3);
+  fightKnock(c, -dx, -dz, (blocked ? 12 : 26) * ratio * (0.6 + frac * 4));
+  if (!blocked && frac >= 0.18) FIGHT.stagger = Math.max(FIGHT.stagger, 0.45);
+  FIGHT.hurtFx = Math.min(1, FIGHT.hurtFx + (blocked ? 0.15 : 0.35 + frac * 2));
+}
+function fightMsg(m, ms) { FIGHT.lastMsg = m; FIGHT.log.push(m); if (FIGHT.log.length > 24) FIGHT.log.shift(); toast(m, ms); }
+// text for the core's "you were hit" toast
+function fightHitMsg(c, by) {
+  const diet = by.ph.carnivory > 0.5 ? 'a carnivore' : 'an animal';
+  const n = (c._lastDmg || 0).toFixed(0);
+  let m = (c._lastBlocked ? 'Blocked ' + diet + ': took ' + n : 'Hit by ' + diet + ' for ' + n) + '.';
+  if (c.bleedT > 0) m += ' Bleeding.';
+  return m + ' No eating for 5 s.';
+}
+
+// ---------------------------------------------------------------- your swing
+// The swing is committed on the button press, but the damage lands at the
+// strike frame of the animation, so a hit reads as a hit and a target can
+// still step out of it.
+function fightStartSwing() {
+  const c = player.c;
+  if (!c || !c.alive || (player.atkCD || 0) > 0 || FIGHT.stagger > 0 || FIGHT.dodgeT > 0) return;
+  const p = c.ph;
+  const mv = playerMove(p), MD = MOVE_DEF[mv];
+  const cost = 8 + 10 * MD.dmg;
+  const weak = FIGHT.exhausted || FIGHT.stam < cost;
+  fightSpend(cost);
+  player.atkCD = MD.dur + 0.10;
+  startAnim(c, mv, MD.dur);
+  FIGHT.swing = { mv, t: MD.dur * 0.44, weak };
+  if (weak) toast('Exhausted: weak ' + MD.label + '.', 800);
+}
+function fightFindSwingTarget(c, rr) {
+  const lk = FIGHT.lock;
+  if (lk && lk.alive && lk.ph) {
+    const d = Math.hypot(lk.x - c.x, lk.y - c.y);
+    if (d <= rr + lk.ph.radius) return lk;
+  }
+  const fx = Math.cos(player.yaw), fz = Math.sin(player.yaw);
+  let best = null, bestD = Infinity;
+  const list = world.creatures;
+  for (let i = 0; i < list.length; i++) {
+    const o = list[i];
+    if (o === c || !o.alive || !o.ph) continue;
+    const dx = o.x - c.x, dz = o.y - c.y;
+    const d = Math.hypot(dx, dz);
+    if (d > rr + o.ph.radius) continue;
+    if (d > 1e-6 && (dx * fx + dz * fz) / d < 0.25) continue;   // must be in front of you
+    if (d < bestD) { bestD = d; best = o; }
+  }
+  return best;
+}
+function fightResolveSwing(sw) {
+  const c = player.c;
+  if (!c || !c.alive) return;
+  const p = c.ph, MD = MOVE_DEF[sw.mv];
+  const rr = interactRange(p) * MD.reach;
+  const best = fightFindSwingTarget(c, rr);
+  if (!best) { toast(MD.label + ' hits nothing.', 700); return; }
+  let dmg = (p.attack - best.ph.defense * 0.6) * MD.dmg;
+  const ratio = clamp(p.mass / Math.max(0.01, best.ph.mass), 0.12, 3);
+  const floor = Math.max(1, best.ph.storage * 0.05 * ratio * MD.dmg);
+  if (dmg < floor) dmg = floor;
+  const dx = best.x - c.x, dz = best.y - c.y, dl = Math.hypot(dx, dz) || 1;
+  const bh = best._yaw3 != null ? best._yaw3 : Math.atan2(best.vy || 0, best.vx || 1);
+  const behind = (Math.cos(bh) * dx + Math.sin(bh) * dz) / dl > 0.5;   // it faces away from you
+  const reeling = best._stagT > simT;
+  let tag = '';
+  if (reeling) { dmg *= 1.6; tag = ' CRITICAL'; }
+  else if (behind) { dmg *= 1.35; tag = ' from behind'; }
+  if (sw.weak) dmg *= 0.5;
+  startAnim(best, 'flinch', 0.35);
+  sndHit();
+  best.energy -= dmg;
+  C.onHit(best, c, dmg);
+  c.energy -= (best.ph.counter || 0) * 0.5;
+  if (c.energy < 0) c.energy = 0;
+  const frac = dmg / Math.max(1, best.ph.storage);
+  fightKnock(best, dx, dz, 18 * clamp(p.mass / Math.max(0.05, best.ph.mass), 0.2, 3) * (0.6 + frac * 4));
+  // a heavy hit interrupts whatever it was winding up
+  if (frac >= 0.18) {
+    best.cooldown = Math.max(best.cooldown || 0, 0.9);
+    const had = FIGHT.pending.length;
+    FIGHT.pending = FIGHT.pending.filter(q => q.att !== best);
+    if (FIGHT.pending.length < had) tag += ', interrupted';
+  }
+  if (best.energy > 0) {
+    const hits = Math.ceil(best.energy / Math.max(0.01, dmg));
+    toast(MD.label.toUpperCase() + tag + ' for ' + dmg.toFixed(0) + '. ' +
+          Math.max(0, best.energy).toFixed(0) + ' left (~' + hits + ' more)' + (best.bleedT > 0 ? ', bleeding.' : '.'), 1200);
+    return;
+  }
+  best.alive = false; best.deathCause = 'predation';
+  if (FIGHT.lock === best) FIGHT.lock = null;
+  FIGHT.pending = FIGHT.pending.filter(q => q.att !== best);
+  const gain = (best.ph.mass * 8 + best.ph.mass * 2) * 0.6;
+  if (c.hurtT > 0) toast('Killed it, but you are still under attack and cannot feed on it.', 2400);
+  else c.energy = Math.min(p.storage, c.energy + Math.max(6, gain));
+  if (world.flags.toxins && best.ph.toxin > 0) {
+    c.energy -= best.ph.toxin * 22;
+    if (c.energy < 0) c.energy = 0;
+  }
+  fightSplat(best.x, best.y, 6 + (best.ph.radius || 4) * 0.8);
+  edOnKill(best);
+}
+
+// ---------------------------------------------------------------- per-frame
+function fightTick(dt) {
+  world.hitFilter = fightHitFilter;
+  const c = player.c;
+  FIGHT.hurtFx = Math.max(0, FIGHT.hurtFx - dt * 1.4);
+  fightUpdateBlood(dt);
+  // blood from every visible hit, and drip trails behind the wounded
+  for (const o of world.creatures) {
+    if (!o.ph) continue;
+    const seq = o._hitSeq || 0;
+    const was = FIGHT.seen.get(o);
+    if (was !== seq) {
+      FIGHT.seen.set(o, seq);
+      if (was != null && (o._lastDmg || 0) > 0 && !(o === c && isFirstPerson())) {
+        const by = o._lastHitBy;
+        fightSpray(o, o._lastDmg, by ? by.x : null, by ? by.y : null);
+      }
+    }
+    if (o.alive && o.bleedT > 0) {
+      o._drip = (o._drip || 0) + dt * (0.6 + Math.min(3, o.bleedR || 0));
+      if (o._drip >= 0.45) {
+        o._drip = 0;
+        const R = (o.ph.radius || 4) * BODY_SCALE;
+        fightSplat(o.x + (Math.random() - 0.5) * R, o.y + (Math.random() - 0.5) * R, 1 + Math.random() * 1.6 + R * 0.12);
+      }
+    }
+  }
+  if (!c || !c.alive) { fightReset(); return; }
+  if (c._fightOwner !== c) { c._fightOwner = c; fightReset(); }   // new body: fresh lungs
+  FIGHT.dodgeT = Math.max(0, FIGHT.dodgeT - dt);
+  FIGHT.dodgeCD = Math.max(0, FIGHT.dodgeCD - dt);
+  FIGHT.iframe = Math.max(0, FIGHT.iframe - dt);
+  FIGHT.stagger = Math.max(0, FIGHT.stagger - dt);
+  FIGHT.stamDelay = Math.max(0, FIGHT.stamDelay - dt);
+  // stamina: sprinting and guarding hold regen off; hunger slows it
+  if (FIGHT.sprinting) fightSpend(STAM_SPRINT * dt);
+  else if (FIGHT.stamDelay <= 0 && !fightBlocking()) {
+    const ef = clamp(c.energy / Math.max(1, c.ph.storage), 0, 1);
+    FIGHT.stam = Math.min(STAM_MAX, FIGHT.stam + STAM_REGEN * (0.35 + 0.65 * ef) * dt);
+  }
+  if (FIGHT.exhausted && FIGHT.stam >= STAM_RECOVER) FIGHT.exhausted = false;
+  // lock-on: keep facing the target, drop it when it dies or escapes
+  const lk = FIGHT.lock;
+  if (lk) {
+    const d = Math.hypot(lk.x - c.x, lk.y - c.y);
+    if (!lk.alive || d > LOCK_BREAK || player.spectator) { FIGHT.lock = null; if (!lk.alive) toast('Target down.', 900); }
+    else {
+      const want = Math.atan2(lk.y - c.y, lk.x - c.x);
+      player.yaw += fightWrapA(want - player.yaw) * Math.min(1, dt * 7);
+    }
+  }
+  // incoming strikes
+  for (let i = FIGHT.pending.length - 1; i >= 0; i--) {
+    const s = FIGHT.pending[i];
+    if (!s.att.alive || s.att._stagT > simT) { FIGHT.pending.splice(i, 1); continue; }
+    s.t -= dt;
+    if (s.t <= 0) { FIGHT.pending.splice(i, 1); fightResolveStrike(s); }
+  }
+  if (FIGHT.swing) {
+    FIGHT.swing.t -= dt;
+    if (FIGHT.swing.t <= 0) { const sw = FIGHT.swing; FIGHT.swing = null; fightResolveSwing(sw); }
+  }
+  // HUD, every frame (cheap style writes)
+  const sb = $('v-s');
+  if (sb) {
+    sb.style.width = (FIGHT.stam / STAM_MAX * 100).toFixed(1) + '%';
+    sb.style.background = FIGHT.exhausted ? '#a33' : fightBlocking() ? 'linear-gradient(90deg,#8ab,#dde)' : 'linear-gradient(90deg,#c90,#fd6)';
+  }
+  const hf = $('hurtfx');
+  if (hf) {
+    const bleed = c.bleedT > 0 ? 0.18 + 0.08 * Math.sin(simT * 6) : 0;
+    const warn = FIGHT.pending.length ? 0.10 : 0;
+    hf.style.opacity = Math.min(0.85, FIGHT.hurtFx + bleed + warn).toFixed(3);
+  }
+}
+
+// ---------------------------------------------------------------- drawing
+// Your attack reach as a ground arc: the bright front arc is where a swing can
+// land (the same cone the hit test uses), sized to the selected move's reach,
+// and it drains and refills with your attack cooldown.
+function drawReachRing(t) {
+  const c = player.c;
+  if (!c || !c.alive || player.spectator) return;
+  const p = c.ph;
+  const mv = playerMove(p), MD = MOVE_DEF[mv];
+  const rad = interactRange(p) * MD.reach;
+  const tgt = player.target;
+  const mate = tgt && canMate(c, tgt);
+  const hot = tgt ? (mate ? [0.20, 0.88, 0.82] : [0.95, 0.26, 0.18]) : [0.78, 0.84, 0.80];
+  const cool = [0.30, 0.34, 0.34];
+  const half = Math.acos(0.25);                                   // the hit cone
+  const ready = 1 - clamp((player.atkCD || 0) / Math.max(0.05, MD.dur + 0.1), 0, 1);
+  const N = 34;
+  for (let i = 0; i <= N; i++) {
+    const u = i / N;
+    const a = player.yaw - half + u * 2 * half;
+    const x = c.x + Math.cos(a) * rad, z = c.y + Math.sin(a) * rad;
+    const on = Math.abs(u - 0.5) * 2 <= ready;                     // fills from the centre out
+    const s2 = (i === 0 || i === N) ? 2.4 : 1.35 + (tgt && on ? 0.5 * (0.5 + 0.5 * Math.sin(t * 5 + i)) : 0);
+    pushS(x, groundAt(x, z) + 1.8, z, 0, 1, 0, s2, 0.5, s2, on ? hot : cool);
+  }
+  // the cone's edges, drawn in toward you
+  for (const side of [-1, 1]) {
+    const a = player.yaw + side * half;
+    for (let j = 1; j < 5; j++) {
+      const r = rad * (0.35 + j * 0.13);
+      const x = c.x + Math.cos(a) * r, z = c.y + Math.sin(a) * r;
+      pushS(x, groundAt(x, z) + 1.0, z, 0, 1, 0, 0.8, 0.3, 0.8, cool);
+    }
+  }
+  // behind you: a faint, sparse ring so the full reach is still readable
+  const M = 18;
+  for (let i = 0; i < M; i++) {
+    const a = player.yaw + half + (i + 0.5) / M * (2 * Math.PI - 2 * half);
+    const x = c.x + Math.cos(a) * rad, z = c.y + Math.sin(a) * rad;
+    pushS(x, groundAt(x, z) + 0.9, z, 0, 1, 0, 0.7, 0.25, 0.7, cool);
+  }
+  if (tgt && tgt !== FIGHT.lock) {
+    const ty = fightTopY(tgt) + Math.sin(t * 3) * 1.5;
+    pushC(tgt.x, ty, tgt.y, 0, -1, 0, 2.2, 6.0, hot);
+  }
+}
+function drawFight(t) {
+  const camX = player.camX, camZ = player.camZ;
+  // droplets
+  for (const b of FIGHT.blood) pushS(b.x, b.y, b.z, b.vx, b.vy, b.vz, b.r, b.r * 1.4, b.r, [0.34, 0.015, 0.02]);
+  // pooled and dripped blood on the ground, darkening as it dries
+  const n = Math.min(FIGHT.splatN, SPLAT_MAX);
+  for (let i = 0; i < n; i++) {
+    const s = FIGHT.splats[i];
+    if (!s) continue;
+    const age = simT - s.t0;
+    if (age > SPLAT_LIFE || age < 0) continue;
+    const dx = s.x - camX, dz = s.z - camZ;
+    if (dx * dx + dz * dz > 900 * 900) continue;
+    const k = age / SPLAT_LIFE, fresh = Math.max(0, 1 - age / 6);
+    const r = s.r * (1 - 0.35 * k) * (0.6 + 0.4 * Math.min(1, age * 4));   // spreads, then shrinks as it soaks in
+    const col = [0.30 + 0.14 * fresh - 0.14 * k, 0.02 + 0.02 * k, 0.025 + 0.015 * k];
+    pushS(s.x, s.y, s.z, Math.cos(s.rot), 0, Math.sin(s.rot), r, 0.16, r * 0.72, col);
+  }
+  const c = player.c;
+  if (!c || !c.alive || player.spectator) return;
+  // telegraph over every animal winding up a strike on you: red while it
+  // loads, yellow inside the parry window
+  for (const s of FIGHT.pending) {
+    const a = s.att;
+    if (!a.alive) continue;
+    const k = 1 - s.t / s.dur;
+    const parry = s.t <= PARRY_WIN;
+    const col = parry ? [1.0, 0.86, 0.18] : [0.95, 0.12 + 0.25 * k, 0.08];
+    const y = fightTopY(a) + 4;
+    const sz = 1.6 + 2.4 * k;
+    pushC(a.x, y + 9 - 4 * k, a.y, 0, -1, 0, sz, 7 + 5 * k, col);
+    const rr = (a.ph.radius || 4) * BODY_SCALE * 1.6 + 6;
+    for (let i = 0; i < 12; i++) {
+      const ang = i / 12 * Math.PI * 2;
+      const x = a.x + Math.cos(ang) * rr * (1.25 - 0.25 * k), z = a.y + Math.sin(ang) * rr * (1.25 - 0.25 * k);
+      pushS(x, groundAt(x, z) + 1.4, z, 0, 1, 0, 1.2 + k, 0.4, 1.2 + k, col);
+    }
+  }
+  // lock-on reticle and the target's health
+  const lk = FIGHT.lock;
+  if (lk && lk.alive) {
+    const R = (lk.ph.radius || 4) * BODY_SCALE * 1.7 + 8;
+    const gy = groundAt(lk.x, lk.y);
+    for (let i = 0; i < 3; i++) {
+      const a = t * 1.6 + i * 2.094;
+      const x = lk.x + Math.cos(a) * R, z = lk.y + Math.sin(a) * R;
+      pushC(x, gy + 7, z, -Math.cos(a), -0.4, -Math.sin(a), 1.6, 6, [0.95, 0.28, 0.2]);
+    }
+    const top = fightTopY(lk) + 10;
+    const rx = -Math.sin(player.yaw), rz = Math.cos(player.yaw);
+    const segs = 12, W = 30;
+    const f = clamp(lk.energy / Math.max(1, lk.ph.storage), 0, 1);
+    for (let i = 0; i < segs; i++) {
+      const u = (i + 0.5) / segs - 0.5;
+      const on = (i + 0.5) / segs <= f;
+      const col = on ? (f > 0.5 ? [0.35, 0.85, 0.35] : f > 0.25 ? [0.95, 0.75, 0.2] : [0.95, 0.2, 0.15]) : [0.12, 0.10, 0.10];
+      pushS(lk.x + rx * u * W, top, lk.y + rz * u * W, rx, 0, rz, 1.25, 0.9, 0.9, col);
+    }
+    if (lk.bleedT > 0) pushS(lk.x, top + 3.5, lk.y, 0, 1, 0, 1.1, 1.5, 1.1, [0.6, 0.03, 0.04]);
+  }
+}
+
 function stepSim(dt) {
   if (player.atkCD > 0) player.atkCD = Math.max(0, player.atkCD - dt);
+  fightTick(dt);
   updateJump(dt);
   updateFlight(dt);
   const c = player.c;
@@ -9949,8 +10450,7 @@ function stepSim(dt) {
     const by = c._lastHitBy;
     if (player._seenHit != null && c.alive && by) {
       startAnim(c, 'flinch', 0.35);
-      const diet = by.ph.carnivory > 0.5 ? 'a carnivore' : 'an animal';
-      toast('Hit by ' + diet + ' for ' + (c._lastDmg || 0).toFixed(0) + '. You cannot eat for 5 s.', 1600);
+      toast(fightHitMsg(c, by), 1600);
     }
     player._seenHit = c._hitSeq;
   }
@@ -9959,6 +10459,8 @@ function stepSim(dt) {
     c.x = px; c.y = py;
     movePlayer(c, dt);
   }
+  fightApplyKnocks(dt);
+  if (c && !c.alive && c._fatalBy && c.deathCause !== 'predation') c.deathCause = 'predation';
   if (!player.c || !player.c.alive) respawn();
 }
 
@@ -10174,6 +10676,7 @@ function updateHUD() {
       act.innerHTML = '<b>' + diet + '</b> mass ' + d.mass.toFixed(1) +
         ' &middot; def ' + d.defense.toFixed(0) + ' &middot; ~' + hits + ' hits to kill' +
         '<div class="keys"><span class="hit">F</span> ' + MOVE_DEF[playerMove(mp)].label + ' <span>X</span> switch ' +
+        '<span>Q</span> guard <span>Z</span> dodge <span>T</span> ' + (FIGHT.lock === tgt ? 'unlock ' : 'lock ') +
         (why ? '<span style="opacity:.55">M mate: ' + why + '</span>'
              : '<span class="ok">M</span> ' + (mateDistance(me, tgt) > 9 ? 'mate (hybrid)' : 'mate')) +
         ' <span>E</span> eat</div>';
@@ -10389,6 +10892,12 @@ function bindInput() {
       (tag === 'INPUT' && !/^(range|checkbox|radio|button|submit)$/i.test(el.type || 'text'));
     if (typing) return;
     const k = e.key.toLowerCase();
+    if (!e.repeat) {
+      if (k === 'q' && started) FIGHT.blockT0 = simT;
+      if (k === 'shift') FIGHT.shiftT0 = simT;
+      if (k === 'z' && started) tryDodge();
+      if (k === 't' && started) toggleLock();
+    }
     keys[k] = true;
     if (k === 'v') {
       player.spectator = !player.spectator;
@@ -10418,7 +10927,13 @@ function bindInput() {
     }
     if ([' ', 'w', 'a', 's', 'd'].includes(k)) e.preventDefault();
   });
-  addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+  addEventListener('keyup', (e) => {
+    const k = e.key.toLowerCase();
+    // shift tapped (not held) is a dodge roll
+    if (k === 'shift' && started && !ED.open && FIGHT.shiftT0 >= 0 && simT - FIGHT.shiftT0 <= SHIFT_TAP) tryDodge();
+    if (k === 'shift') FIGHT.shiftT0 = -1;
+    keys[k] = false;
+  });
   addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
   document.addEventListener('pointerlockchange', () => {
     pointerLocked = document.pointerLockElement === canvas;
@@ -10462,6 +10977,7 @@ function bindInput() {
     lastMX = e.clientX; lastMY = e.clientY;
   });
   canvas.addEventListener('mousedown', (e) => {
+    if (e.button === 1 && !ED.open && started) { e.preventDefault(); toggleLock(); return; }
     if (ED.open || !pointerLocked) return;
     if (e.button === 0) tryAttack();
     else if (e.button === 2) { if (player.target) tryMate(); else tryEat(); }
@@ -12420,6 +12936,9 @@ window.__G3D = {
   spawnNewborn: (src) => spawnNewborn(src),
   setDist(d) { player.dist = clamp(d, 0, THIRD_MAX); },
   HEIGHT_SCALE, WORLD_W, WORLD_H,
+  get FIGHT() { return FIGHT; }, get simT() { return simT; },
+  dodge: () => tryDodge(), lock: () => toggleLock(),
+  fightFilter: (v, a, d) => fightHitFilter(v, a, d),
 };
 window.__G3D.boot = init();
 })();

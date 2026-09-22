@@ -19,3 +19,13 @@ Press **B** at any time (or the "edit creature" button) to open the creature edi
 - **Unlocks:** every part starts locked. You can rearrange the parts your body already has, but nothing more. Each kill lets you unlock one of the victim's parts. Kills, unlocks and saved creatures are remembered in this browser. Add `?sandbox=1` to the URL to unlock everything.
 
 Your design is a real genome. Your kin and offspring inherit it with small mutations, and it breeds and evolves like everything else on the island.
+
+
+## Combat
+
+- **Stamina** powers sprinting, dodging, guarding and attacks. Run it dry and you are exhausted: no sprint or dodge, and your attacks land at half strength.
+- **Telegraphed attacks:** an animal attacking you winds up first, and a marker over its head counts down. Bigger animals take longer to wind up.
+- **Guard (hold Q)** blocks 70% of a frontal hit. Raise it just as the marker turns yellow to **parry**: you take no damage, the attacker staggers, and your next hits on it are critical.
+- **Dodge (Z or tap Shift)** rolls you away, and you can't be hit during the first part of the roll.
+- **Lock on (T or middle click)** keeps you facing a target and shows its health.
+- Hits cause knockback, heavy hits stagger, and big wounds bleed. Wounded animals leave a blood trail you can follow.
