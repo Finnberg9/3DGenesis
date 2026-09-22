@@ -13631,7 +13631,17 @@ function bindInput() {
     if (btn) { e.stopPropagation(); becomeArchetype(btn.getAttribute('data-arch')); beginPlay(); return; }
   });
   menuBind();
-  { const m = document.getElementById('mmMusic'); if (m) { m.volume = 0.45; const go = () => { m.play().catch(() => {}); removeEventListener('pointerdown', go); removeEventListener('keydown', go); }; m.play().catch(() => { addEventListener('pointerdown', go); addEventListener('keydown', go); }); } }
+  { const m = document.getElementById('mmMusic'); if (m) {
+    m.volume = 0.45;
+    m.loop = true;
+    m.autoplay = true;
+    const startMenuMusic = () => {
+      if (started) return;
+      m.play().catch(() => {});
+    };
+    startMenuMusic();
+    addEventListener('load', startMenuMusic, { once: true });
+  } }
   const rb = $('resetbtn');
   if (rb) rb.addEventListener('click', (e) => { e.stopPropagation(); resetWorldClick(); });
   ssInit();
