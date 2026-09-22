@@ -2,6 +2,25 @@
 
 Build: `dev/3dgenesis-dev-src.tgz` unpacks to the patch pipeline. `bash build.sh` (edit its `cd` to your folder) turns `g3.v3` + `src/patch_*.py` into `g3.html` (= `index.html`) and extracts `core.js` for node tests.
 
+## 2026-09-22 (later): Feedback pass
+- Removed the grey/black ground rings around creatures (attack arc, threat ring, telegraph ring). No on-screen proximity indicator; danger is heard, not drawn.
+- 3D audio: every animal sound goes through an HRTF panner at its real position, with the listener following your head, so on headphones sounds come from behind, above and around you. Distance loudness and muffling are unchanged.
+- Footsteps for the 8 nearest walking animals: step rate from leg length and speed, weight from mass (big animals thud), surface from the ground (leaf litter, grass, mud, rock, snow, sand, water). Wingbeats for fliers. Stalking meat eaters growl more often as they close in.
+- Graphics selector bottom right (low / medium / high / ultra, remembered): render resolution, ground cover radius, food plant and tree LOD distances, creature detail distance, fog, instance budget. Fixed distant trees vanishing when the foliage buffer overflowed (it now fills partially, trees first; buffer raised to 200k).
+- Growing by eating: every kill you feed on and every carcass you eat makes you bigger. Juveniles get a growth spurt; adults bulk past their genetic size up to x1.5 (stats and upkeep scale with it). Size shown in the HUD.
+- Eyes rebuilt: bulging eyeball on a raised orbital mound, layered iris, round or slit pupil, catch-lights, upper and lower lids in skin colour that close on a blink. Spider eye clusters are glossy black domes standing clear of the skin.
+- First person shows your own body: the camera sits just in front of your head (your own eyes and mouth hidden), so looking down shows your legs and arms.
+- Trees: procedural bark in the foliage shader (furrowed plates, grain, bump-lit ridges, moss on shaded and upward faces, lichen), thick sinuous rounded buttress roots instead of flat fins, trunk base flare, more trunk sides.
+- Blood fixed: splats were drawn standing on edge (the dark "disc"). Now flat, small, irregular pools and drips.
+- Skeletons: every animal that dies near you leaves a skeleton built from its real body plan (spine, ribs across its real width, skull, neck, tail, every limb splayed from its socket). Rotting flesh shrinks away over 45 s, bones yellow, then sink into the soil over 7 minutes.
+- Animals commit to a heading for 1 to 1.8 s and turn at a limited rate (faster when fleeing, fighting or hunting): no more jittery walking.
+- Drowning: animals without fins will not wade in over their heads. If your head is under water you lose 12% of your health per second, with a red and blue vignette, a warning and bubbling sounds.
+- "YOU DIED" screen with the cause on every death.
+- Start screen: no box; text drifts down over an animated dark rainforest silhouette with mist, and pairs of eyes open in the undergrowth, blink and follow your cursor. It lists all keys and moves; clicking opens the creature builder, and finishing the design starts the game.
+- Always-visible Reset World button (click twice to confirm; keeps your last design).
+- Defaults: population 100, time scale 0.05, plant regrowth 20, plant energy 10, day length 10, season length 10, corpse lifespan 50, yield 0.5, patchiness 0.5, founder diversity 0.6, start plants 0. Control panel hidden until opened (Tab or the controls button).
+- Fixes: the predator warning no longer hides under the goal box; the goal box is hidden in the builder; builder camera can no longer go below the ground; both wings beat together; bodies stand on their shortest leg so every foot touches the ground (no dangling legs); prey you wounded that bleeds out within 25 s counts as your kill; "energy" is now "health".
+
 ## 2026-09-22: Combat v2
 - Stamina bar (HUD). Sprint, dodge, guard and every attack cost stamina; regen slows when starving. Empty = exhausted until 30 (no sprint/dodge, attacks do half damage).
 - Telegraphed incoming strikes: an animal attacking you winds up (0.40 to 0.85 s, longer for heavier animals). A marker over it counts down, red then yellow in the parry window. The hit only lands if you are still in reach.
@@ -17,4 +36,4 @@ Build: `dev/3dgenesis-dev-src.tgz` unpacks to the patch pipeline. `bash build.sh
 - Tests: `node test_fight_core.js` (11 checks), `node play.js s_fight.js` (deterministic stepped browser test of every mechanic). `s_stress.js` updated for delayed swings.
 
 ## Next up (candidates)
-Hunger/thirst split + drinking, weather (rain/fog/lightning), graphics quality menu + resolution slider, world save between sessions, predator stalking AI, wounds visible on skin.
+Hunger/thirst split + drinking, weather (rain/fog/lightning), world save between sessions, predator stalking AI, wounds visible on skin, gills as a part, swimming with a breath meter.

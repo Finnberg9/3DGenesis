@@ -28,4 +28,8 @@ Your design is a real genome. Your kin and offspring inherit it with small mutat
 - **Guard (hold Q)** blocks 70% of a frontal hit. Raise it just as the marker turns yellow to **parry**: you take no damage, the attacker staggers, and your next hits on it are critical.
 - **Dodge (Z or tap Shift)** rolls you away, and you can't be hit during the first part of the roll.
 - **Lock on (T or middle click)** keeps you facing a target and shows its health.
+- **Sound is 3D.** On headphones, footsteps, growls and roars come from where the animal really is, including behind you.
+- **Eat to grow.** Every kill you feed on and every carcass you eat makes you bigger, up to one and a half times your adult size.
+- **Drowning.** Without fins you drown fast if your head goes under water.
+- The dead leave skeletons shaped like their bodies, which slowly sink into the ground.
 - Hits cause knockback, heavy hits stagger, and big wounds bleed. Wounded animals leave a blood trail you can follow.

@@ -15,6 +15,14 @@
   .panel{position:fixed;background:var(--panel);border:1px solid var(--line);border-radius:10px;
     padding:11px 14px;backdrop-filter:blur(7px);font-size:13px;line-height:1.5;pointer-events:none}
   #vitals{left:14px;bottom:14px;min-width:260px}
+  #gfxsel{position:fixed;right:14px;bottom:14px;z-index:14;display:flex;gap:4px;align-items:center;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 8px;font-size:12px;backdrop-filter:blur(7px)}
+  #gfxsel span{color:var(--dim);margin-right:4px}
+  #gfxsel button{font:inherit;color:var(--ink);background:#06201c;border:1px solid var(--line);border-radius:6px;padding:3px 8px;cursor:pointer}
+  #gfxsel button:hover{border-color:var(--cyan)}
+  #gfxsel button.on{background:var(--cyan);color:#04100e;font-weight:700;border-color:var(--cyan)}
+  body.editing #gfxsel{display:none}
+  body.editing #objective{display:none !important}
   #env{right:14px;top:14px;min-width:210px;text-align:right}
   #evt{left:50%;transform:translateX(-50%);bottom:96px;text-align:center;opacity:0;transition:opacity .4s;
     border-color:#3d6f68;font-size:13px;max-width:70vw}
@@ -25,20 +33,42 @@
   .k{color:var(--dim)}
   .v{color:var(--ink);font-weight:600}
   b.t{color:var(--cyan);font-weight:700;letter-spacing:.06em}
-  #start{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
-    background:radial-gradient(ellipse at 50% 40%,#0b2320,#04100e 70%);z-index:20;cursor:pointer}
-  #start .box{text-align:center;max-width:640px;padding:36px 44px;border:1px solid var(--line);
-    border-radius:14px;background:rgba(5,20,18,.72)}
-  #start h1{margin:0 0 8px;font-size:32px;letter-spacing:.16em;color:var(--cyan);font-weight:700}
-  #start p{margin:8px 0;color:var(--dim);font-size:14.5px;line-height:1.65}
-  #start .keys{margin-top:16px;font-size:13.5px;line-height:1.7;color:var(--ink);opacity:.85}
-  #start .go{margin-top:16px;color:var(--cyan);font-size:14px;letter-spacing:.06em}
-  #start .arch{margin-top:18px}
-  #start .alab{color:var(--dim);font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px}
-  #start .arch button{font-family:inherit;font-size:14px;background:#0a201d;color:var(--cyan);
-    border:1px solid var(--line);border-radius:8px;padding:9px 15px;margin:4px;cursor:pointer}
-  #start .arch button:hover{background:#12332e;border-color:#35e0d8}
-  #start .arch button.big{font-size:17px;font-weight:700;padding:13px 24px;color:#06231a;background:linear-gradient(180deg,#b8ff8e,#54d35a);border-color:#d6ffc0}
+  #start{position:fixed;inset:0;display:flex;justify-content:center;align-items:flex-start;overflow-y:auto;
+    background:#010303;z-index:20;cursor:pointer}
+  #startbg{position:fixed;inset:0;width:100vw;height:100vh;display:block}
+  #start .flow{position:relative;max-width:820px;padding:9vh 28px 12vh;text-align:center;color:#b9d3cc;
+    text-shadow:0 2px 12px #000,0 0 30px #000}
+  #start .fl{opacity:0;transform:translateY(-18px);animation:ssdrop 1.4s cubic-bezier(.2,.7,.2,1) forwards}
+  @keyframes ssdrop{to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){#start .fl{animation:none;opacity:1;transform:none}}
+  #start h1{margin:0 0 18px;font-size:clamp(40px,7vw,78px);letter-spacing:.34em;color:#9fe3cf;font-weight:700;
+    text-shadow:0 0 40px rgba(60,200,160,.35),0 4px 18px #000}
+  #start p{margin:10px auto;font-size:15px;line-height:1.75;max-width:680px}
+  #start p.lead{font-size:19px;color:#d8efe8}
+  #start .dim{color:#6f9088}
+  #start .small{font-size:12px;margin-top:6px}
+  #start .keysg{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:10px 34px;margin:30px 0 8px;text-align:left}
+  #start .grp h3{margin:0 0 6px;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#6fb8a6;font-weight:600}
+  #start .kr{display:flex;gap:12px;align-items:baseline;font-size:13.5px;line-height:1.55;margin:3px 0}
+  #start .kk{flex:0 0 150px;text-align:right;white-space:nowrap}
+  #start kbd{font-family:inherit;font-size:12px;color:#e4f4ef;background:rgba(10,30,26,.55);border:1px solid rgba(90,160,140,.35);
+    border-radius:4px;padding:1px 6px}
+  #start .moves{font-size:13.5px;color:#9dbdb5}
+  #start .go{margin-top:30px;font-size:20px;letter-spacing:.3em;text-transform:uppercase;color:#d4f7ec;
+    animation:ssdrop 1.4s cubic-bezier(.2,.7,.2,1) forwards,sspulse 2.6s ease-in-out 2.2s infinite}
+  @keyframes sspulse{50%{opacity:.45}}
+  #resetbtn{position:fixed;right:14px;bottom:58px;z-index:22;font:inherit;font-size:12px;color:#ffd9d2;cursor:pointer;
+    background:rgba(40,8,6,.78);border:1px solid #7a2a20;border-radius:8px;padding:6px 12px;backdrop-filter:blur(6px)}
+  #resetbtn:hover{border-color:#ff6b5e}
+  #resetbtn.armed{background:#8a1a10;color:#fff;border-color:#ff6b5e}
+  body.editing #resetbtn{display:none}
+  #deathfx{position:fixed;inset:0;z-index:19;pointer-events:none;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:radial-gradient(ellipse at center,rgba(0,0,0,.72),rgba(0,0,0,.96));opacity:0;visibility:hidden}
+  #deathfx .big{font-family:Georgia,'Times New Roman',serif;font-size:clamp(54px,11vw,140px);letter-spacing:.14em;color:#b3140c;
+    text-shadow:0 0 30px rgba(160,10,0,.6),0 6px 24px #000;transform:scale(1.08)}
+  #deathfx .sub{margin-top:14px;color:#caa;font-size:15px;letter-spacing:.06em}
+  #drownfx{position:fixed;inset:0;z-index:4;pointer-events:none;opacity:0;transition:opacity .3s;
+    background:radial-gradient(ellipse at center,rgba(10,60,90,.25),rgba(0,20,40,.8))}
   #err{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:30;
     background:#04100e;padding:40px;text-align:center;font-size:14px;line-height:1.7}
   #err code{color:var(--warn)}
@@ -101,7 +131,7 @@
     padding:0 4px;margin:0 2px;color:var(--ink)}
   #act .keys .hit{color:#ff7a6b;border-color:#7a2c26}
   #act .keys .ok{color:#35e0d8;border-color:#2f7d74}
-  #warn{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:12;display:none;
+  #warn{position:fixed;left:50%;top:112px;transform:translateX(-50%);z-index:12;display:none;
     font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.12em;text-transform:uppercase;
     color:#ff8a76;background:rgba(38,10,8,.72);border:1px solid #7a2c26;border-radius:20px;
     padding:5px 15px;pointer-events:none;backdrop-filter:blur(6px)}
@@ -281,11 +311,15 @@
 </head>
 <body>
 <canvas id="gpu"></canvas>
+<div id="drownfx"></div>
+<div id="deathfx"><div class="big">YOU DIED</div><div class="sub"></div></div>
+<button id="resetbtn" type="button">Reset World</button>
+<div id="gfxsel"><span>graphics</span><button data-q="low">low</button><button data-q="medium">medium</button><button data-q="high">high</button><button data-q="ultra">ultra</button></div>
 <div id="hurtfx" style="position:fixed;inset:0;pointer-events:none;opacity:0;z-index:4;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 45%,rgba(120,0,0,.55) 80%,rgba(70,0,0,.9) 100%)"></div>
 
 <div id="vitals" class="panel">
   <b class="t" id="v-name">-</b><br>
-  <span class="k">energy</span><span class="bar"><i id="v-e" style="width:0%;background:linear-gradient(90deg,#2fa,#7ee787)"></i></span>
+  <span class="k">health</span><span class="bar"><i id="v-e" style="width:0%;background:linear-gradient(90deg,#2fa,#7ee787)"></i></span>
   <span class="k">growth</span><span class="bar"><i id="v-g" style="width:0%;background:linear-gradient(90deg,#3a8,#35e0d8)"></i></span>
   <span class="k">stamina</span><span class="bar"><i id="v-s" style="width:100%;background:linear-gradient(90deg,#c90,#fd6)"></i></span>
   <div id="v-stats" class="k"></div>
@@ -307,7 +341,7 @@
 <div id="picker"></div>
 <button id="ptab">controls</button>
 <button id="edOpenBtn" title="edit your creature (B)">edit creature (B)</button>
-<div id="panel">
+<div id="panel" class="hidden">
   <div class="card brief">
     <p>You are the controller of Genesis. It is your job to design a functional
     ecosystem that can maintain itself without reaching extinction, and to
@@ -320,7 +354,7 @@
         <button type="button" id="uiDown" aria-label="smaller interface">&minus;</button><b id="uiVal">auto</b><button type="button" id="uiUp" aria-label="larger interface">+</button><button type="button" id="uiAuto">auto</button></div>
       <div class="popbox" title="number of founder animals placed on the island. Takes effect on reset.">
         <div class="pop-h"><span>start population</span><em>applies on reset</em></div>
-        <div class="pop-row"><input id="startPopR" type="range" min="2" max="500" step="1" value="50" aria-label="start population slider"><input id="startPop" type="number" min="2" max="2000" value="50" aria-label="start population"></div>
+        <div class="pop-row"><input id="startPopR" type="range" min="2" max="500" step="1" value="100" aria-label="start population slider"><input id="startPop" type="number" min="2" max="2000" value="100" aria-label="start population"></div>
         <div class="ctl-d">founders placed on the island. Slider covers 2 to 500; type up to 2000.</div>
       </div>
     <div class="toggles">
@@ -332,21 +366,21 @@
       <label title="off = asexual budding"><input type="checkbox" id="f_sex" checked> sexual repro</label>
     </div>
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">mutation rate</span><b id="mutv">0.60</b></div><input id="mut" type="range" min="0.1" max="1" step="0.01" value="0.6"><div class="ctl-d">chance each gene mutates per birth. Live.</div></div>
-    <div class="ctl"><div class="ctl-h"><span class="ctl-n">time scale</span><b id="tscalev">0.120</b></div><input id="tscale" type="range" min="0.01" max="1" step="0.01" value="0.12"><div class="ctl-d">how fast biological time runs against wall time. Live.</div></div>
-    <div class="ctl"><div class="ctl-h"><span class="ctl-n">plant regrowth</span><b id="plantv">40</b></div><input id="plant" type="range" min="5" max="900" step="5" value="40"><div class="ctl-d">plant spawn attempts per biological second. Live.</div></div>
-    <div class="ctl"><div class="ctl-h"><span class="ctl-n">plant energy</span><b id="pev">30</b></div><input id="pe" type="range" min="5" max="120" step="5" value="30"><div class="ctl-d">energy in one plant before biome multipliers. Live.</div></div>
-    <div class="ctl"><div class="ctl-h"><span class="ctl-n">day length</span><b id="daylv">18</b></div><input id="dayl" type="range" min="1" max="40" step="1" value="18"><div class="ctl-d">length of one day/night cycle. Live.</div></div>
-    <div class="ctl"><div class="ctl-h"><span class="ctl-n">season length</span><b id="yearlv">70</b></div><input id="yearl" type="range" min="10" max="300" step="10" value="70"><div class="ctl-d">length of one year, which drives seasons. Live.</div></div>
-    <div class="ctl"><div class="ctl-h"><span class="ctl-n">corpse lifespan</span><b id="clifev">12</b></div><input id="clife" type="range" min="2" max="60" step="1" value="12"><div class="ctl-d">how long a corpse lies there. Live, applies to new corpses.</div></div>
-    <div class="ctl"><div class="ctl-h"><span class="ctl-n">corpse yield</span><b id="cyv">1.0</b></div><input id="cy" type="range" min="0.2" max="4" step="0.1" value="1"><div class="ctl-d">multiplier on corpse energy. Live, applies to new corpses.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">time scale</span><b id="tscalev">0.050</b></div><input id="tscale" type="range" min="0.01" max="1" step="0.01" value="0.05"><div class="ctl-d">how fast biological time runs against wall time. Live.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">plant regrowth</span><b id="plantv">20</b></div><input id="plant" type="range" min="5" max="900" step="5" value="20"><div class="ctl-d">plant spawn attempts per biological second. Live.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">plant energy</span><b id="pev">10</b></div><input id="pe" type="range" min="5" max="120" step="5" value="10"><div class="ctl-d">energy in one plant before biome multipliers. Live.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">day length</span><b id="daylv">10</b></div><input id="dayl" type="range" min="1" max="40" step="1" value="10"><div class="ctl-d">length of one day/night cycle. Live.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">season length</span><b id="yearlv">10</b></div><input id="yearl" type="range" min="10" max="300" step="10" value="10"><div class="ctl-d">length of one year, which drives seasons. Live.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">corpse lifespan</span><b id="clifev">50</b></div><input id="clife" type="range" min="2" max="60" step="1" value="50"><div class="ctl-d">how long a corpse lies there. Live, applies to new corpses.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">corpse yield</span><b id="cyv">0.5</b></div><input id="cy" type="range" min="0.2" max="4" step="0.1" value="0.5"><div class="ctl-d">multiplier on corpse energy. Live, applies to new corpses.</div></div>
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">pre-run</span><b id="prerunv">0</b></div><input id="prerun" type="range" min="0" max="300" step="10" value="0"><div class="ctl-d">biological seconds to run the world before you enter it. 0 = you witness the very first generation. Takes effect on reset.</div></div>
-    <div class="ctl"><div class="ctl-h"><span class="ctl-n">food patchiness</span><b id="fpv">0.70</b></div><input id="fp" type="range" min="0" max="1" step="0.05" value="0.7"><div class="ctl-d">how strongly food clusters into thickets and bare ground. Takes effect on reset.</div></div>
-    <div class="ctl"><div class="ctl-h"><span class="ctl-n">founder diversity</span><b id="fdv">0.40</b></div><input id="fd" type="range" min="0" max="1" step="0.05" value="0.4"><div class="ctl-d">how far founders are pre-mutated apart. Takes effect on reset.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">food patchiness</span><b id="fpv">0.50</b></div><input id="fp" type="range" min="0" max="1" step="0.05" value="0.5"><div class="ctl-d">how strongly food clusters into thickets and bare ground. Takes effect on reset.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">founder diversity</span><b id="fdv">0.60</b></div><input id="fd" type="range" min="0" max="1" step="0.05" value="0.6"><div class="ctl-d">how far founders are pre-mutated apart. Takes effect on reset.</div></div>
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">height variation</span><b id="trv">1.00</b></div><input id="trelief" type="range" min="0.3" max="2.2" step="0.05" value="1"><div class="ctl-d">how tall mountains and ridges rise, and how rough the general terrain is. 1 = default. Takes effect on reset.</div></div>
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">water depth</span><b id="twv">1.00</b></div><input id="twater" type="range" min="0.3" max="2.5" step="0.05" value="1"><div class="ctl-d">how deep the open ocean and inland lakes cut below the waterline. 1 = default. Takes effect on reset.</div></div>
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">tree density</span><b id="ttv">1.00</b></div><input id="ttree" type="range" min="0.2" max="2.5" step="0.05" value="1"><div class="ctl-d">fraction of eligible plants that render as full trees vs low ground cover. 1 = default. Live.</div></div>
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">region density</span><b id="trgv">1.00</b></div><input id="tregion" type="range" min="0.4" max="2.5" step="0.05" value="1"><div class="ctl-d">how large or small climate-driven biome regions (forest, plains, desert, tundra...) are. Higher = more, smaller patches. 1 = default. Takes effect on reset.</div></div>
-    <div class="field">start plants <input id="startPlants" type="number" min="0" max="40000" value="500"></div>
+    <div class="field">start plants <input id="startPlants" type="number" min="0" max="40000" value="0"></div>
     <div class="field">seed <input id="seed" type="number" min="1" max="4294967295" value="2024">
       <label title="off = a new random world each reset"><input type="checkbox" id="seedLock"> lock</label></div>
     <button id="reset">reset world</button>
@@ -359,33 +393,16 @@
 </div>
 
 
-<div id="start"><div class="box">
-  <h1>GENESIS 3D</h1>
-  <p>You are not a camera. You are a creature in this ecosystem, with a real genome, real
-     metabolism, and real predators. You will get hungry. You can be eaten.</p>
-  <p>You start as a newborn and grow up on the same cell economy as everything else.
-     Kill something and you absorb one part of its genome into your own body plan.
-     When you die you are reborn as a newborn of your nearest surviving kin.</p>
-  <div class="keys">
-    <b>WASD</b> move &nbsp;·&nbsp; <b>drag</b> look &nbsp;·&nbsp; hold <b>shift</b> sprint (stamina)<br>
-    <b>scroll</b> zoom out to third person &nbsp;·&nbsp; <b>C</b> toggle view<br>
-    <b>Q</b> guard &nbsp;·&nbsp; <b>Z</b> / tap <b>shift</b> dodge &nbsp;·&nbsp; <b>T</b> / <b>middle click</b> lock on<br>
-    guard or dodge as an attacker's marker turns <span style="color:#ffd84a">yellow</span> to parry<br>
-    <b>left click</b> / <b>F</b> attack &nbsp;·&nbsp; <b>X</b> switch attack &nbsp;·&nbsp; <b>R</b> roar &nbsp;·&nbsp; <b>N</b> sound &nbsp;·&nbsp; <b>M</b> mate &nbsp;·&nbsp; <b>E</b> eat<br>
-    ground arc = where your selected attack lands, refilling as it recovers (<span style="color:#f04c38">red</span> target,
-    <span style="color:#35e0d8">cyan</span> mate)<br>
-    outer ring = predators nearby, at their real bearing<br>
-    <b>space</b> jump &nbsp;·&nbsp; <b>space + W</b> sprint<br>
-    fliers: <b>space</b> climb, <b>ctrl</b> dive &nbsp;·&nbsp; hover the minimap to enlarge it<br>
-    <b>drag</b> on the world to look (mouse stays free) &nbsp;·&nbsp; <b>L</b> lock mouse for FPS look<br>
-    <b>Tab</b> controls panel &nbsp;·&nbsp; <b>B</b> creature editor, any time<br>
-    <b>V</b> detach camera &nbsp;·&nbsp; <b>[</b> <b>]</b> sim speed &nbsp;·&nbsp; <b>Esc</b> / <b>L</b> release mouse
-  </div>
-  <div class="arch">
-    <div class="alab">how do you want to be born</div>
-    <button data-act="create" class="big">create your creature</button><button data-act="last" id="startLast" style="display:none">play my last creature</button><button data-arch="random">random creature</button>
-  </div>
-  <div class="go">or click anywhere to begin as a random founder</div>
+<div id="start"><canvas id="startbg"></canvas><div class="flow">
+  <h1 class="fl">GENESIS</h1>
+  <p class="fl lead">You are not watching this island. You live on it.</p>
+  <p class="fl">You hatch as a newborn with a real genome and a real metabolism, among animals that evolved on their own and will hunt you. Eat to grow. Kill to take their parts into your body. Mate and your line goes on in your children. When you die, you are reborn as your nearest kin.</p>
+  <p class="fl">Nothing here was designed. Every animal you meet came out of mutation and natural selection, so no two islands are the same.</p>
+  <p class="fl dim">Wear headphones. Footsteps, growls and roars come from where the animal really is, even behind you.</p>
+  <div class="keysg"><div class="grp fl"><h3>Move</h3><div class="kr"><span class="kk"><kbd>W A S D</kbd></span><span>walk</span></div><div class="kr"><span class="kk"><kbd>hold Shift</kbd></span><span>sprint (uses stamina)</span></div><div class="kr"><span class="kk"><kbd>Space</kbd></span><span>jump; fliers climb</span></div><div class="kr"><span class="kk"><kbd>Ctrl</kbd></span><span>fliers dive</span></div><div class="kr"><span class="kk"><kbd>drag</kbd> <kbd>L</kbd></span><span>look around / lock the mouse</span></div></div><div class="grp fl"><h3>Fight</h3><div class="kr"><span class="kk"><kbd>left click</kbd> <kbd>F</kbd></span><span>attack with your body</span></div><div class="kr"><span class="kk"><kbd>X</kbd></span><span>switch attack</span></div><div class="kr"><span class="kk"><kbd>Q (hold)</kbd></span><span>guard: raise it as the marker over an attacker turns yellow to parry</span></div><div class="kr"><span class="kk"><kbd>Z</kbd> <kbd>tap Shift</kbd></span><span>dodge roll</span></div><div class="kr"><span class="kk"><kbd>T</kbd> <kbd>middle click</kbd></span><span>lock on to a target</span></div></div><div class="grp fl"><h3>Survive</h3><div class="kr"><span class="kk"><kbd>E</kbd></span><span>eat plants, fruit or the dead</span></div><div class="kr"><span class="kk"><kbd>M</kbd></span><span>mate: you become the offspring</span></div><div class="kr"><span class="kk"><kbd>R</kbd></span><span>roar: small animals scatter, big ones answer</span></div><div class="kr"><span class="kk"><kbd>B</kbd></span><span>creature builder, any time</span></div></div><div class="grp fl"><h3>See and hear</h3><div class="kr"><span class="kk"><kbd>C</kbd> <kbd>scroll</kbd></span><span>first or third person</span></div><div class="kr"><span class="kk"><kbd>V</kbd></span><span>detach the camera</span></div><div class="kr"><span class="kk"><kbd>N</kbd></span><span>sound on or off</span></div><div class="kr"><span class="kk"><kbd>Tab</kbd></span><span>control panel</span></div><div class="kr"><span class="kk"><kbd>[ ]</kbd></span><span>simulation speed</span></div><div class="kr"><span class="kk"><kbd>Esc</kbd></span><span>release the mouse</span></div></div></div>
+  <p class="fl moves">Your attacks come from your body: a <b>head-butt</b> by default, a <b>bite</b> with jaws, a <b>gore</b> with horns, a <b>claw</b> swipe, a <b>tail sweep</b>, a <b>spike slam</b> or a <b>punch</b> with arms. Bigger bodies and bigger parts hit harder.</p>
+  <div class="go fl">click to begin</div>
+  <div class="fl dim small">you will design your creature first</div>
 </div></div>
 
 <div id="err"><div>
@@ -2729,6 +2746,26 @@
         }
       }
       dirx = _dx; diry = _dy;
+      // ---- heading commitment and finite turn rate
+      {
+        const dl = Math.hypot(dirx, diry);
+        if (dl > 1e-6) {
+          const urgent = !!c.foe || c.fear > 0.3 || !!(hunting && prey);
+          if (c._hx == null) { c._hx = dirx / dl; c._hy = diry / dl; c._cx = c._hx; c._cy = c._hy; c._hdT = 0; }
+          c._hdT -= dt;
+          if (urgent || c._hdT <= 0) {
+            c._cx = dirx / dl; c._cy = diry / dl;
+            if (!urgent) c._hdT = 1.0 + ((c.id * 0.6180339 + c.age * 0.37) % 1) * 0.8;
+          }
+          // turn toward the committed heading at a bounded rate
+          const cur = Math.atan2(c._hy, c._hx), want = Math.atan2(c._cy, c._cx);
+          let d = want - cur; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+          const maxTurn = (urgent ? 5.0 : 2.2) * dt;
+          const a = cur + Math.max(-maxTurn, Math.min(maxTurn, d));
+          c._hx = Math.cos(a); c._hy = Math.sin(a);
+          dirx = c._hx * dl; diry = c._hy * dl;
+        }
+      }
       // move (terrain modulates land speed; mountains cost extra upkeep)
       const len = Math.hypot(dirx, diry);
       const tMul = terrain.speedMul(c.x, c.y, p.canFly, p.canSwim);
@@ -2753,7 +2790,12 @@
         const lv0 = terrain.level(c.x, c.y);
         const blocked = (bx, by) => {
           if (terrain.isDeep(bx, by)) return !p.canSwim;
-          if (terrain.isWater(bx, by)) return false;        // you swim, you do not climb
+          if (terrain.isWater(bx, by)) {
+            // a non-swimmer will not wade in over its head (but may wade back out)
+            if (p.canSwim) return false;
+            const dB = waterDepth(terrain, bx, by);
+            return dB > headHeight(world, p) * 0.9 && dB > waterDepth(terrain, c.x, c.y);
+          }
           return terrain.level(bx, by) - lv0 > terrain.maxStep + (c.jumpLv || 0);
         };
         if (blocked(nx, ny)) {
@@ -2786,10 +2828,15 @@
         if (dx * dx + dy * dy < hz.r * hz.r) { c.energy -= hz.strength * bdt; inHazard = true; }
       }
       c._inHazard = inHazard ? 1 : 0;   // fed back into next step's senses
+      // drowning: a body without fins whose head is under water loses energy
+      // fast (a full reserve lasts about eight seconds)
+      if (!p.canSwim && !p.canFly && terrain.isWater(c.x, c.y) && waterDepth(terrain, c.x, c.y) > headHeight(world, p) - (c.jumpLv || 0) * 8) {
+        c.energy -= p.storage * 0.12 * dt; c._drown = true;
+      } else c._drown = false;
 
       if (c.energy <= 0 || c.age >= c.maxAge) {
         c.alive = false;
-        c.deathCause = c.age >= c.maxAge ? 'oldage' : (inHazard ? 'toxin' : 'starvation');
+        c.deathCause = c.age >= c.maxAge ? 'oldage' : c._drown ? 'drowned' : (inHazard ? 'toxin' : 'starvation');
         recordDeath(world, c); dropCarrion(world, c);
         continue;
       }
@@ -2882,7 +2929,18 @@
     return world.stats;
   }
 
+  // metres of water over the ground here (world units), 0 on land
+  function waterDepth(terrain, x, y) {
+    const d = (terrain.LV.water - terrain.height(x, y)) * (terrain.heightScale || 420);
+    return d > 0 ? d : 0;
+  }
+  // how high this body carries its head (world units); the game sets bodyScale
+  function headHeight(world, p) {
+    const bs = world.params.bodyScale || 0.55;
+    return ((p.standH || p.radius) + (p.neck || 0) * p.radius * 1.05 + Math.max(1.5, p.radius * 0.45)) * bs;
+  }
   function recordDeath(world, c) {
+    if (typeof world.onDeath === 'function') { try { world.onDeath(c); } catch (e) { /* visuals must never break the sim */ } }
     const cause = c.deathCause || 'starvation';
     world.deaths[cause] = (world.deaths[cause] || 0) + 1;
     pedDie(world, c);
@@ -3406,7 +3464,9 @@
     if (cand.length) {
       stand = cand.reduce((s, o) => s + (-o.footY), 0) / cand.length;
       cand = cand.filter(o => -o.footY >= stand * 0.72);
-      if (cand.length) stand = cand.reduce((s, o) => s + (-o.footY), 0) / cand.length;
+      // stand on the SHORTEST leg: every foot then reaches the ground (longer legs
+      // bend at the knee) instead of short legs dangling in the air
+      if (cand.length) stand = cand.reduce((m, o) => Math.min(m, -o.footY), Infinity) * 0.97;
       for (const o of cand) o.leg = true;
     } else {
       // no legs: the belly rests on the ground
@@ -4646,6 +4706,24 @@ struct VO { @builtin(position) pos: vec4<f32>, @location(0) nrm: vec3<f32>, @loc
   o.wpos = w; o.col = c * iTint; o.leaf = leaf;
   return o;
 }
+fn fhash(p: vec2<f32>) -> f32 { return fract(sin(dot(p, vec2<f32>(127.1, 311.7))) * 43758.5453); }
+fn fnoise(p: vec2<f32>) -> f32 {
+  let i = floor(p); let f = fract(p); let u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(fhash(i), fhash(i + vec2<f32>(1.0, 0.0)), u.x), mix(fhash(i + vec2<f32>(0.0, 1.0)), fhash(i + vec2<f32>(1.0, 1.0)), u.x), u.y);
+}
+// Bark: deep vertical furrows broken into plates, fine grain, a bumped normal
+// so the ridges catch the light, and moss/lichen on upward and shaded faces.
+// Coordinates run round the trunk (horizontal tangent) and up it, so the
+// pattern follows each trunk without needing UVs. Detail fades with distance
+// so it never shimmers.
+fn barkPattern(a: f32, y: f32) -> f32 {
+  let q = vec2<f32>(a * 0.30, y * 0.032);
+  let warp = fnoise(q * vec2<f32>(1.0, 2.5) + vec2<f32>(3.1, 7.7)) * 1.6;
+  let n = fnoise(q + vec2<f32>(warp, 0.0));
+  let plates = smoothstep(0.30, 0.62, n);
+  let grain = fnoise(vec2<f32>(a * 0.9, y * 0.11));
+  return plates * 0.85 + grain * 0.15;
+}
 @fragment fn fs(i: VO, @builtin(front_facing) ff: bool) -> @location(0) vec4<f32> {
   let d = distance(i.wpos, g.camPos.xyz);
   let hs = fract(sin(dot(i.pos.xy, vec2<f32>(12.9898, 78.233))) * 43758.5453);
@@ -4655,7 +4733,35 @@ struct VO { @builtin(position) pos: vec4<f32>, @location(0) nrm: vec3<f32>, @loc
   } else if (d < 4.0 && hs > (d - 1.5) / 2.5) { discard; }   // editor: plants right at the lens
   var N = normalize(i.nrm);
   if (!ff && i.leaf > 0.5) { N = -N; }
-  var lit = shade(i.col, N, i.wpos);
+  var col = i.col;
+  if (i.leaf < 0.5) {
+    let det = 1.0 - smoothstep(260.0, 900.0, d);
+    if (det > 0.001) {
+      let hz = vec2<f32>(N.x, N.z);
+      let hl = length(hz);
+      let T = select(vec3<f32>(1.0, 0.0, 0.0), normalize(vec3<f32>(-N.z, 0.0, N.x)), hl > 0.2);
+      let a = dot(i.wpos, T);
+      let b0 = barkPattern(a, i.wpos.y);
+      let b1 = barkPattern(a + 0.35, i.wpos.y);
+      let b2 = barkPattern(a, i.wpos.y + 2.5);
+      // furrows dark, plate faces light, with a touch of grey weathering on the ridges
+      let bark = col * (0.50 + 0.78 * b0) + vec3<f32>(0.05, 0.05, 0.045) * smoothstep(0.75, 0.95, b0);
+      // moss: patchy, heavier on faces that look up or away from the sun
+      let mp = fnoise(vec2<f32>(a * 0.08, i.wpos.y * 0.02) + i.wpos.xz * 0.004);
+      let shadeSide = clamp(0.5 - 0.5 * dot(N, normalize(g.lightDir.xyz)), 0.0, 1.0);
+      let moss = smoothstep(0.52, 0.80, mp) * (0.35 + 0.65 * max(shadeSide, clamp(N.y + 0.2, 0.0, 1.0))) * (1.0 - smoothstep(0.55, 0.9, b0));
+      let mossCol = mix(vec3<f32>(0.16, 0.26, 0.08), vec3<f32>(0.30, 0.38, 0.14), fnoise(i.wpos.xz * 0.3));
+      let lichen = smoothstep(0.86, 0.93, fnoise(vec2<f32>(a * 0.9, i.wpos.y * 0.12) + vec2<f32>(9.0, 2.0)));
+      var detailed = mix(bark, mossCol, moss * 0.85);
+      detailed = mix(detailed, vec3<f32>(0.55, 0.58, 0.46), lichen * 0.5 * (1.0 - moss));
+      col = mix(col, detailed, det);
+      // bump from the pattern's slope, round the trunk and up it
+      let gA = (b1 - b0) / 0.35;
+      let gY = (b2 - b0) / 2.5;
+      N = normalize(N - (T * gA * 0.55 + vec3<f32>(0.0, 1.0, 0.0) * gY * 0.9) * det);
+    }
+  }
+  var lit = shade(col, N, i.wpos);
   if (i.leaf > 0.5) {
     // light through the leaf from behind
     let L = normalize(g.lightDir.xyz);
@@ -4681,7 +4787,7 @@ struct VO { @builtin(position) pos: vec4<f32>, @location(0) nrm: vec3<f32>, @loc
 // =====================================================================
 const FOL_VF = 11;           // pos3 nrm3 col3 sway1 leaf1
 const FOL_IF = 8;            // pos3 yaw1 scale1 tint3
-const FOL_MAX_INST = 60000;
+const FOL_MAX_INST = 200000;   // buffer size; the live budget is GFX.folMax
 function folRng(seed) {
   let a = seed >>> 0;
   return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
@@ -4740,34 +4846,42 @@ function folLimb(m, a, b, r0, r1, bend, sides, col, H, swayK) {
   folTube(m, pts, rad, sides, col, H, swayK, null);
 }
 // Buttress roots: thin curved plates flaring from the trunk into the ground
+// Buttress roots: thick, sinuous flares that grow out of the trunk, taper and
+// curl as they run out along the ground, with a rounded crest (not a flat
+// blade) and soft normals so they read as wood, not sheet metal.
 function folButtress(m, trunkR, hTop, reach, nFins, thick, col, rnd, H) {
+  const S = 12;
   for (let f = 0; f < nFins; f++) {
-    const a = (f / nFins + rnd() * 0.12) * Math.PI * 2;
-    const dir = [Math.cos(a), 0, Math.sin(a)], perp = [-Math.sin(a), 0, Math.cos(a)];
+    const a0 = (f / nFins + rnd() * 0.12) * Math.PI * 2;
+    const curl = (rnd() - 0.5) * 0.9;                     // the root swings sideways as it runs out
     const R = reach * (0.7 + rnd() * 0.5), Ht = hTop * (0.75 + rnd() * 0.4);
-    const S = 6, sideV = [[], []];
+    const T0 = thick * (2.2 + rnd() * 0.8);
+    const rows = [];                                      // per step: [leftBottom, leftTop, crest, rightTop, rightBottom]
     for (let k = 0; k <= S; k++) {
       const u = k / S;
-      const out = trunkR * 0.8 + R * u;
-      const y = Ht * Math.pow(1 - u, 2.2);
-      const th = thick * (1 - u * 0.7);
-      for (let sd = 0; sd < 2; sd++) {
-        const sg = sd ? 1 : -1;
-        const top = fadd(fadd(fmul(dir, out), fmul(perp, th * sg)), [0, y, 0]);
-        const bot = fadd(fadd(fmul(dir, out * 0.97), fmul(perp, th * sg)), [0, -3, 0]);
-        const nrm = fnorm(fadd(fmul(perp, sg), [0, 0.15, 0]));
-        const ao = 0.55 + 0.45 * Math.min(1, y / 30);
-        sideV[sd].push([folV(m, top, nrm, fcol(col, ao), 0, 0), folV(m, bot, nrm, fcol(col, 0.5), 0, 0)]);
+      const a = a0 + curl * u * u;
+      const dir = [Math.cos(a), 0, Math.sin(a)], perp = [-Math.sin(a), 0, Math.cos(a)];
+      const out = trunkR * 0.55 + R * u;
+      const y = Ht * Math.pow(1 - u, 1.9) + 1.2 * (1 - u);
+      const th = T0 * (1 - u * 0.75) * (0.85 + 0.3 * Math.sin(u * 7 + a0));
+      const base = fmul(dir, out);
+      const ao = 0.55 + 0.45 * Math.min(1, y / 30);
+      const pt = (side, h, nr, sh) => folV(m, fadd(fadd(base, fmul(perp, side)), [0, h, 0]), fnorm(nr), fcol(col, sh), 0, 0);
+      const up = [0, 1, 0];
+      rows.push([
+        pt(-th * 1.25, -3, fadd(fmul(perp, -1), [0, -0.2, 0]), 0.5),
+        pt(-th, y * 0.92, fadd(fmul(perp, -1), fmul(up, 0.45)), ao),
+        pt(0, y + th * 0.55, fadd(up, fmul(dir, 0.25)), ao * 1.05),
+        pt(th, y * 0.92, fadd(perp, fmul(up, 0.45)), ao),
+        pt(th * 1.25, -3, fadd(perp, [0, -0.2, 0]), 0.5),
+      ]);
+    }
+    for (let k = 0; k < S; k++) {
+      const A = rows[k], B = rows[k + 1];
+      for (let c = 0; c < 4; c++) {
+        const a0v = A[c], a1v = A[c + 1], b0v = B[c], b1v = B[c + 1];
+        m.i.push(a0v, b0v, a1v, a1v, b0v, b1v);
       }
-      // ridge along the top edge
-    }
-    for (let sd = 0; sd < 2; sd++) for (let k = 0; k < S; k++) {
-      const [t0, b0] = sideV[sd][k], [t1, b1] = sideV[sd][k + 1];
-      if (sd) m.i.push(t0, b0, t1, t1, b0, b1); else m.i.push(t0, t1, b0, t1, b1, b0);
-    }
-    for (let k = 0; k < S; k++) {   // top edge strip joining the two faces
-      const a0 = sideV[0][k][0], a1 = sideV[0][k + 1][0], c0 = sideV[1][k][0], c1 = sideV[1][k + 1][0];
-      m.i.push(a0, c0, a1, a1, c0, c1);
     }
   }
 }
@@ -4874,7 +4988,7 @@ function buildTreeMesh(kind, variant, lod) {
   const leafCol = LEAF_GREEN[(kind + variant) % LEAF_GREEN.length];
   const nLeaf = (n) => Math.max(4, Math.round(n * [1, 0.4, 0][lod]));
   const leafL = (l) => l * [1, 1.9, 1][lod];
-  const sides = [8, 5, 3][lod];
+  const sides = [12, 6, 3][lod];
   // far LOD: every crown is merged into one lumpy blob drawn at the end
   const farCrowns = [];
   const crown = (c, R, flat, count, col, H, sw, L) => {
@@ -4889,7 +5003,7 @@ function buildTreeMesh(kind, variant, lod) {
     for (let k = 0; k <= N; k++) {
       const u = k / N;
       pts.push([Math.cos(la) * lean * H * u * u + Math.sin(u * 5 + la) * bendAmp, H * u - 2, Math.sin(la) * lean * H * u * u + Math.cos(u * 4 + la) * bendAmp]);
-      rad.push(r0 + (r1 - r0) * Math.pow(u, 0.7));
+      rad.push((r0 + (r1 - r0) * Math.pow(u, 0.7)) * (1 + 0.45 * Math.exp(-u * 14)));
     }
     folTube(m, pts, rad, sides, col, H, 0.02 * H, 0.45);
     return pts;
@@ -5123,8 +5237,8 @@ const COVER_BY_BIOME = {
   forest: [[2, 0.55], [5, 0.3], [0, 0.35], [4, 0.2]], plains: [[0, 0.8], [4, 0.08]], savanna: [[1, 0.8], [4, 0.05]],
   marsh: [[3, 0.8], [0, 0.3]], taiga: [[2, 0.3], [4, 0.2], [0, 0.2]], beach: [[1, 0.12]], tundra: [[0, 0.1]], shallow: [[3, 0.4]],
 };
-const COVER_R = 720, COVER_CELL = 15;
-const TREE_LOD0 = 750, TREE_LOD1 = 2400;
+let COVER_R = 720; const COVER_CELL = 15;
+let TREE_LOD0 = 750, TREE_LOD1 = 2400;
 // Rebuild the instance lists when the camera has moved or turned enough.
 function folUpdate(camX, camY, camZ, yaw) {
   if (!FOL.ready || !world || !world.forest) return;
@@ -5176,8 +5290,10 @@ function folUpdate(camX, camY, camZ, yaw) {
   let off = 0;
   FOL.batches.length = 0;
   for (const [mesh, arr] of buckets) {
-    const n = arr.length / FOL_IF;
-    if (off + n > FOL_MAX_INST) break;
+    let n = arr.length / FOL_IF;
+    const room = Math.min(FOL_MAX_INST, GFX.folMax) - off;
+    if (room <= 0) break;
+    if (n > room) { n = room; arr.length = n * FOL_IF; }
     FOL.inst.set(arr, off * FOL_IF);
     FOL.batches.push({ mesh, first: off, count: n });
     off += n;
@@ -5717,7 +5833,7 @@ function drawCreature(c, t, camDist) {
   const belly = [Math.min(1, base[0] * 0.55 + 0.30), Math.min(1, base[1] * 0.55 + 0.30), Math.min(1, base[2] * 0.55 + 0.28)];
   const limbCol = [base[0] * 0.82, base[1] * 0.80, base[2] * 0.78];
   const n = tallyParts(p);
-  const far = camDist > 900;
+  const far = camDist > 900 * GFX.crit;
   if (c.genome && c.genome.design) {
     drawDesignedCreature(c, t, camDist, {
       R, wx, wz, dirW, bodyY, yaw, far, phase0, gaitAmt, armSwing, tailSwing, flinch,
@@ -6085,7 +6201,7 @@ function drawThreatRing(t) {
       const a = bear + (q / 2) * wedge;
       const rx = c.x + Math.cos(a) * band, rz = c.y + Math.sin(a) * band;
       const sz = (1.6 + 2.6 * near) * (q === 0 ? 1.5 : 1) * pulse;
-      pushS(rx, groundAt(rx, rz) + 1.6, rz, 0, 1, 0, sz, 0.6, sz, col);
+      void sz; void col; void rx; void rz;
     }
   }
   if (count) {
@@ -6094,8 +6210,7 @@ function drawThreatRing(t) {
     for (let i = 0; i < N; i++) {
       const a = (i / N) * Math.PI * 2;
       const rx = c.x + Math.cos(a) * band, rz = c.y + Math.sin(a) * band;
-      pushS(rx, groundAt(rx, rz) + 1.0, rz, 0, 1, 0, 0.9, 0.28, 0.9,
-            [0.42 + dim, 0.22, 0.20]);
+      void rx; void rz; void dim;
     }
   }
   player.threatLevel = worst;
@@ -6119,9 +6234,10 @@ function buildCreatureInstances(camX, camZ, t) {
   drawThreatRing(t);
   drawBirths(t);
   drawFight(t);
+  drawRemains(t);
   for (const c of world.creatures) {
     if (!c.alive || !c.ph) continue;
-    if (c === player.c && isFirstPerson()) continue;
+    if (c === player.c && isFirstPerson() && !(c.genome && c.genome.design)) continue;   // designed bodies are visible in first person
     const dx = c.x - camX, dz = c.y - camZ;
     const d2 = dx * dx + dz * dz;
     if (d2 > FAR * FAR) continue;
@@ -6189,7 +6305,7 @@ const BARK = [0.42, 0.31, 0.22], BARK_PALE = [0.58, 0.48, 0.34];
 function buildPlantInstances(camX, camZ, t) {
   plantCount = 0;
   const T = terrain;
-  const NEARR = TREE_LOD * TREE_LOD, FARR = 3600 * 3600;
+  const NEARR = TREE_LOD * TREE_LOD, FARR = GFX.plant * GFX.plant;
   for (const pl of world.plants) {
     if (plantCount + 40 >= MAX_PLANT_INST) break;
     const dx = pl.x - camX, dz = pl.y - camZ;
@@ -6884,29 +7000,46 @@ const VIS = {
 // see FLESH eyes), a domed iris, a round or slit pupil and a wet highlight.
 // Only a sliver of pale sclera shows, which keeps faces from looking human.
 function drawEye(g, c, e, k, style) {
+  // gaze axis: out of the skin, tipped forward; 'up' is the brow direction
   const f = v3.norm(v3.add([0, 1, 0], v3.mul(g.fw, 0.8)));
   const up0 = v3.sub(g.up, v3.mul(f, v3.dot(g.up, f)));
   const up = v3.len(up0) > 1e-3 ? v3.norm(up0) : [1, 0, 0];
-  const R = 0.9 * k, cy = 0.05 * k;
+  const R = 0.9 * k, cy = 0.22 * k;              // raised: the eye bulges from its socket
   const C0 = [0, cy, 0];
-  g.sp(0, cy, 0, 0, 1, 0, R, R, R, [0.80, 0.74, 0.62]);
-  // iris dome hugging the ball
-  const irisR = style === 'goggle' ? 0.84 : 0.78;
-  const iP = v3.add(C0, v3.mul(f, R * 0.6));
-  g.sp(iP[0], iP[1], iP[2], f[0], f[1], f[2], irisR * R, 0.44 * R, irisR * R, colMul(c, 0.55), up[0], up[1], up[2]);
-  const iP2 = v3.add(C0, v3.mul(f, R * 0.66));
-  g.sp(iP2[0], iP2[1], iP2[2], f[0], f[1], f[2], irisR * R * 0.86, 0.4 * R, irisR * R * 0.86, c, up[0], up[1], up[2]);
-  // pupil
-  const pP = v3.add(C0, v3.mul(f, R * 0.8));
-  if (style === 'slit') g.sp(pP[0], pP[1], pP[2], f[0], f[1], f[2], 0.1 * R, 0.24 * R, 0.5 * R, BLACKP, up[0], up[1], up[2]);
-  else g.sp(pP[0], pP[1], pP[2], f[0], f[1], f[2], 0.36 * R, 0.24 * R, 0.36 * R, BLACKP, up[0], up[1], up[2]);
-  // wet highlight
+  const at = (d, u) => v3.add(v3.add(C0, v3.mul(f, d * R)), v3.mul(up, (u || 0) * R));
+  // eyeball: warm, slightly yellowed sclera (only a sliver shows between the lids)
+  g.sp(0, cy, 0, 0, 1, 0, R, R, R, [0.78, 0.70, 0.52]);
+  // iris in layers, each a little further out so none of them z-fight:
+  // dark limbal ring, the coloured iris, a lighter inner flare round the pupil
+  const irisR = style === 'goggle' ? 0.86 : 0.76;
+  let q = at(0.50); g.sp(q[0], q[1], q[2], f[0], f[1], f[2], irisR * R, 0.53 * R, irisR * R, colMul(c, 0.32), up[0], up[1], up[2]);
+  q = at(0.58); g.sp(q[0], q[1], q[2], f[0], f[1], f[2], irisR * R * 0.9, 0.48 * R, irisR * R * 0.9, colMul(c, 0.85), up[0], up[1], up[2]);
+  q = at(0.66); g.sp(q[0], q[1], q[2], f[0], f[1], f[2], irisR * R * 0.58, 0.41 * R, irisR * R * 0.58, colHi(c), up[0], up[1], up[2]);
+  // pupil: round, or a vertical slit for ambush hunters
+  q = at(0.76);
+  if (style === 'slit') g.sp(q[0], q[1], q[2], f[0], f[1], f[2], 0.09 * R, 0.335 * R, 0.52 * R, BLACKP, up[0], up[1], up[2]);
+  else g.sp(q[0], q[1], q[2], f[0], f[1], f[2], 0.33 * R, 0.335 * R, 0.33 * R, BLACKP, up[0], up[1], up[2]);
+  // wet cornea: a clear-ish dome and a sharp catch-light
   if (!e.lod) {
-    const hl = v3.add(v3.add(C0, v3.mul(f, R * 1.0)), v3.add(v3.mul(up, 0.3 * R), v3.mul(v3.cross(f, up), 0.18 * R)));
-    g.ball(hl[0], hl[1], hl[2], 0.09 * R, WHITE);
+    const side = v3.cross(f, up);
+    const hl = v3.add(at(1.04, 0.32), v3.mul(side, 0.2 * R));
+    g.ball(hl[0], hl[1], hl[2], 0.1 * R, WHITE);
+    const hl2 = v3.add(at(1.02, -0.22), v3.mul(side, -0.16 * R));
+    g.ball(hl2[0], hl2[1], hl2[2], 0.045 * R, [0.8, 0.82, 0.84]);
   }
-  // blink: a skin lid closes over the eye
-  if (e.blink > 0) g.sp(0, cy, 0, f[0], f[1], f[2], R * 1.06, R * 1.06, R * 1.06, e.base, up[0], up[1], up[2]);
+  // lids in the skin colour: a heavy upper lid and a lower lid leave an almond
+  // opening; a blink drops the upper lid and lifts the lower one to meet it
+  const lid = e.base || colMul(c, 0.6);
+  const shut = e.blink > 0 ? 1 : 0;
+  if ((e.lod || 0) < 2) {
+    q = at(0.08, 0.98 - 0.72 * shut);
+    g.sp(q[0], q[1], q[2], up[0], up[1], up[2], R * 1.12, R * 0.56, R * 1.12, lid, f[0], f[1], f[2]);
+    q = at(0.02, -1.08 + 0.32 * shut);
+    g.sp(q[0], q[1], q[2], up[0], up[1], up[2], R * 1.08, R * 0.5, R * 1.08, colMul(lid, 0.92), f[0], f[1], f[2]);
+    // a darker lash line along the upper lid's edge
+    q = at(0.62, 0.44 - 0.72 * shut);
+    g.sp(q[0], q[1], q[2], up[0], up[1], up[2], R * 0.78, R * 0.07, R * 0.5, colMul(lid, 0.45), f[0], f[1], f[2]);
+  } else if (shut) g.sp(0, cy, 0, f[0], f[1], f[2], R * 1.06, R * 1.06, R * 1.06, lid, up[0], up[1], up[2]);
 }
 const VIS_CATS = [
   { id: 'body', label: 'body' }, { id: 'mouth', label: 'mouths' }, { id: 'eyes', label: 'eyes' },
@@ -7085,7 +7218,7 @@ function drawDesignOld(des, X) {
     if (X.hl && (X.hl.part === pt || (X.hl.mirror && X.hl.part && pt.m && X.hl.part.m === pt.m))) cc = colHi(cc);
     env.seed = seed + pi * 1.7;
     env.blink = X.blink ? X.blink(pi) : 0;
-    const flapSide = X.flap || 0;
+    const flapSide = (X.flap || 0) * (lp[2] < 0 ? -1 : 1);   // both wings beat together
     env.flap = flapSide;
     vis.draw(g, cc, env);
   }
@@ -7568,8 +7701,9 @@ const socket = (F, k, e) => {
   let u0 = v3.sub(up, v3.mul(f, v3.dot(up, f)));
   u0 = v3.len(u0) > 1e-3 ? v3.norm(u0) : [1, 0, 0];
   const s0 = v3.cross(f, u0);
-  const R = 0.9 * k, C0 = [0, 0.05 * k, 0];
-  F.e(0, -0.08 * k, 0, 0, 1, 0, 1, 0, 0, 1.05 * k, 0.5 * k, 1.05 * k, 0.4 * k);
+  const R = 0.9 * k, C0 = [0, 0.22 * k, 0];
+  // a raised orbital mound, so the eye sits proud of the face
+  F.e(0, 0.0, 0, 0, 1, 0, 1, 0, 0, 1.18 * k, 0.66 * k, 1.18 * k, 0.45 * k);
   for (let i = 0; i < 10; i++) {
     const a = i / 10 * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
     const top = 0.5 + 0.5 * ca;                        // 1 at the brow, 0 at the lower lid
@@ -7590,10 +7724,19 @@ FLESH.e_stalk = (F, c, e) => {
   F.e(0.25, 2.1, 0.1, 0, 1, 0, 1, 0, 0, 1.05, 0.62, 1.05, 0.2);
 };
 HARD.e_stalk = (g, c, e) => { drawEye(g.at(0.25, 2.1, 0.1), c, e, 0.95, 'round'); };
-FLESH.e_cluster = (F) => { F.e(0, 0.1, 0, 0, 1, 0, 1, 0, 0, 1.05, 0.38, 0.95, 0.3); };
-HARD.e_cluster = (g, c) => {
-  const pts = [[0.45, 0.32, 0.3], [0.45, 0.32, -0.3], [-0.1, 0.36, 0.55], [-0.1, 0.36, -0.55], [-0.2, 0.44, 0]];
-  for (const p of pts) { g.ball(p[0], p[1], p[2], 0.32, colMul(c, 0.55)); g.ball(p[0] + 0.1, p[1] + 0.2, p[2] + 0.06, 0.08, WHITE); }
+FLESH.e_cluster = (F) => { F.e(0, 0.05, 0, 0, 1, 0, 1, 0, 0, 1.0, 0.3, 0.92, 0.3); };
+// spider-style: two big glossy front eyes and smaller ones behind, each a
+// wet black dome standing clear of the skin with a tinted rim and catch-light
+HARD.e_cluster = (g, c, e) => {
+  const pts = [[0.42, 0.44, 0.24, 0.30], [0.42, 0.44, -0.24, 0.30], [0.02, 0.44, 0.52, 0.19], [0.02, 0.44, -0.52, 0.19],
+               [-0.28, 0.40, 0.32, 0.15], [-0.28, 0.40, -0.32, 0.15]];
+  const rim = colMul(c, 0.35), ball = colMix(BLACKP, c, 0.12);
+  for (const p of pts) {
+    const r = p[3];
+    g.sp(p[0], p[1] - r * 0.55, p[2], 0, 1, 0, r * 1.18, r * 0.45, r * 1.18, rim);
+    g.ball(p[0], p[1], p[2], r, ball);
+    if (!e || !e.lod) g.ball(p[0] + r * 0.35, p[1] + r * 0.62, p[2] + r * 0.2, r * 0.22, WHITE);
+  }
 };
 FLESH.e_bug = (F) => { F.e(0, 0.1, 0, 0, 1, 0, 1, 0, 0, 1.12, 0.4, 1.12, 0.3); };
 HARD.e_bug = VIS.e_bug.draw;
@@ -8262,6 +8405,8 @@ function drawDesign(des, X) {
     env.seed = seed + pi * 1.7;
     env.blink = X.blink ? X.blink(pi) : 0;
     env.jaw = pt === mouth ? jawAng : 0;
+    // mirrored wings get the mirrored angle, so both beat down together
+    env.flap = (X.flap || 0) * (r0.p[2] < 0 ? -1 : 1);
     draw(g, cc, env);
   }
   // ---- hard pieces of feet and hands --------------------------------------------------
@@ -8317,6 +8462,24 @@ function solveKnee(rootW, footW, L1, L2, poleW) {
   if (v3.len(pole) < 1e-6) pole = [0, 1, 0];
   pole = v3.norm(pole);
   return { knee: v3.add(v3.add(rootW, v3.mul(dir, a)), v3.mul(pole, h)), foot: footW };
+}
+// ---- first-person body ----------------------------------------------------------
+// Where the eye sits, stored relative to the body (forward / up from the ground
+// under it), so the camera follows this frame's position without a frame of lag.
+function fpRecordEye(c, G, toW, Rw, yaw) {
+  const sk = G.sk, hb = sk.balls[sk.headIdx];
+  if (!hb) { c._fpOff = null; return; }
+  const w = toW([hb.x + hb.r * 1.0, hb.y + hb.r * 0.3, 0]);
+  const dx = w[0] - c.x, dz = w[2] - c.y;
+  const fwd = dx * Math.cos(yaw) + dz * Math.sin(yaw);
+  // clear of the skin by more than the near plane, whatever the body size
+  c._fpOff = { f: fwd + Math.max(NEAR * 2.5, hb.r * Rw * 0.12), y: w[1] - groundAt(c.x, c.y) - (player.jumpY || 0) - (player.fly || 0) };
+}
+function fpHide(c, dead) {
+  if (c !== player.c || !isFirstPerson()) return dead;
+  const s = new Set(dead || []);
+  s.add('EYE'); s.add('MOUTH');   // both sit right at the lens
+  return s;
 }
 function deadTypes(c) {
   const cs = c.cellState, cn = c.cellNodes;
@@ -8412,6 +8575,7 @@ function drawDesignedCreature(c, t, camDist, A) {
   const tilt = (v) => { const x1 = v[0] * cP - v[1] * sP, y1 = v[0] * sP + v[1] * cP; return [x1, y1 * cQ + v[2] * sQ, -y1 * sQ + v[2] * cQ]; };
   const untilt = (v) => { const y1 = v[1] * cQ - v[2] * sQ, z = v[1] * sQ + v[2] * cQ; return [v[0] * cP + y1 * sP, -v[0] * sP + y1 * cP, z]; };
   const toW = (l0) => { const l = tilt(l0); return [A.wx(l[0] * Rw, l[2] * Rw), A.bodyY + l[1] * Rw, A.wz(l[0] * Rw, l[2] * Rw)]; };
+  if (c === player.c) fpRecordEye(c, G, toW, Rw, A.yaw);
   const dW = (v0) => { const v = tilt(v0); return A.dirW(v[0], v[1], v[2]); };
   // world -> body space (inverse of toW; used to bring IK results back for skinning)
   const o0 = toW([0, 0, 0]);
@@ -8429,8 +8593,8 @@ function drawDesignedCreature(c, t, camDist, A) {
   const X = {
     head, tilt: tiltAff,
     R: Rw, t, seed: c.id * 0.37, toW, toL, yaw: A.yaw, dirW: dW,
-    quality: isPlayer ? 2 : camDist < 420 ? 1 : 0, sync: false, meshFar: true, far: A.far, lod: camDist > 650 ? 2 : camDist > 420 ? 1 : 0,
-    hide: deadTypes(c), gaitPhase: A.phase0, tailSwing: A.tailSwing * rig.tailMul,
+    quality: isPlayer ? 2 : camDist < 420 * GFX.crit ? 1 : 0, sync: false, meshFar: true, far: A.far, lod: camDist > 650 * GFX.crit ? 2 : camDist > 420 * GFX.crit ? 1 : 0,
+    hide: fpHide(c, deadTypes(c)), gaitPhase: A.phase0, tailSwing: A.tailSwing * rig.tailMul,
     tailAmp: 0.35 + 0.65 * A.gaitAmt, flexAmp: 0.10 + 0.22 * A.gaitAmt,
     flap: Math.sin(t * (airborne ? 6.5 : 3.4) + c.id) * (airborne ? 0.62 : (p.canFly ? 0.18 : 0.08)),
     chomp: rig.chomp != null ? rig.chomp : A.bite > 0 ? A.bite : 0.12 + 0.12 * Math.sin(t * 1.7 + c.id),
@@ -8592,19 +8756,7 @@ function sndToggle() {
   else if (SND.on) sndInit();
   toast('sound ' + (SND.on ? 'on' : 'off') + '  (N)', 1400);
 }
-function sndPan(dx, dz) {
-  // pan by where the source is relative to the way you are looking
-  const yaw = player.yaw || 0;
-  const side = -Math.sin(yaw) * dx + Math.cos(yaw) * dz;
-  const d = Math.hypot(dx, dz) || 1;
-  return clamp(side / d, -1, 1);
-}
-function sndVoice(build, pan, when) {
-  const ctx = SND.ctx; if (!ctx) return;
-  const p = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
-  if (p) { p.pan.value = pan || 0; p.connect(SND.master); }
-  build(ctx, p || SND.master, when || ctx.currentTime);
-}
+// sndPan / sndVoice live in spatial.js (HRTF 3D placement)
 function sndNoiseBurst(freq, q, dur, vol, pan, rate) {
   sndVoice((ctx, out, t) => {
     const s = ctx.createBufferSource(); s.buffer = SND.noiseBuf; s.playbackRate.value = rate || 1;
@@ -8654,14 +8806,14 @@ function sndTick(dt) {
   SND.insect.gain.setTargetAtTime(night ? 0 : (0.004 + 0.014 * canopy) * (0.4 + 0.6 * pulse) * light, t, 0.15);
   if (night && t > SND.nextChirp) {
     SND.nextChirp = t + 0.35 + Math.random() * 0.9;
-    const pan = Math.random() * 2 - 1;
+    const pan = sndRandDir(60 + Math.random() * 220);
     for (let k = 0; k < 3; k++) sndVoice((cx2, out, tt) => {
       const o = cx2.createOscillator(); o.frequency.value = 4300 + Math.random() * 300;
       const g = cx2.createGain(); g.gain.setValueAtTime(0, tt); g.gain.linearRampToValueAtTime(0.008, tt + 0.008); g.gain.linearRampToValueAtTime(0, tt + 0.035);
       o.connect(g).connect(out); o.start(tt); o.stop(tt + 0.05);
     }, pan, t + k * 0.06);
   }
-  if (t > SND.nextCall) { SND.nextCall = t + (night ? 25 : 45) + Math.random() * (night ? 30 : 45); sndCall(Math.random() * 1.6 - 0.8, night); }
+  if (t > SND.nextCall) { SND.nextCall = t + (night ? 25 : 45) + Math.random() * (night ? 30 : 45); sndCall(sndRandDir(900 + Math.random() * 1600), night); }
   voxTick(dt);
   // unseen movement nearby, and anything hungry closing in
   let threat = 0;
@@ -8792,11 +8944,9 @@ function voxOut(ctx, dist, pan, when, loud) {
   g.gain.value = loud * near;
   const lp = ctx.createBiquadFilter(); lp.type = 'lowpass';
   lp.frequency.value = clamp(9000 / (1 + dist / 350), 500, 9000);
-  const pn = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
-  if (pn) pn.pan.value = pan * clamp(0.3 + dist / 400, 0.3, 1);
   g.connect(lp);
   const dry = ctx.createGain(); dry.gain.value = clamp(1 - dist / 2400, 0.25, 1);
-  if (pn) { lp.connect(pn); pn.connect(dry); } else lp.connect(dry);
+  lp.connect(sndPlacer(ctx, pan, dry));        // HRTF: placed where the animal is, all around you
   dry.connect(SND.master);
   const wet = ctx.createGain(); wet.gain.value = clamp(0.15 + dist / 2000, 0.15, 0.6);
   lp.connect(wet); wet.connect(VOX.verb);
@@ -9047,7 +9197,7 @@ function voxCall(c, why, fromX, fromZ) {
   const lx = fromX != null ? fromX : (player.c ? player.c.x : player.camX), lz = fromZ != null ? fromZ : (player.c ? player.c.y : player.camZ);
   const dx = c.x - lx, dz = c.y - lz, dist = c === player.c ? 30 : Math.hypot(dx, dz);
   if (dist > 3200) return;
-  const pan = c === player.c ? 0 : sndPan(dx, dz);
+  const pan = c === player.c ? 0 : sndAtC(c);
   const k = why === 'pain' ? 1 : why === 'win' ? 1 : why === 'attack' ? 0.8 : 0.6;
   const loud = (why === 'pain' ? 0.9 : 1.1) * (0.6 + 0.6 * v.size);
   const out = voxOut(ctx, dist, pan, ctx.currentTime, loud);
@@ -9083,13 +9233,12 @@ function voxDistant(kindHint) {
   const t = ctx.currentTime + 0.05;
   const r = Math.random();
   const kind = kindHint || (r < 0.45 ? 'roar' : r < 0.65 ? 'scream' : r < 0.85 ? 'bellow' : r < 0.93 ? 'screech' : 'crash');
-  const pan = Math.random() * 1.8 - 0.9;
+  const pan = sndRandDir(2600);
   const out = ctx.createGain(); out.gain.value = 1;
   const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1500 + Math.random() * 1400;
-  const pn = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
   out.connect(lp);
   const dry = ctx.createGain(); dry.gain.value = 0.35;
-  if (pn) { pn.pan.value = pan; lp.connect(pn); pn.connect(dry); } else lp.connect(dry);
+  lp.connect(sndPlacer(ctx, pan, dry));
   dry.connect(SND.master);
   const wet = ctx.createGain(); wet.gain.value = 0.6; lp.connect(wet); wet.connect(VOX.bigVerb);
   const ec = ctx.createGain(); ec.gain.value = 0.4; lp.connect(ec); ec.connect(VOX.echo);
@@ -9396,6 +9545,7 @@ function takeNewbornBody(src) {
 // a sibling, so the body you inhabit drifts as the lineage actually evolves.
 function respawn() {
   const dead = player.c;
+  if (dead && dead !== player._shownDeath) { player._shownDeath = dead; showDeath(dead); }
   let best = null, bestD = Infinity;
   if (dead) {
     // geneticDistance() compares SIGNATURES, not genomes. Creatures cache one
@@ -9735,7 +9885,8 @@ function tryEat() {
     const gain = bestC.e * (p.carrionDigest || 0.9);
     bestC.dead = true;
     c.energy = Math.min(p.storage, c.energy + gain);
-    toast('Ate carrion. +' + gain.toFixed(0) + ' energy.', 1800); objOnEat();
+    toast('Ate carrion. +' + gain.toFixed(0) + ' health.', 1800); objOnEat();
+    feedGrowth(c, Math.max(0.3, (bestC.e - 20) / 14) * 0.6, 'Ate carrion');
     return;
   }
   if (bestP) {
@@ -9745,7 +9896,7 @@ function tryEat() {
     if (i >= 0) world.plants.splice(i, 1);
     if (bestP.deep) world.deepPlants = Math.max(0, world.deepPlants - 1);
     c.energy = Math.min(p.storage, c.energy + gain);
-    toast('Ate. +' + gain.toFixed(0) + ' energy.', 1400); objOnEat();
+    toast('Ate. +' + gain.toFixed(0) + ' health.', 1400); objOnEat();
     return;
   }
   toast('Nothing to eat in reach.', 1100);
@@ -10065,11 +10216,11 @@ function fightSpray(c, dmg, fromX, fromZ) {
       r: 0.5 + Math.random() * (0.8 + frac * 3), life: 1.6,
     });
   }
-  fightSplat(c.x, c.y, (1.5 + frac * 10) * (0.7 + Math.random() * 0.6));
+  fightSplat(c.x, c.y, (1.0 + frac * 5) * (0.7 + Math.random() * 0.6));
 }
 function fightSplat(x, z, r) {
   const i = FIGHT.splatN % SPLAT_MAX;
-  FIGHT.splats[i] = { x, z, y: groundAt(x, z) + 0.35, r: Math.min(r, 14), t0: simT, rot: Math.random() * 6.283 };
+  FIGHT.splats[i] = { x, z, y: groundAt(x, z) + 0.3, r: Math.min(r, 5), t0: simT, rot: Math.random() * 6.283 };
   FIGHT.splatN++;
 }
 function fightUpdateBlood(dt) {
@@ -10102,7 +10253,7 @@ function fightHitFilter(victim, att, dmg) {
   FIGHT.pending.push({ att, dmg, t: windup, dur: windup });
   // the strike animation peaks (strikeCurve k ~ 0.5) exactly at impact
   startAnim(att, bestMove(att.ph, tallyParts(att.ph)), windup / 0.5);
-  if (SND.ctx && SND.on) sndNoiseBurst(260 + 200 / Math.sqrt(Math.max(0.3, att.ph.mass)), 2.5, windup, 0.10, sndPan(att.x - c.x, att.y - c.y), 0.6);
+  if (SND.ctx && SND.on) sndNoiseBurst(260 + 200 / Math.sqrt(Math.max(0.3, att.ph.mass)), 2.5, windup, 0.10, sndAtC(att), 0.6);
   return null;
 }
 function fightResolveStrike(s) {
@@ -10219,6 +10370,7 @@ function fightResolveSwing(sw) {
   else if (behind) { dmg *= 1.35; tag = ' from behind'; }
   if (sw.weak) dmg *= 0.5;
   startAnim(best, 'flinch', 0.35);
+  best._hitByPlayerT = simT;
   sndHit();
   best.energy -= dmg;
   C.onHit(best, c, dmg);
@@ -10239,23 +10391,28 @@ function fightResolveSwing(sw) {
           Math.max(0, best.energy).toFixed(0) + ' left (~' + hits + ' more)' + (best.bleedT > 0 ? ', bleeding.' : '.'), 1200);
     return;
   }
-  best.alive = false; best.deathCause = 'predation';
+  best.alive = false; best.deathCause = 'predation'; best._creditedKill = true;
   if (FIGHT.lock === best) FIGHT.lock = null;
   FIGHT.pending = FIGHT.pending.filter(q => q.att !== best);
   const gain = (best.ph.mass * 8 + best.ph.mass * 2) * 0.6;
   if (c.hurtT > 0) toast('Killed it, but you are still under attack and cannot feed on it.', 2400);
-  else c.energy = Math.min(p.storage, c.energy + Math.max(6, gain));
+  else { c.energy = Math.min(p.storage, c.energy + Math.max(6, gain)); feedGrowth(c, best.ph.mass, 'Ate your kill'); }
   if (world.flags.toxins && best.ph.toxin > 0) {
     c.energy -= best.ph.toxin * 22;
     if (c.energy < 0) c.energy = 0;
   }
-  fightSplat(best.x, best.y, 6 + (best.ph.radius || 4) * 0.8);
+  // a spattered pool, not one disc
+  for (let q = 0; q < 7; q++) { const a = Math.random() * 6.283, d = Math.random() * (best.ph.radius || 4) * 0.5; fightSplat(best.x + Math.cos(a) * d, best.y + Math.sin(a) * d, 1.5 + Math.random() * 3); }
+  remainsAdd(best);
   edOnKill(best);
 }
 
 // ---------------------------------------------------------------- per-frame
 function fightTick(dt) {
   world.hitFilter = fightHitFilter;
+  world.params.bodyScale = BODY_SCALE;
+  drownFx(dt);
+  world.onDeath = onWorldDeath;
   const c = player.c;
   FIGHT.hurtFx = Math.max(0, FIGHT.hurtFx - dt * 1.4);
   fightUpdateBlood(dt);
@@ -10330,50 +10487,17 @@ function fightTick(dt) {
 }
 
 // ---------------------------------------------------------------- drawing
-// Your attack reach as a ground arc: the bright front arc is where a swing can
-// land (the same cone the hit test uses), sized to the selected move's reach,
-// and it drains and refills with your attack cooldown.
+// Only a marker over whatever you are about to act on: red to fight, cyan when
+// it could be a mate. (The ground rings were removed: they read as floating
+// grey discs around every animal. Proximity is now a screen-edge warning.)
 function drawReachRing(t) {
   const c = player.c;
   if (!c || !c.alive || player.spectator) return;
-  const p = c.ph;
-  const mv = playerMove(p), MD = MOVE_DEF[mv];
-  const rad = interactRange(p) * MD.reach;
   const tgt = player.target;
-  const mate = tgt && canMate(c, tgt);
-  const hot = tgt ? (mate ? [0.20, 0.88, 0.82] : [0.95, 0.26, 0.18]) : [0.78, 0.84, 0.80];
-  const cool = [0.30, 0.34, 0.34];
-  const half = Math.acos(0.25);                                   // the hit cone
-  const ready = 1 - clamp((player.atkCD || 0) / Math.max(0.05, MD.dur + 0.1), 0, 1);
-  const N = 34;
-  for (let i = 0; i <= N; i++) {
-    const u = i / N;
-    const a = player.yaw - half + u * 2 * half;
-    const x = c.x + Math.cos(a) * rad, z = c.y + Math.sin(a) * rad;
-    const on = Math.abs(u - 0.5) * 2 <= ready;                     // fills from the centre out
-    const s2 = (i === 0 || i === N) ? 2.4 : 1.35 + (tgt && on ? 0.5 * (0.5 + 0.5 * Math.sin(t * 5 + i)) : 0);
-    pushS(x, groundAt(x, z) + 1.8, z, 0, 1, 0, s2, 0.5, s2, on ? hot : cool);
-  }
-  // the cone's edges, drawn in toward you
-  for (const side of [-1, 1]) {
-    const a = player.yaw + side * half;
-    for (let j = 1; j < 5; j++) {
-      const r = rad * (0.35 + j * 0.13);
-      const x = c.x + Math.cos(a) * r, z = c.y + Math.sin(a) * r;
-      pushS(x, groundAt(x, z) + 1.0, z, 0, 1, 0, 0.8, 0.3, 0.8, cool);
-    }
-  }
-  // behind you: a faint, sparse ring so the full reach is still readable
-  const M = 18;
-  for (let i = 0; i < M; i++) {
-    const a = player.yaw + half + (i + 0.5) / M * (2 * Math.PI - 2 * half);
-    const x = c.x + Math.cos(a) * rad, z = c.y + Math.sin(a) * rad;
-    pushS(x, groundAt(x, z) + 0.9, z, 0, 1, 0, 0.7, 0.25, 0.7, cool);
-  }
-  if (tgt && tgt !== FIGHT.lock) {
-    const ty = fightTopY(tgt) + Math.sin(t * 3) * 1.5;
-    pushC(tgt.x, ty, tgt.y, 0, -1, 0, 2.2, 6.0, hot);
-  }
+  if (!tgt || tgt === FIGHT.lock) return;
+  const col = canMate(c, tgt) ? [0.20, 0.88, 0.82] : [0.95, 0.26, 0.18];
+  const ty = fightTopY(tgt) + Math.sin(t * 3) * 1.5;
+  pushC(tgt.x, ty, tgt.y, 0, -1, 0, 2.2, 6.0, col);
 }
 function drawFight(t) {
   const camX = player.camX, camZ = player.camZ;
@@ -10390,8 +10514,14 @@ function drawFight(t) {
     if (dx * dx + dz * dz > 900 * 900) continue;
     const k = age / SPLAT_LIFE, fresh = Math.max(0, 1 - age / 6);
     const r = s.r * (1 - 0.35 * k) * (0.6 + 0.4 * Math.min(1, age * 4));   // spreads, then shrinks as it soaks in
-    const col = [0.30 + 0.14 * fresh - 0.14 * k, 0.02 + 0.02 * k, 0.025 + 0.015 * k];
-    pushS(s.x, s.y, s.z, Math.cos(s.rot), 0, Math.sin(s.rot), r, 0.16, r * 0.72, col);
+    const col = [0.26 + 0.12 * fresh - 0.12 * k, 0.018 + 0.02 * k, 0.02 + 0.015 * k];
+    const cr = Math.cos(s.rot), sr = Math.sin(s.rot);
+    // flat on the ground (thin along up), irregular: a main pool and two lobes
+    pushSX(s.x, s.y, s.z, 0, 1, 0, cr, 0, sr, r, 0.06, r * 0.62, col);
+    if (r > 1.2) {
+      pushSX(s.x + cr * r * 0.7 - sr * r * 0.3, s.y + 0.01, s.z + sr * r * 0.7 + cr * r * 0.3, 0, 1, 0, -sr, 0, cr, r * 0.45, 0.05, r * 0.3, col);
+      pushSX(s.x - cr * r * 0.5 + sr * r * 0.4, s.y + 0.02, s.z - sr * r * 0.5 - cr * r * 0.4, 0, 1, 0, cr, 0, sr, r * 0.32, 0.05, r * 0.26, col);
+    }
   }
   const c = player.c;
   if (!c || !c.alive || player.spectator) return;
@@ -10406,12 +10536,6 @@ function drawFight(t) {
     const y = fightTopY(a) + 4;
     const sz = 1.6 + 2.4 * k;
     pushC(a.x, y + 9 - 4 * k, a.y, 0, -1, 0, sz, 7 + 5 * k, col);
-    const rr = (a.ph.radius || 4) * BODY_SCALE * 1.6 + 6;
-    for (let i = 0; i < 12; i++) {
-      const ang = i / 12 * Math.PI * 2;
-      const x = a.x + Math.cos(ang) * rr * (1.25 - 0.25 * k), z = a.y + Math.sin(ang) * rr * (1.25 - 0.25 * k);
-      pushS(x, groundAt(x, z) + 1.4, z, 0, 1, 0, 1.2 + k, 0.4, 1.2 + k, col);
-    }
   }
   // lock-on reticle and the target's health
   const lk = FIGHT.lock;
@@ -10429,14 +10553,763 @@ function drawFight(t) {
     const f = clamp(lk.energy / Math.max(1, lk.ph.storage), 0, 1);
     for (let i = 0; i < segs; i++) {
       const u = (i + 0.5) / segs - 0.5;
-      const on = (i + 0.5) / segs <= f;
-      const col = on ? (f > 0.5 ? [0.35, 0.85, 0.35] : f > 0.25 ? [0.95, 0.75, 0.2] : [0.95, 0.2, 0.15]) : [0.12, 0.10, 0.10];
+      if ((i + 0.5) / segs > f) break;                 // only the health that is left
+      const col = f > 0.5 ? [0.35, 0.85, 0.35] : f > 0.25 ? [0.95, 0.75, 0.2] : [0.95, 0.2, 0.15];
       pushS(lk.x + rx * u * W, top, lk.y + rz * u * W, rx, 0, rz, 1.25, 0.9, 0.9, col);
     }
     if (lk.bleedT > 0) pushS(lk.x, top + 3.5, lk.y, 0, 1, 0, 1.1, 1.5, 1.1, [0.6, 0.03, 0.04]);
   }
 }
 
+// =====================================================================
+// GRAPHICS QUALITY (bottom-right selector): low / medium / high / ultra.
+// Controls render resolution, how far out ground cover, food plants and
+// detailed tree/creature models are drawn, the instance budget and the fog.
+// The choice is remembered in this browser.
+// =====================================================================
+const GFX_PRESETS = {
+  low:    { res: 0.60, cover: 380,  plant: 2600,  lod0: 420,  lod1: 1600, crit: 0.6, fog: 1.00, folMax: 50000 },
+  medium: { res: 0.85, cover: 620,  plant: 4200,  lod0: 700,  lod1: 2600, crit: 0.9, fog: 0.80, folMax: 90000 },
+  high:   { res: 1.00, cover: 900,  plant: 6500,  lod0: 1000, lod1: 3800, crit: 1.3, fog: 0.60, folMax: 140000 },
+  ultra:  { res: 1.25, cover: 1250, plant: 11000, lod0: 1500, lod1: 6000, crit: 1.9, fog: 0.42, folMax: 200000 },
+};
+const GFX_ORDER = ['low', 'medium', 'high', 'ultra'];
+const GFX = Object.assign({ name: 'high' }, GFX_PRESETS.high);
+function gfxLoad() {
+  let n = null;
+  try { n = localStorage.getItem('g3d_gfx'); } catch (e) { n = null; }
+  gfxSet(GFX_PRESETS[n] ? n : 'high', true);
+}
+function gfxSet(name, silent) {
+  if (!GFX_PRESETS[name]) return;
+  Object.assign(GFX, GFX_PRESETS[name], { name });
+  COVER_R = GFX.cover; TREE_LOD0 = GFX.lod0; TREE_LOD1 = GFX.lod1;
+  if (typeof FOL !== 'undefined') FOL.key = '';                 // rebuild the foliage set now
+  try { localStorage.setItem('g3d_gfx', name); } catch (e) { /* private mode: not remembered */ }
+  const el = document.getElementById('gfxsel');
+  if (el) for (const b of el.querySelectorAll('button')) b.classList.toggle('on', b.dataset.q === name);
+  if (!silent && typeof toast === 'function') toast('Graphics: ' + name, 1200);
+}
+function gfxBind() {
+  const el = document.getElementById('gfxsel');
+  if (!el) return;
+  el.addEventListener('click', (e) => {
+    const b = e.target.closest ? e.target.closest('button[data-q]') : null;
+    if (b) { gfxSet(b.dataset.q); e.stopPropagation(); }
+  });
+  el.addEventListener('mousedown', (e) => e.stopPropagation());
+  gfxLoad();
+}
+// keep clear of the control panel when it is open
+function gfxPlace() {
+  const el = document.getElementById('gfxsel'), tab = document.getElementById('ptab');
+  if (!el) return;
+  const open = tab && !tab.classList.contains('closed') && document.getElementById('panel') &&
+               getComputedStyle(document.getElementById('panel')).display !== 'none';
+  el.style.right = open ? '454px' : '14px';
+  const rb = document.getElementById('resetbtn'); if (rb) rb.style.right = el.style.right;
+}
+
+// ---------------------------------------------------------------- feeding growth
+// Eating another animal makes you bigger. A juvenile gets a big growth spurt;
+// a grown animal keeps bulking past its genetic adult size, up to BULK_MAX,
+// with diminishing returns. Size is real: develop() scales mass, reach,
+// attack, storage and upkeep with it, so a bigger body hits harder, holds
+// more, and has to eat more.
+const BULK_MAX = 1.5;
+function feedGrowth(c, preyMass, label) {
+  if (!c || !c.alive || !c.cellState || !c.cellState.length) return;
+  const ratio = clamp((preyMass || 0.5) / Math.max(0.2, c.ph.mass), 0.05, 1.5);
+  const gain = 0.02 + 0.10 * ratio;
+  const r0 = c.ph.radius, ef = c.energy / Math.max(1, c.ph.storage);
+  let sum = 0, n = 0;
+  for (const q of c.cellState) {
+    if (!q.alive) continue;
+    if (q.grow < 1) q.grow = q.grow + gain * 2.5;                    // juvenile spurt
+    else q.grow = q.grow + gain * Math.max(0, 1 - (q.grow - 1) / (BULK_MAX - 1));
+    q.grow = Math.min(BULK_MAX, q.grow);
+    sum += q.grow; n++;
+  }
+  c._growthAvg = n ? Math.min(1, sum / n) : 0;
+  c._bulk = n ? sum / n : 1;
+  c.ph = C.develop(c.genome, c.cellState);
+  // the same fraction of a bigger stomach
+  c.energy = Math.min(c.ph.storage, Math.max(c.energy, ef * c.ph.storage));
+  if (c.ph.radius > r0 * 1.004) toast((label || 'Fed') + ': you grew to size x' + (c._bulk || 1).toFixed(2) + '.', 2200);
+}
+
+// =====================================================================
+// 3D AUDIO, FOOTSTEPS AND THE PROXIMITY WARNING
+//
+// Every positional sound goes through an HRTF PannerNode placed at the
+// source's world position, with the AudioListener moved and turned with your
+// head every frame. On headphones that gives full 360-degree placement: an
+// animal behind you sounds behind you, not just left or right, and turning
+// your head during a long roar moves it around you. Distance loudness and
+// muffling stay with the existing hand-tuned curves (panner rolloff is 0), so
+// the panner only decides direction.
+//
+// Animals near you make footsteps from their bodies: step rate from speed and
+// leg length, weight from mass (big animals thud, small ones patter) and a
+// surface from the ground (leaf litter, grass, sand, rock, snow, splashes).
+// Meat eaters stalking you growl more often the closer they get.
+//
+// The proximity warning replaces the old ground rings: red arcs around the
+// centre of the screen at the true bearing of every animal close to you, as
+// in Fortnite's sound visualiser. Arcs brighten and widen as it closes, flash
+// on each of its footsteps and turn solid for anything hunting you.
+// =====================================================================
+const SPAT = { lastPos: [0, 0, 0], ok: false };
+const STEP_R = 650;          // footsteps audible within this
+const STEP_MAX = 8;          // nearest animals that get footsteps
+const PROX_R = 620;          // proximity arcs within this
+const GROWL_R = 520;         // stalking meat eaters growl within this
+
+// listener: at your eyes, facing where you look
+function sndListener() {
+  const ctx = SND.ctx; if (!ctx) return;
+  const L = ctx.listener;
+  const x = player.camX, y = player.camY, z = player.camZ;
+  const fx = Math.cos(player.yaw) * Math.cos(player.pitch), fy = Math.sin(player.pitch), fz = Math.sin(player.yaw) * Math.cos(player.pitch);
+  const t = ctx.currentTime;
+  try {
+    if (L.positionX) {
+      L.positionX.setTargetAtTime(x, t, 0.02); L.positionY.setTargetAtTime(y, t, 0.02); L.positionZ.setTargetAtTime(z, t, 0.02);
+      L.forwardX.setTargetAtTime(fx, t, 0.02); L.forwardY.setTargetAtTime(fy, t, 0.02); L.forwardZ.setTargetAtTime(fz, t, 0.02);
+      L.upX.setValueAtTime(0, t); L.upY.setValueAtTime(1, t); L.upZ.setValueAtTime(0, t);
+    } else {
+      L.setPosition(x, y, z);
+      L.setOrientation(fx, fy, fz, 0, 1, 0);
+    }
+    SPAT.lastPos = [x, y, z]; SPAT.ok = true;
+  } catch (e) { SPAT.ok = false; }
+}
+// A world position that sndVoice / voxOut understand in place of a stereo pan.
+function sndAt(x, z, y) {
+  return { spatial: true, x, y: y != null ? y : groundAt(x, z) + 8, z };
+}
+function sndAtC(c) {
+  if (!c || !c.ph) return 0;
+  if (c === player.c) return 0;                       // your own body: centred
+  return sndAt(c.x, c.y, groundAt(c.x, c.y) + (c.ph.standH || c.ph.radius || 4) * BODY_SCALE * 1.3);
+}
+// a random direction at a distance, for unseen sources (calls, distant roars)
+function sndRandDir(dist) {
+  const a = Math.random() * Math.PI * 2, d = dist || 1500;
+  const x = player.camX + Math.cos(a) * d, z = player.camZ + Math.sin(a) * d;
+  return { spatial: true, x, y: player.camY + (Math.random() * 0.3 - 0.05) * d * 0.3, z };
+}
+// Offset form kept for older callers: returns a world position now, not a pan.
+function sndPan(dx, dz) {
+  const lx = player.c ? player.c.x : player.camX, lz = player.c ? player.c.y : player.camZ;
+  return sndAt(lx + dx, lz + dz, player.camY);
+}
+// The node a voice connects into for a given placement (number = stereo pan)
+function sndPlacer(ctx, pan, dest) {
+  if (pan && pan.spatial && SPAT.ok && ctx.createPanner) {
+    const p = ctx.createPanner();
+    p.panningModel = 'HRTF';
+    p.distanceModel = 'linear'; p.rolloffFactor = 0; p.refDistance = 1; p.maxDistance = 1e7;
+    const t = ctx.currentTime;
+    if (p.positionX) { p.positionX.setValueAtTime(pan.x, t); p.positionY.setValueAtTime(pan.y, t); p.positionZ.setValueAtTime(pan.z, t); }
+    else p.setPosition(pan.x, pan.y, pan.z);
+    p.connect(dest);
+    return p;
+  }
+  // stereo fallback (or a plain number for centred UI sounds)
+  let v = 0;
+  if (typeof pan === 'number') v = pan;
+  else if (pan && pan.spatial) {
+    const dx = pan.x - SPAT.lastPos[0], dz = pan.z - SPAT.lastPos[2], d = Math.hypot(dx, dz) || 1;
+    v = clamp((-Math.sin(player.yaw) * dx + Math.cos(player.yaw) * dz) / d, -1, 1);
+  }
+  if (!v || !ctx.createStereoPanner) return dest;
+  const s = ctx.createStereoPanner(); s.pan.value = v; s.connect(dest);
+  return s;
+}
+function sndVoice(build, pan, when) {
+  const ctx = SND.ctx; if (!ctx) return;
+  build(ctx, sndPlacer(ctx, pan, SND.master), when || ctx.currentTime);
+}
+// distance of a placement from your ears (0 for centred)
+function sndDist(pan) {
+  if (!pan || !pan.spatial) return 0;
+  return Math.hypot(pan.x - SPAT.lastPos[0], pan.z - SPAT.lastPos[2]);
+}
+
+// ---------------------------------------------------------------- footsteps
+function stepSurface(x, z) {
+  if (terrain.isWater(x, z)) return 'water';
+  const b = terrain.biomeAt(x, z);
+  if (b === 'forest' || b === 'marsh') return forestCanopyAt(x, z) > 0.3 || b === 'marsh' ? (b === 'marsh' ? 'mud' : 'leaf') : 'grass';
+  if (b === 'rock' || b === 'tundra') return 'rock';
+  if (b === 'snow') return 'snow';
+  if (b === 'beach' || b === 'desert') return 'sand';
+  return 'grass';
+}
+// one footfall: a thud scaled by weight plus a surface layer
+function sndStep(pos, mass, surf, vol) {
+  if (!SND.ctx || !SND.on || vol < 0.004) return;
+  const heavy = clamp(Math.log2(1 + mass) / 5, 0.05, 1.3);
+  sndVoice((ctx, out, t) => {
+    // body: a low thump, deeper and longer for heavy animals
+    if (heavy > 0.25) {
+      const o = ctx.createOscillator(); o.type = 'sine';
+      const f0 = 95 - 45 * Math.min(1, heavy);
+      o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f0 * 0.55, t + 0.09 + 0.12 * heavy);
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol * (0.5 + 0.9 * heavy), t + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12 + 0.2 * heavy);
+      o.connect(g).connect(out); o.start(t); o.stop(t + 0.4 + 0.2 * heavy);
+    }
+    // surface: filtered noise with a material-specific colour
+    const S = {
+      leaf:  [2600, 0.8, 0.11, 1.0, 1.25],
+      grass: [1800, 0.9, 0.08, 0.7, 1.1],
+      mud:   [520, 1.4, 0.16, 0.9, 0.6],
+      rock:  [3200, 2.2, 0.035, 0.55, 1.5],
+      snow:  [1200, 0.7, 0.12, 0.8, 0.8],
+      sand:  [2100, 0.6, 0.07, 0.6, 1.0],
+      water: [900, 0.9, 0.22, 1.3, 0.7],
+    }[surf] || [1800, 0.9, 0.08, 0.7, 1.0];
+    const n = ctx.createBufferSource(); n.buffer = SND.noiseBuf; n.playbackRate.value = S[4] * (1.3 - 0.4 * Math.min(1, heavy));
+    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = S[0] * (1.15 - 0.35 * Math.min(1, heavy)); f.Q.value = S[1];
+    const g2 = ctx.createGain(); const dur = S[2] * (0.8 + 0.8 * heavy);
+    g2.gain.setValueAtTime(0.0001, t); g2.gain.exponentialRampToValueAtTime(vol * S[3] * (0.35 + 0.5 * Math.min(1, heavy)), t + 0.006);
+    g2.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    n.connect(f).connect(g2).connect(out); n.start(t, Math.random() * 1.5); n.stop(t + dur + 0.05);
+  }, pos);
+}
+function sndWingbeat(pos, mass, vol) {
+  if (!SND.ctx || !SND.on || vol < 0.004) return;
+  sndVoice((ctx, out, t) => {
+    const n = ctx.createBufferSource(); n.buffer = SND.noiseBuf; n.playbackRate.value = 0.5;
+    const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 700 - 300 * Math.min(1, mass / 20);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.05); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+    n.connect(f).connect(g).connect(out); n.start(t, Math.random()); n.stop(t + 0.3);
+  }, pos);
+}
+function stepVolume(d) { return d >= STEP_R ? 0 : 0.5 / (1 + d / 70) * (1 - d / STEP_R); }
+// how often this body puts a foot down, seconds (0 = not walking)
+function stepInterval(c, sp) {
+  if (sp < 4) return 0;
+  const p = c.ph;
+  const leg = Math.max(2, (p.standH || p.radius || 4) * BODY_SCALE * 1.6);
+  const feet = Math.max(2, p.dLegs || 2);
+  const stride = leg * 2.2;
+  // strides per second, then more footfalls for more feet (capped: a centipede patters, not buzzes)
+  return clamp(stride / sp / Math.min(feet / 2, 3), 0.07, 1.1);
+}
+let spatNearBuf = [];
+function spatTick(dt) {
+  sndListener();
+  const me = player.c;
+  const lx = player.camX, lz = player.camZ;
+  // nearest walkers
+  const near = spatNearBuf; near.length = 0;
+  for (const o of world.creatures) {
+    if (!o.alive || !o.ph) continue;
+    const d = Math.hypot(o.x - lx, o.y - lz);
+    if (d > STEP_R) { o._stepFlash = 0; continue; }
+    o._stepFlash = Math.max(0, (o._stepFlash || 0) - dt * 4);
+    near.push({ o, d });
+  }
+  near.sort((a, b) => a.d - b.d);
+  const audible = SND.ctx && SND.on;
+  for (let i = 0; i < near.length && i < STEP_MAX; i++) {
+    const { o, d } = near[i];
+    const isMe = o === me;
+    let sp;
+    if (isMe) sp = Math.hypot(o.vx || 0, o.vy || 0) * (player.grounded ? 1 : 0);
+    else sp = Math.hypot(o.vx || 0, o.vy || 0);
+    const iv = stepInterval(o, sp);
+    if (!iv) { o._stepT = 0; continue; }
+    o._stepT = (o._stepT || 0) + dt;
+    if (o._stepT < iv) continue;
+    o._stepT -= iv; if (o._stepT > iv) o._stepT = 0;
+    o._stepFlash = 1;
+    if (!audible) continue;
+    const vol = isMe ? 0.10 : stepVolume(d) * (o.ph.carnivory > 0.5 ? 1.15 : 1);
+    const pos = isMe ? 0 : sndAt(o.x, o.y, groundAt(o.x, o.y) + 1);
+    if (o.ph.canFly && !isMe && (o.alt || 0) > 5) sndWingbeat(pos, o.ph.mass, vol * 0.8);
+    else sndStep(pos, o.ph.mass || 1, stepSurface(o.x, o.y), vol);
+  }
+  // stalkers growl more often as they close in
+  if (audible && me && me.alive && typeof voxCall === 'function') {
+    for (const { o, d } of near) {
+      if (o === me || o.ph.carnivory <= 0.5 || d > GROWL_R) continue;
+      const hunting = o.foe === me || o.target === me;
+      if (!hunting) continue;
+      o._growlT = (o._growlT == null ? 1.5 : o._growlT) - dt;
+      if (o._growlT <= 0) {
+        voxCall(o, 'threat');
+        o._growlT = 2.2 + 5 * (d / GROWL_R) + Math.random() * 2;
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------- proximity warning
+let proxCv = null, proxCtx = null;
+function proxDraw() {
+  if (!proxCv) {
+    proxCv = document.getElementById('proxfx');
+    if (!proxCv) return;
+    proxCtx = proxCv.getContext('2d');
+  }
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const W = Math.floor(proxCv.clientWidth * dpr), H = Math.floor(proxCv.clientHeight * dpr);
+  if (proxCv.width !== W || proxCv.height !== H) { proxCv.width = W; proxCv.height = H; }
+  const g = proxCtx;
+  g.clearRect(0, 0, W, H);
+  const me = player.c;
+  if (!me || !me.alive || player.spectator || ED.open) return;
+  const cx = W / 2, cy = H / 2, R = Math.min(W, H) * 0.36;
+  const fx = Math.cos(player.yaw), fz = Math.sin(player.yaw);
+  const now = performance.now() / 1000;
+  let drawn = 0;
+  for (const o of world.creatures) {
+    if (o === me || !o.alive || !o.ph) continue;
+    const dx = o.x - me.x, dz = o.y - me.y, d = Math.hypot(dx, dz);
+    if (d > PROX_R || d < 1e-3) continue;
+    const moving = Math.hypot(o.vx || 0, o.vy || 0) > 4;
+    const hunting = o.foe === me || o.target === me || FIGHT.pending.some(s => s.att === o);
+    const danger = hunting || (o.ph.carnivory > 0.5 && o.ph.attack > me.ph.defense * 0.5);
+    if (!moving && !hunting) continue;                 // still animals make no sound to show
+    const near = 1 - d / PROX_R;
+    if (!danger && near < 0.35) continue;              // distant grazers are not worth a warning
+    const fwd = dx * fx + dz * fz, side = -dx * fz + dz * fx;
+    const ang = Math.atan2(side, fwd);                  // 0 = ahead, + = to your right
+    const flash = o._stepFlash || 0;
+    const a = clamp((danger ? 0.35 : 0.04) + near * (danger ? 0.65 : 0.40) + flash * 0.25, 0, 1) *
+              (hunting ? 0.8 + 0.2 * Math.sin(now * 9) : 1);
+    const span = 0.10 + 0.30 * near + (danger ? 0.06 : 0);
+    const w = (danger ? 4 + 9 * near : 2 + 5 * near) * dpr;
+    // screen angle: ahead is up, right is right
+    const sa = ang - Math.PI / 2;
+    g.beginPath();
+    g.arc(cx, cy, R + (1 - near) * R * 0.25, sa - span / 2, sa + span / 2);
+    g.strokeStyle = `rgba(${danger ? 255 : 235},${danger ? 38 : 70},${danger ? 30 : 55},${a.toFixed(3)})`;
+    g.lineWidth = w; g.lineCap = 'round';
+    g.shadowColor = 'rgba(255,30,20,0.8)'; g.shadowBlur = (6 + 14 * near) * dpr * (danger ? 1 : 0.4);
+    g.stroke();
+    // a chevron pointing at it for the very close and the hunting
+    if (danger && near > 0.35) {
+      const rr = R + (1 - near) * R * 0.25 + w * 1.6;
+      const px = cx + Math.cos(sa) * rr, py = cy + Math.sin(sa) * rr;
+      g.save(); g.translate(px, py); g.rotate(sa);
+      g.beginPath(); g.moveTo(9 * dpr, 0); g.lineTo(-4 * dpr, -7 * dpr); g.lineTo(-4 * dpr, 7 * dpr); g.closePath();
+      g.fillStyle = `rgba(255,50,35,${a.toFixed(3)})`; g.fill(); g.restore();
+    }
+    if (++drawn >= 24) break;
+  }
+  g.shadowBlur = 0;
+}
+
+// =====================================================================
+// REMAINS: every animal that dies near you leaves a skeleton built from its
+// own body plan. The spine follows its real vertebra chain, ribs arc over its
+// real body width, the skull sits where its head was, the neck and tail are
+// its own chains, and each limb it actually had lies splayed from its real
+// socket. Rotting flesh clings to the bones at first and shrinks away; the
+// bones then yellow and slowly sink into the soil until they are gone.
+// =====================================================================
+const REMAINS = [];
+const REMAINS_MAX = 48;
+const REMAINS_LIFE = 420;      // seconds of game time until fully buried
+const REMAINS_ROT = 45;        // flesh gone after this
+const REMAINS_DRAW_R = 1100;
+function remainsAdd(c) {
+  if (!c || c._remains || !c.ph || !c.genome || !c.genome.design) return;
+  c._remains = true;
+  const d = Math.hypot(c.x - player.camX, c.y - player.camZ);
+  if (d > 3500) return;                                  // too far to ever be seen
+  let G;
+  try { G = designGeo(c.genome.design); } catch (e) { return; }
+  if (!G || !G.sk) return;
+  if (REMAINS.length >= REMAINS_MAX) REMAINS.shift();
+  REMAINS.push({
+    x: c.x, z: c.y, yaw: c._yaw3 != null ? c._yaw3 : Math.atan2(c.vy || 0, c.vx || 1),
+    R: (c.ph.radius || 4) * BODY_SCALE, G, t0: simT,
+    seed: (c.id * 2654435761) >>> 0,
+    hide: deadTypes(c),
+  });
+}
+// deterministic per-skeleton jitter so bones do not lie in perfect symmetry
+function remRand(r, i) { let h = (r.seed ^ Math.imul(i + 1, 0x9E3779B1)) >>> 0; h = Math.imul(h ^ (h >>> 15), 2246822519) >>> 0; return ((h ^ (h >>> 13)) >>> 0) / 4294967296; }
+function drawRemains(t) {
+  if (!REMAINS.length) return;
+  for (let ri = REMAINS.length - 1; ri >= 0; ri--) {
+    const r = REMAINS[ri];
+    const age = simT - r.t0;
+    if (age > REMAINS_LIFE || age < -1) { REMAINS.splice(ri, 1); continue; }
+    const dcam = Math.hypot(r.x - player.camX, r.z - player.camZ);
+    if (dcam > REMAINS_DRAW_R) continue;
+    drawSkeleton(r, age, dcam);
+  }
+}
+function drawSkeleton(r, age, dcam) {
+  const sk = r.G.sk, B = sk.balls, P = sk.plan || { seg: 0 };
+  const S = r.R;
+  const cy = Math.cos(r.yaw), sy = Math.sin(r.yaw);
+  const gy = groundAt(r.x, r.z);
+  const k = age / REMAINS_LIFE;
+  // bones sink as the soil takes them: nothing for a while, then steadily
+  const sinkK = clamp((k - 0.25) / 0.75, 0, 1);
+  const rot = clamp(1 - age / REMAINS_ROT, 0, 1);         // 1 fresh .. 0 clean
+  const fresh = [0.86, 0.80, 0.68], old = [0.58, 0.53, 0.43];
+  const bone = [fresh[0] + (old[0] - fresh[0]) * k, fresh[1] + (old[1] - fresh[1]) * k, fresh[2] + (old[2] - fresh[2]) * k];
+  const boneD = [bone[0] * 0.72, bone[1] * 0.70, bone[2] * 0.66];
+  const flesh = [0.30, 0.05, 0.05], dark = [0.07, 0.05, 0.04];
+  // spine height above ground in body units (a collapsed carcass)
+  let maxR = 0.3;
+  for (let i = 0; i < P.seg; i++) if (B[i] && !B[i].hide) maxR = Math.max(maxR, B[i].r);
+  const hs = maxR * 0.62;
+  const sinkBy = (hs + 0.35) * S * sinkK * 1.15;
+  // body-local (x fwd, y up, z side) -> world, ground-relative
+  const W = (x, y, z) => [r.x + (x * cy - z * sy) * S, gy + y * S - sinkBy, r.z + (x * sy + z * cy) * S];
+  const lod = dcam > 500 ? 1 : 0;
+  const T = (a, b, ra, rb, col) => { const A = W(a[0], a[1], a[2]), Bp = W(b[0], b[1], b[2]); pushT(A[0], A[1], A[2], Bp[0], Bp[1], Bp[2], ra * S, col, rb * S); };
+  const Ball = (p, rad, col) => { const w = W(p[0], p[1], p[2]); pushS(w[0], w[1], w[2], 0, 1, 0, rad * S, rad * S, rad * S, col); };
+  const El = (p, dir, sx, syy, sz, col) => { const w = W(p[0], p[1], p[2]); const dw = [dir[0] * cy - dir[2] * sy, dir[1], dir[0] * sy + dir[2] * cy]; pushS(w[0], w[1], w[2], dw[0], dw[1], dw[2], sx * S, syy * S, sz * S, col); };
+  // ---- spine and ribs
+  const spine = [];
+  for (let i = 0; i < P.seg; i++) { const b = B[i]; if (b && !b.hide && Math.abs(b.z) < 1e-3) spine.push(b); }
+  spine.sort((a, b) => a.x - b.x);
+  const vr = 0.055 + maxR * 0.035;
+  const sp = spine.map((b, i) => [b.x, hs * (0.55 + 0.45 * b.r / maxR) + (remRand(r, i) - 0.5) * 0.03, (remRand(r, i + 50) - 0.5) * 0.05]);
+  for (let i = 0; i < sp.length; i++) {
+    if (i) T(sp[i - 1], sp[i], vr, vr, bone);
+    if (!lod) Ball(sp[i], vr * 1.45, bone);             // vertebra
+  }
+  // ribs over the widest part of the body, on both sides
+  const ribN = lod ? 3 : 4;
+  for (let i = 0; i < spine.length; i++) {
+    const b = spine[i];
+    if (b.r < maxR * 0.55) continue;
+    const top = sp[i];
+    for (const side of [-1, 1]) {
+      // some ribs have broken or been dragged off by scavengers
+      if (remRand(r, i * 3 + side + 7) < 0.12 + 0.25 * k) continue;
+      const w = b.r * (0.95 + remRand(r, i * 5 + side) * 0.1);
+      const splay = 0.10 + 0.25 * remRand(r, i * 7 + side);   // collapsed outward
+      let prev = top;
+      for (let q = 1; q <= ribN; q++) {
+        const th = (q / ribN) * 1.85;
+        const p = [b.x + side * 0 - 0.06 * q / ribN, Math.max(0.04, top[1] * Math.cos(th) * (1 - splay * 0.5)),
+                   side * w * Math.sin(th) * (1 + splay)];
+        T(prev, p, vr * 0.62, vr * 0.5, q === ribN ? boneD : bone);
+        prev = p;
+      }
+      if (rot > 0.02 && !lod) Ball([b.x, top[1] * 0.45, side * w * 0.7], 0.16 * b.r * rot, flesh);
+    }
+    if (rot > 0.02) El([b.x, hs * 0.35, 0], [1, 0, 0], b.r * 0.55 * rot, b.r * 0.5 * rot, b.r * 0.45 * rot, flesh);   // guts, shrinking
+  }
+  // ---- neck, skull and jaw
+  const head = B[sk.headIdx], neck = [];
+  for (let i = P.seg; i < B.length; i++) if (B[i] && B[i].g === 'neck' && !B[i].hide) neck.push(B[i]);
+  let prevN = sp.length ? sp[sp.length - 1] : [0, hs, 0];
+  for (let i = 0; i < neck.length; i++) {
+    const n = neck[i];
+    const p = [n.x, Math.max(vr * 1.2, hs * (0.6 - 0.5 * (i + 1) / (neck.length + 1))), (i + 1) * 0.06 * (remRand(r, 90) - 0.5)];
+    T(prevN, p, vr * 1.05, vr * 1.0, bone);
+    if (!lod) Ball(p, vr * 1.5, bone);
+    prevN = p;
+  }
+  if (head && !head.hide) {
+    const hr = head.r;
+    const hx = head.x, hz = neck.length * 0.08 * (remRand(r, 91) - 0.5);
+    const hp = [hx, hr * 0.62, hz];
+    T(prevN, hp, vr, vr, bone);
+    // cranium, an elongated snout, dark eye sockets and a dropped jaw
+    El(hp, [1, 0, 0], hr * 0.72, hr * 0.9, hr * 0.62, bone);
+    const snout = B[sk.headIdx + 1] && B[sk.headIdx + 1].g === 'head' ? B[sk.headIdx + 1] : null;
+    const tipX = snout ? snout.x + snout.r * 0.6 : hx + hr * 1.2;
+    T([hx + hr * 0.3, hr * 0.7, hz], [tipX, hr * 0.42, hz], hr * 0.42, hr * 0.2, bone);
+    if (!lod) {
+      for (const s2 of [-1, 1]) Ball([hx + hr * 0.3, hr * 0.85, hz + s2 * hr * 0.42], hr * 0.2, dark);   // orbits
+      Ball([tipX - hr * 0.05, hr * 0.46, hz], hr * 0.08, dark);                                              // nasal opening
+      T([hx - hr * 0.1, hr * 0.14, hz + hr * 0.28], [tipX - hr * 0.1, hr * 0.08, hz + hr * 0.36], hr * 0.12, hr * 0.07, boneD);
+      T([hx - hr * 0.1, hr * 0.14, hz - hr * 0.28], [tipX - hr * 0.1, hr * 0.08, hz - hr * 0.36], hr * 0.12, hr * 0.07, boneD);
+    }
+    if (rot > 0.02) El(hp, [1, 0, 0], hr * 0.55 * rot, hr * 0.5 * rot, hr * 0.5 * rot, flesh);
+  }
+  // ---- tail
+  const tail = [];
+  for (let i = sk.tailStart || B.length; i < B.length; i++) if (B[i] && B[i].g === 'tail' && !B[i].hide) tail.push(B[i]);
+  let prevT = sp.length ? sp[0] : [0, hs, 0];
+  const curl = (remRand(r, 99) - 0.5) * 1.6;
+  for (let i = 0; i < tail.length; i++) {
+    const tb = tail[i], u = (i + 1) / tail.length;
+    const p = [tb.x, Math.max(0.05, hs * 0.5 * (1 - u)), curl * u * u * 0.6];
+    const rr = Math.max(0.02, vr * (1 - 0.7 * u));
+    T(prevT, p, rr, rr * 0.9, bone);
+    if (!lod && i % 2 === 0) Ball(p, rr * 1.4, bone);
+    prevT = p;
+  }
+  // ---- limbs: every limb it had, splayed flat from its real socket
+  const limbs = r.G.cls ? r.G.cls.limbs : [];
+  for (let li = 0; li < limbs.length; li++) {
+    const o = limbs[li];
+    if (r.hide && r.hide.has(o.leg ? 'LEG' : 'ARM')) continue;
+    const lb = o.lb; if (!lb || !lb.k || !lb.f) continue;
+    const side = o.root[2] >= 0 ? 1 : -1;
+    const th = (lb.th || 1) * 0.06 + 0.02;
+    const root = [o.root[0], Math.max(th, hs * 0.55), o.root[2] * 0.8];
+    // lay the leg down: its drop becomes sideways reach along the ground
+    const flat = (v, j) => [v[0] * (0.8 + 0.3 * remRand(r, li * 11 + j)), 0, side * (Math.abs(v[2]) + Math.abs(v[1]) * 0.9)];
+    const kv = flat(lb.k, 1), fv = flat(lb.f, 2);
+    const knee = [root[0] + kv[0], th * 1.2, root[2] + kv[2]];
+    const foot = [root[0] + fv[0], th, root[2] + fv[2]];
+    T(root, knee, th * 1.05, th * 0.85, bone);
+    T(knee, foot, th * 0.85, th * 0.7, bone);
+    if (!lod) {
+      Ball(root, th * 1.6, bone); Ball(knee, th * 1.35, bone);
+      // digits
+      const dx = foot[0] - knee[0], dz = foot[2] - knee[2], dl = Math.hypot(dx, dz) || 1;
+      for (let q = -1; q <= 1; q++) {
+        const a = Math.atan2(dz, dx) + q * 0.35;
+        T(foot, [foot[0] + Math.cos(a) * th * 3.2, th * 0.5, foot[2] + Math.sin(a) * th * 3.2], th * 0.4, th * 0.2, boneD);
+      }
+      void dl;
+    }
+  }
+  // a dark stain of soil and old blood under it, fading as it is buried
+  if (false) {   // stain disabled: read as a dark dome from low angles
+    const len = (spine.length ? spine[spine.length - 1].x - spine[0].x : 1) + maxR;
+    const w = W(0, 0.02, 0);
+    pushSX(w[0], gy + 0.25, w[2], 0, 1, 0, cy, 0, sy, len * S * 0.75, 0.1, maxR * S * 1.5, [0.16 - 0.06 * k, 0.07, 0.05]);
+  }
+}
+
+// Every death passes through here (world.onDeath). Something you wounded that
+// bleeds out, or dies of its wounds, within 25 s still counts as your kill.
+function onWorldDeath(c) {
+  remainsAdd(c);
+  const me = player.c;
+  if (!me || !me.alive || c === me || c._creditedKill) return;
+  if (c._hitByPlayerT != null && simT - c._hitByPlayerT < 25) {
+    c._creditedKill = true;
+    c.deathCause = 'predation';
+    if (FIGHT.lock === c) FIGHT.lock = null;
+    toast('Your prey bled out. The kill is yours: its body lies where it fell.', 2600);
+    try { edOnKill(c); } catch (e) { console.warn(e); }
+  }
+}
+
+// =====================================================================
+// START SCREEN: no box. Text drifts down into place over a dark, layered
+// rainforest silhouette with drifting mist, and now and then a pair of eyes
+// opens in the undergrowth, blinks, and follows your cursor. Clicking goes
+// straight into the creature builder; finishing the design starts the game.
+// =====================================================================
+const SS = { cv: null, g: null, layers: null, eyes: [], nextEye: 1.5, mx: 0.5, my: 0.5, t: 0, raf: 0, w: 0, h: 0, dpr: 1 };
+function ssRng(seed) { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+// one silhouette layer: trunks, lianas, fronds and a band of undergrowth
+function ssLayer(W, H, depth, col, seed) {
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d'); const r = ssRng(seed);
+  g.fillStyle = col; g.strokeStyle = col;
+  const nT = Math.round(5 + depth * 7);
+  for (let i = 0; i < nT; i++) {                                // trunks, leaning a little
+    const x = r() * W, w = (6 + r() * 16) * (0.5 + depth) * (W / 1600), lean = (r() - 0.5) * 60 * depth;
+    g.beginPath(); g.moveTo(x - w * 1.8, H); g.quadraticCurveTo(x - w * 0.6, H * 0.8, x - w * 0.5 + lean * 0.3, H * 0.55);
+    g.lineTo(x - w * 0.35 + lean, -10); g.lineTo(x + w * 0.35 + lean, -10); g.lineTo(x + w * 0.5 + lean * 0.3, H * 0.55);
+    g.quadraticCurveTo(x + w * 0.6, H * 0.8, x + w * 1.8, H); g.closePath(); g.fill();
+    // buttress flares
+    for (let b = 0; b < 2; b++) { const s = b ? 1 : -1; g.beginPath(); g.moveTo(x, H * 0.72); g.quadraticCurveTo(x + s * w * 1.2, H * 0.88, x + s * w * 3.2, H); g.lineTo(x + s * w * 0.4, H); g.fill(); }
+  }
+  g.lineWidth = Math.max(1, 1.6 * depth * (W / 1600));
+  for (let i = 0; i < nT * 2; i++) {                            // hanging lianas
+    const x = r() * W, len = H * (0.25 + r() * 0.5 * depth);
+    g.beginPath(); g.moveTo(x, -5); g.bezierCurveTo(x + (r() - 0.5) * 80, len * 0.4, x + (r() - 0.5) * 80, len * 0.8, x + (r() - 0.5) * 40, len); g.stroke();
+  }
+  const frond = (x, y, len, ang, droop) => {                   // palm / fern frond
+    g.beginPath();
+    const n = 14;
+    const pts = [];
+    for (let k = 0; k <= n; k++) { const u = k / n; const a = ang + droop * u * u; pts.push([x + Math.cos(a) * len * u, y + Math.sin(a) * len * u]); }
+    for (let k = 1; k < n; k++) {
+      const [px, py] = pts[k], u = k / n, lw = len * 0.2 * Math.sin(u * Math.PI);
+      const a = Math.atan2(pts[k + 1][1] - py, pts[k + 1][0] - px);
+      for (const s of [-1, 1]) {
+        g.moveTo(px, py); g.lineTo(px + Math.cos(a + s * 1.1) * lw, py + Math.sin(a + s * 1.1) * lw + lw * 0.4);
+        g.lineTo(pts[k + 1][0], pts[k + 1][1]);
+      }
+    }
+    g.fill();
+    g.beginPath(); g.moveTo(x, y); for (const p of pts) g.lineTo(p[0], p[1]); g.stroke();
+  };
+  const nF = Math.round(4 + depth * 8);
+  for (let i = 0; i < nF; i++) {                                // fronds bursting from the undergrowth
+    const x = r() * W, y = H * (0.62 + r() * 0.3), n = 4 + (r() * 4 | 0);
+    for (let k = 0; k < n; k++) frond(x, y, (60 + r() * 110) * (0.6 + depth) * (W / 1600), -Math.PI / 2 + (k / (n - 1) - 0.5) * 2.4, (k / (n - 1) - 0.5) * 1.6);
+  }
+  const base = H * (0.78 - depth * 0.1);                        // lumpy undergrowth band
+  g.beginPath(); g.moveTo(0, H);
+  for (let x = 0; x <= W + 40; x += 30) {
+    const y = base - (Math.sin(x * 0.013 + seed) * 0.5 + 0.5) * 50 * (0.5 + depth) - r() * 40 * depth;
+    g.quadraticCurveTo(x - 15, y - 30 * r(), x, y);
+  }
+  g.lineTo(W, H); g.closePath(); g.fill();
+  return cv;
+}
+function ssBuild() {
+  const cv = SS.cv; if (!cv) return;
+  SS.dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const W = Math.max(2, Math.floor(cv.clientWidth * SS.dpr)), H = Math.max(2, Math.floor(cv.clientHeight * SS.dpr));
+  if (W === SS.w && H === SS.h && SS.layers) return;
+  cv.width = W; cv.height = H; SS.w = W; SS.h = H;
+  SS.layers = [
+    { cv: ssLayer(W, H, 0.15, '#0b1a17', 11), sway: 0.3 },
+    { cv: ssLayer(W, H, 0.45, '#07120f', 23), sway: 0.7 },
+    { cv: ssLayer(W, H, 0.75, '#040a08', 37), sway: 1.2 },
+    { cv: ssLayer(W, H, 1.0, '#010302', 51), sway: 2.0 },
+  ];
+}
+function ssSpawnEye() {
+  const r = Math.random;
+  const near = r() < 0.4;
+  const size = (near ? 5 + r() * 5 : 2.5 + r() * 3) * SS.dpr;
+  const palette = [[255, 190, 60], [210, 255, 90], [255, 70, 40], [120, 255, 200]];
+  const c = palette[(r() * palette.length) | 0];
+  SS.eyes.push({
+    x: (0.06 + r() * 0.88) * SS.w, y: (0.55 + r() * 0.33) * SS.h,
+    s: size, gap: size * (2.6 + r() * 1.4), col: c, slit: r() < 0.5,
+    t0: SS.t, life: 3 + r() * 4, blinkAt: SS.t + 0.8 + r() * 1.5, layer: near ? 2 : 1,
+  });
+}
+function ssDrawEyes(g, layer) {
+  for (const e of SS.eyes) {
+    if (e.layer !== layer) continue;
+    const age = SS.t - e.t0;
+    const fade = Math.min(1, age / 0.7, (e.life - age) / 0.6);
+    if (fade <= 0) continue;
+    // blinking: the lids close for ~0.15 s
+    let open = 1;
+    const bt = SS.t - e.blinkAt;
+    if (bt > 0 && bt < 0.16) open = Math.abs(bt - 0.08) / 0.08;
+    if (bt >= 0.16) e.blinkAt = SS.t + 1.2 + Math.random() * 2.2;
+    // pupils turn toward the cursor
+    const lx = (SS.mx * SS.w - e.x), ly = (SS.my * SS.h - e.y), ll = Math.hypot(lx, ly) || 1;
+    for (const s of [-1, 1]) {
+      const cx = e.x + s * e.gap * 0.5, cy = e.y;
+      g.save(); g.translate(cx, cy); g.scale(1, Math.max(0.06, open) * 0.62);
+      const grd = g.createRadialGradient(0, 0, 0, 0, 0, e.s * 3);
+      grd.addColorStop(0, `rgba(${e.col[0]},${e.col[1]},${e.col[2]},${0.35 * fade})`); grd.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = grd; g.beginPath(); g.arc(0, 0, e.s * 3, 0, 6.283); g.fill();
+      g.fillStyle = `rgba(${e.col[0]},${e.col[1]},${e.col[2]},${0.95 * fade})`;
+      g.beginPath(); g.arc(0, 0, e.s, 0, 6.283); g.fill();
+      g.fillStyle = `rgba(0,0,0,${fade})`;
+      const px = lx / ll * e.s * 0.35, py = ly / ll * e.s * 0.35;
+      g.beginPath();
+      if (e.slit) g.ellipse(px, py, e.s * 0.18, e.s * 0.85, 0, 0, 6.283); else g.arc(px, py, e.s * 0.45, 0, 6.283);
+      g.fill();
+      g.restore();
+    }
+  }
+}
+function ssFrame(now) {
+  const st = document.getElementById('start');
+  if (!st || st.style.display === 'none' || !SS.cv) { SS.raf = 0; return; }
+  SS.raf = requestAnimationFrame(ssFrame);
+  const t = now / 1000, dt = Math.min(0.05, t - (SS.t || t)); SS.t = t;
+  ssBuild();
+  const g = SS.g, W = SS.w, H = SS.h;
+  // sky: near-black green with a faint moon glow high up
+  const sky = g.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, '#0a1714'); sky.addColorStop(0.55, '#06100d'); sky.addColorStop(1, '#010303');
+  g.fillStyle = sky; g.fillRect(0, 0, W, H);
+  const moon = g.createRadialGradient(W * 0.72, H * 0.12, 0, W * 0.72, H * 0.12, H * 0.5);
+  moon.addColorStop(0, 'rgba(150,190,170,0.16)'); moon.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = moon; g.fillRect(0, 0, W, H);
+  SS.eyes = SS.eyes.filter(e => SS.t - e.t0 < e.life);
+  if (SS.t > SS.nextEye) { ssSpawnEye(); SS.nextEye = SS.t + 1.4 + Math.random() * 3.2; }
+  for (let i = 0; i < SS.layers.length; i++) {
+    const L = SS.layers[i];
+    const dx = Math.sin(t * 0.35 + i) * L.sway * SS.dpr + (SS.mx - 0.5) * -10 * i * SS.dpr;
+    g.drawImage(L.cv, dx, 0);
+    // mist between layers, drifting
+    const mist = g.createLinearGradient(0, H * 0.5, 0, H);
+    const a = 0.05 + 0.03 * Math.sin(t * 0.2 + i * 1.7);
+    mist.addColorStop(0, 'rgba(60,90,80,0)'); mist.addColorStop(0.6, `rgba(60,90,80,${a})`); mist.addColorStop(1, 'rgba(60,90,80,0)');
+    g.fillStyle = mist; g.fillRect(0, 0, W, H);
+    if (i === 1 || i === 2) ssDrawEyes(g, i);
+  }
+  void dt;
+}
+function ssInit() {
+  SS.cv = document.getElementById('startbg');
+  if (!SS.cv) return;
+  SS.g = SS.cv.getContext('2d');
+  addEventListener('mousemove', (e) => { SS.mx = e.clientX / Math.max(1, innerWidth); SS.my = e.clientY / Math.max(1, innerHeight); });
+  addEventListener('resize', () => { SS.w = 0; });
+  // text drifts down into place, line by line
+  const items = document.querySelectorAll('#start .fl');
+  items.forEach((el, i) => { el.style.animationDelay = (0.25 + i * 0.09).toFixed(2) + 's'; });
+  if (!SS.raf) SS.raf = requestAnimationFrame(ssFrame);
+}
+function ssShow() { const st = document.getElementById('start'); if (st) { st.style.display = 'flex'; if (!SS.raf) SS.raf = requestAnimationFrame(ssFrame); } }
+
+// ---------------------------------------------------------------- reset world
+let resetArm = 0;
+function resetWorldClick() {
+  const b = document.getElementById('resetbtn');
+  const now = performance.now();
+  if (now > resetArm) {                       // first click arms it: no browser dialogs
+    resetArm = now + 3000;
+    if (b) { b.textContent = 'Click again to reset'; b.classList.add('armed'); }
+    setTimeout(() => { if (performance.now() > resetArm && b) { b.textContent = 'Reset World'; b.classList.remove('armed'); } }, 3100);
+    return;
+  }
+  resetArm = 0;
+  if (b) { b.textContent = 'Reset World'; b.classList.remove('armed'); }
+  REMAINS.length = 0; FIGHT.blood.length = 0; FIGHT.splatN = 0; FIGHT.splats.fill(undefined);
+  const keep = started && PROG.last ? C.cloneDesign(PROG.last) : null;
+  Promise.resolve(rebuildWorld()).then(() => { if (keep) { try { becomeDesigned(keep); } catch (e) { console.warn(e); } } });
+}
+
+// ---------------------------------------------------------------- death screen
+function showDeath(dead) {
+  const el = document.getElementById('deathfx');
+  if (!el) return;
+  const cause = dead ? dead.deathCause : '';
+  const why = cause === 'drowned' ? 'You drowned.' : cause === 'predation' ? 'You were killed.' :
+              cause === 'oldage' ? 'You died of old age.' : cause === 'toxin' ? 'You were poisoned.' :
+              cause === 'starvation' ? 'You starved.' : '';
+  const sub = el.querySelector('.sub'); if (sub) sub.textContent = why + ' Your line continues in your nearest kin.';
+  showDeath.t0 = performance.now();
+  deathTick();
+  if (SND.ctx && SND.on) { sndThump(0.6); setTimeout(() => sndThump(0.4), 380); }
+}
+// driven from the frame loop (and a timer fallback) so it never depends on CSS animation timing
+function deathTick() {
+  const el = document.getElementById('deathfx');
+  if (!el || showDeath.t0 == null) return;
+  const k = (performance.now() - showDeath.t0) / 4200;
+  if (k >= 1) { el.style.opacity = '0'; el.style.visibility = 'hidden'; showDeath.t0 = null; return; }
+  const a = k < 0.14 ? k / 0.14 : k > 0.78 ? (1 - k) / 0.22 : 1;
+  el.style.visibility = 'visible'; el.style.opacity = a.toFixed(3);
+  const big = el.querySelector('.big'); if (big) big.style.transform = 'scale(' + (1.18 - 0.18 * Math.min(1, k * 1.3)).toFixed(3) + ')';
+  clearTimeout(deathTick._t); deathTick._t = setTimeout(deathTick, 50);
+}
+
+let drownMsgT = 0;
+function drownFx(dt) {
+  const c = player.c, el = document.getElementById('drownfx');
+  const wl = terrain && terrain.LV ? terrain.LV.water * HEIGHT_SCALE : -1e9;
+  const under = player.camY < wl - 0.5;
+  const drown = !!(c && c.alive && c._drown && !player.spectator);
+  if (el) el.style.opacity = (under ? 0.85 : drown ? 0.5 : 0).toFixed(2);
+  if (drown) {
+    FIGHT.hurtFx = Math.min(1, FIGHT.hurtFx + dt * 1.6);
+    drownMsgT -= dt;
+    if (drownMsgT <= 0) {
+      drownMsgT = 2.2; toast('Drowning! You have no fins. Get your head above water.', 2000);
+      if (SND.ctx && SND.on) for (let k = 0; k < 4; k++) setTimeout(() => sndNoiseBurst(320 + Math.random() * 300, 6, 0.12, 0.12, 0, 0.6), k * 110);
+    }
+  } else drownMsgT = 0;
+}
 function stepSim(dt) {
   if (player.atkCD > 0) player.atkCD = Math.max(0, player.atkCD - dt);
   fightTick(dt);
@@ -10493,10 +11366,12 @@ function updateCamera(dt) {
   if (player.dist <= 0) {
     // FIRST PERSON: eye sits at the head, nudged forward along the body axis.
     player._minD = bodyExtent(c) * 1.25 + NEAR * 6;
-    const fwd = (bx * 0.35 + nk * bx * 0.25) * BODY_SCALE;
+    const fo = c.genome && c.genome.design ? c._fpOff : null;
+    const fwd = fo ? fo.f : (bx * 0.35 + nk * bx * 0.25) * BODY_SCALE;
     player.camX = clamp(c.x + Math.cos(player.yaw) * fwd, 0, WORLD_W);
     player.camZ = clamp(c.y + Math.sin(player.yaw) * fwd, 0, WORLD_H);
-    const eye = Math.max(headY, groundAt(player.camX, player.camZ)
+    const eye = fo ? Math.max(groundAt(c.x, c.y) + fo.y, groundAt(player.camX, player.camZ) + NEAR * 3) + player.jumpY
+                   : Math.max(headY, groundAt(player.camX, player.camZ)
                 + ((p.standH || p.radius) * 0.6) * BODY_SCALE + NEAR * 3) + player.jumpY;
     player.camY += (eye + player.fly - player.camY) * Math.min(1, dt * 14);
     if (!isFinite(player.camY)) player.camY = eye + player.fly;
@@ -10539,7 +11414,9 @@ function ensureDepth() {
   depthW = w; depthH = h;
 }
 function resize() {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const lim = dev && dev.limits ? dev.limits.maxTextureDimension2D : 8192;
+  let dpr = Math.min(window.devicePixelRatio || 1, 2) * GFX.res;
+  dpr = Math.min(dpr, lim / Math.max(1, canvas.clientWidth), lim / Math.max(1, canvas.clientHeight), 3);
   const w = Math.max(1, Math.floor(canvas.clientWidth * dpr));
   const h = Math.max(1, Math.floor(canvas.clientHeight * dpr));
   if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
@@ -10577,7 +11454,7 @@ function renderFrame(t) {
   const sunA = (world.bt || 0) * 0.4;
   gArr[20] = Math.cos(sunA) * 0.45; gArr[21] = 0.72 + 0.28 * lt; gArr[22] = Math.sin(sunA) * 0.45; gArr[23] = 0;
   gArr[24] = fog[0]; gArr[25] = fog[1]; gArr[26] = fog[2]; gArr[27] = 1;
-  gArr[28] = t; gArr[29] = FOG_DENSITY * (1 + 2.4 * can) * (1 + 3.2 * (1 - lt2)); gArr[30] = (0.1 + 0.9 * lt2) * (1 - 0.22 * can); gArr[31] = terrain.LV.water * HEIGHT_SCALE;
+  gArr[28] = t; gArr[29] = FOG_DENSITY * GFX.fog * (1 + 2.4 * can) * (1 + 3.2 * (1 - lt2)); gArr[30] = (0.1 + 0.9 * lt2) * (1 - 0.22 * can); gArr[31] = terrain.LV.water * HEIGHT_SCALE;
   dev.queue.writeBuffer(gBuf, 0, gArr);
 
   const nInst = buildCreatureInstances(player.camX, player.camZ, t);
@@ -10628,6 +11505,7 @@ function renderFrame(t) {
 let hudAcc = 0;
 function updateHUD() {
   edHudLine();
+  gfxPlace();
   const c = player.c;
   if (c && c.alive) {
     const p = c.ph;
@@ -10641,6 +11519,7 @@ function updateHUD() {
     $('v-g').style.width = clamp((c._growthAvg || 0) * 100, 0, 100) + '%';
     $('v-stats').innerHTML =
       `<span class="k">mass</span> <span class="v">${p.mass.toFixed(1)}</span> · ` +
+      ((c._bulk || 0) > 1.005 ? `<span class="k">size</span> <span class="v">x${c._bulk.toFixed(2)}</span> · ` : '') +
       `<span class="k">reach</span> <span class="v">${p.reach.toFixed(0)}</span> · ` +
       `<span class="k">neck</span> <span class="v">${(p.neck || 0).toFixed(2)}</span><br>` +
       `<span class="k">age</span> <span class="v">${c.age.toFixed(0)}/${c.maxAge.toFixed(0)}</span> · ` +
@@ -10711,11 +11590,11 @@ function panelOpts() {
   return {
     startPop: clamp(num('startPop', 50) | 0, 2, 2000),
     startPlants: clamp(num('startPlants', 500) | 0, 0, 40000),
-    mutationRate: num('mut', 0.6), plantRate: num('plant', 40),
-    timeScale: num('tscale', 0.12), plantEnergy: num('pe', 30),
-    dayLen: num('dayl', 18), yearLen: num('yearl', 70),
-    carrionLife: num('clife', 12), carrionYield: num('cy', 1),
-    founderDiversity: num('fd', 0.4), foodPatchiness: num('fp', 0.7), flags: panelFlags(),
+    mutationRate: num('mut', 0.6), plantRate: num('plant', 20),
+    timeScale: num('tscale', 0.05), plantEnergy: num('pe', 10),
+    dayLen: num('dayl', 10), yearLen: num('yearl', 10),
+    carrionLife: num('clife', 50), carrionYield: num('cy', 0.5),
+    founderDiversity: num('fd', 0.6), foodPatchiness: num('fp', 0.5), flags: panelFlags(),
     terrainRelief: num('trelief', 1), waterDepthMul: num('twater', 1),
     regionDensity: num('tregion', 1), treeDensity: num('ttree', 1),
   };
@@ -10881,6 +11760,7 @@ function drawMinimap() {
 
 // ================================================================= input
 function bindInput() {
+  gfxBind();
   addEventListener('keydown', (e) => {
     if (ED.open) return;
     // Only a field you are actually TYPING into may swallow keys. Previously any
@@ -11000,8 +11880,12 @@ function bindInput() {
     }
     const btn = e.target && e.target.closest ? e.target.closest('[data-arch]') : null;
     if (btn) { e.stopPropagation(); becomeArchetype(btn.getAttribute('data-arch')); beginPlay(); return; }
-    beginPlay();
+    startEl.style.display = 'none';
+    openEditor('start');
   });
+  const rb = $('resetbtn');
+  if (rb) rb.addEventListener('click', (e) => { e.stopPropagation(); resetWorldClick(); });
+  ssInit();
   addEventListener('wheel', (e) => {
     if (ED.open) return;
     if (e.target !== canvas) return;               // let the control panel scroll normally
@@ -11027,6 +11911,7 @@ function bindInput() {
 // =====================================================================
 const ED_POD_R = 6.5;           // radius of the clearing under the creature (editor units: 1 = one body radius)
 const ED_FOV = 0.78;
+let ED_HAT = null;              // ground height of the editor scene at (r, angle), for the camera
 let edEnv = null;               // { vb, ib, count, skyVB, skyIB, skyCount }
 function edNoise(a, s) {        // cheap smooth periodic noise on an angle
   return Math.sin(a * 3 + s) * 0.5 + Math.sin(a * 7 + s * 2.1) * 0.25 + Math.sin(a * 13 + s * 3.7) * 0.12;
@@ -11040,7 +11925,7 @@ function buildEditorEnv() {
   const GY = 0;
   const rings = [ED_POD_R, 7, 8, 9.5, 11, 13, 15.5, 18.5, 22, 26, 31, 37, 44, 52, 62, 74, 90, 110, 135, 165, 200];
   const SEG = 128;
-  const hAt = (r, a) => {
+  const hAt = ED_HAT = (r, a) => {
     const bank = Math.max(0, Math.min(1, (r - 14) / 30));
     const h = bank * bank * (3 + 7 * (0.5 + 0.5 * edNoise(a, 1.7))) + (r > 70 ? (r - 70) * 0.18 * (0.6 + 0.4 * edNoise(a, 3.3)) : 0);
     const bump = 0.12 * Math.sin(r * 0.7 + a * 5) * Math.min(1, Math.max(0, r - ED_POD_R) / 4);
@@ -11613,6 +12498,11 @@ function edCamera(t) {
   const eye = [target[0] + Math.cos(ED.cam.yaw) * cp * dist, target[1] + Math.sin(ED.cam.pitch) * dist,
                target[2] + Math.sin(ED.cam.yaw) * cp * dist];
   eye[1] = Math.max(eye[1], 0.5);
+  // never below the meadow or the hills around it
+  if (ED_HAT) {
+    const r = Math.hypot(eye[0], eye[2]), a = Math.atan2(eye[2], eye[0]);
+    eye[1] = Math.max(eye[1], ED_HAT(r, a) + 0.9, ED_HAT(r + 2, a) + 0.6);
+  }
   return { eye, target, pl };
 }
 function edRay(clientX, clientY) {
@@ -12573,7 +13463,7 @@ function closeEditor(apply) {
   lastT = 0;
   if (mode === 'start') {
     if (apply) { becomeDesigned(des); started = true; }
-    else { const st = $('start'); if (st && !started) st.style.display = 'flex'; }
+    else if (!started) ssShow();
   } else if (apply) applyDesignToPlayer(des);
   updateHUD(); updateStats();
 }
@@ -12796,7 +13686,7 @@ function loop(now) {
     return;
   }
   try { tick(dt); } catch (e) { running = false; fatal('Render loop failed: ' + e.message); throw e; }
-  try { objTick(dt); sndTick(dt); } catch (e) { console.warn(e); }
+  try { objTick(dt); sndTick(dt); spatTick(dt); } catch (e) { console.warn(e); }
   requestAnimationFrame(loop);
 }
 
@@ -12936,6 +13826,10 @@ window.__G3D = {
   spawnNewborn: (src) => spawnNewborn(src),
   setDist(d) { player.dist = clamp(d, 0, THIRD_MAX); },
   HEIGHT_SCALE, WORLD_W, WORLD_H,
+  begin: () => { started = true; const st = document.getElementById('start'); if (st) st.style.display = 'none'; }, showDeath: (c) => showDeath(c),
+  get REMAINS() { return REMAINS; }, remainsAdd: (c) => remainsAdd(c),
+  get GFX() { return GFX; }, gfxSet: (n) => gfxSet(n), feedGrowth: (c, m) => feedGrowth(c, m),
+  spat: { stepInterval, stepSurface, proxDraw, sndPlacer: (p) => SND.ctx && sndPlacer(SND.ctx, p, SND.master), get ok() { return SPAT.ok; } },
   get FIGHT() { return FIGHT; }, get simT() { return simT; },
   dodge: () => tryDodge(), lock: () => toggleLock(),
   fightFilter: (v, a, d) => fightHitFilter(v, a, d),
