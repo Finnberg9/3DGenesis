@@ -2,6 +2,20 @@
 
 Build: `dev/3dgenesis-dev-src.tgz` unpacks to the patch pipeline. `bash build.sh` (edit its `cd` to your folder) turns `g3.v3` + `src/patch_*.py` into `g3.html` (= `index.html`) and extracts `core.js` for node tests.
 
+## 2026-09-22 (night): Diving, and finer parts
+
+### Diving
+- The surface is no longer a ceiling. A swimmer in deep water goes where it looks: pitch the nose down and hold forward to descend, space to rise, ctrl (or C) to sink straight down. Depth and the controls are on the HUD.
+- A gill breather is neutrally buoyant and stays wherever you leave it, all the way to the sea floor. An air breather is buoyant, drifts back up when you stop working at it, and starts drowning once its head goes under, so a diving lungfish has to time its trips.
+- Fixed with it: a swimmer floating at the surface of deep water was counted as submerged and drowned. Only an animal that has actually dived counts as under now.
+
+### Jaws
+- Fixed the muzzle: the flesh was built from six ellipsoids spaced further apart than they were wide, so a long jaw came out as a string of separate lumps with teeth between them. Segment count now follows jaw length and each blob overlaps its neighbour, so the snout is one smooth piece.
+- Teeth are smaller and there are more of them, capped against the depth of the jaw they sit in, so they read as a tooth row instead of a handful of white spikes. Gums are a thin line along the jaw rather than a bead per tooth.
+
+### Fins, sails and wings
+- The webbing between fin rays is built from twice as many, thinner sections, tapering and darkening toward the edge, so a sail or a fluke reads as a sheet instead of a row of beads. Rays are slimmer and taper to the edge.
+
 ## 2026-09-22 (later still): Sea life, breathing, and fixes
 
 ### Breathing

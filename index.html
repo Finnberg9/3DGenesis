@@ -2907,8 +2907,11 @@
       c._inHazard = inHazard ? 1 : 0;   // fed back into next step's senses
       // drowning: a body without fins whose head is under water loses energy
       // fast (a full reserve lasts about eight seconds)
-      const underNow = !p.canFly && terrain.isWater(c.x, c.y) &&
+      const deepHere = terrain.isWater(c.x, c.y) &&
         waterDepth(terrain, c.x, c.y) > headHeight(world, p) - (c.jumpLv || 0) * 8;
+      // a swimmer floats at the surface with its head out; it is only under
+      // when it has actually dived (the game sets _sub for the one you steer)
+      const underNow = !p.canFly && deepHere && (!p.canSwim || !!c._sub);
       const cantBreathe = underNow ? !p.waterBreath : !p.airBreath;
       if (cantBreathe) { c.energy -= p.storage * 0.12 * dt; c._drown = underNow ? 1 : 2; }
       else c._drown = 0;
@@ -6289,7 +6292,11 @@ function drawCreature(c, t, camDist) {
 
   let groundY = surf;
   const inWater = h < LVw;
-  if (inWater && p.canSwim) groundY = Math.max(groundY, LVw * HEIGHT_SCALE - p.radius * 0.8 * S);
+  if (inWater && p.canSwim) {
+    groundY = Math.max(groundY, LVw * HEIGHT_SCALE - p.radius * 0.8 * S);
+    if (c === player.c && !player.spectator && (player.dive || 0) > 0)
+      groundY = Math.max(surf + p.radius * 0.55 * S, groundY - player.dive);
+  }
   if (p.canFly) {
     groundY += (c === player.c && !player.spectator)
       // R is declared below, so use its expression directly: referencing R here
@@ -7095,20 +7102,25 @@ function drawFan(g, A, B, angs, lens, skin, ray, thin, ripple, t) {
     const wob = Math.sin(t * 2.4 - j * 0.8) * (ripple || 0);
     const tip = v3.add(v3.mul(dir, lens[j]), v3.mul(Nrm, wob * lens[j] * 0.25));
     pts.push(tip);
-    g.tube([0, 0, 0], tip, 0.055, 0.03, ray, 3);
+    g.tube([0, 0, 0], tip, 0.045, 0.016, ray, 3);          // a slim ray, tapering to the edge
   }
-  // membrane: flat ellipsoids spanning neighbouring rays
+  // Membrane: flat ellipsoids spanning neighbouring rays. Enough rows that the
+  // web reads as a sheet instead of a string of beads, thinning toward the
+  // edge and darkening slightly where it is stretched thinnest.
+  const ROWS = [0.22, 0.4, 0.58, 0.74, 0.88, 0.98];
+  const edge = colMul(skin, 0.86);
   for (let j = 0; j < n - 1; j++) {
     const p0 = pts[j], p1 = pts[j + 1];
-    for (const u of [0.35, 0.7, 0.95]) {
+    for (const u of ROWS) {
       const q0 = v3.mul(p0, u), q1 = v3.mul(p1, u);
       const m = v3.lerp(q0, q1, 0.5);
       const span = v3.sub(q1, q0);
       const out = v3.norm(m);
-      const w = v3.len(span) * 0.62 + 0.04;
-      const h = v3.len(p0) * 0.2 + 0.05;
+      const w = v3.len(span) * 0.66 + 0.03;
+      const h = v3.len(p0) * 0.16 + 0.04;
       // ellipsoid y along the outward direction, x across the span, z = plane normal
-      g.sp(m[0] * 0.92, m[1] * 0.92, m[2] * 0.92, out[0], out[1], out[2], w, h * (1.25 - u * 0.5), thin, skin, span[0], span[1], span[2]);
+      g.sp(m[0] * 0.94, m[1] * 0.94, m[2] * 0.94, out[0], out[1], out[2],
+           w, h * (1.3 - u * 0.55), thin * (1 - u * 0.45), u > 0.88 ? edge : skin, span[0], span[1], span[2]);
     }
   }
 }
@@ -7182,8 +7194,8 @@ const VIS = {
     for (let i = 0; i < 6; i++) g.cn(-0.34 - o * 0.5, 0.6, (i - 2.5) * 0.2, 1, 0.1, 0, 0.065, 0.3, IVORY);
     for (const s of [1, -1]) g.cn(-0.34 - o * 0.5, 0.62, s * 0.62, 1, 0.2, 0, 0.1, 0.5, IVORY);
   } },
-  m_rex: { name: 'crushing jaw', cat: 'mouth', size: 0.74, col: 'base', use: 'a deep bone-cracking bite: the heaviest damage of any mouth, and the most genome space', draw(g, c, e) { dinoJawHard(g, c, e, jawShape('m_rex')); } },
-  m_spino: { name: 'fishing jaw', cat: 'mouth', size: 0.62, col: 'base', use: 'long crocodile jaws full of conical teeth: extra reach, good in water', draw(g, c, e) { dinoJawHard(g, c, e, jawShape('m_spino')); } },
+  m_rex: { name: 'crushing jaw', cat: 'mouth', size: 0.66, col: 'base', use: 'a deep bone-cracking bite: the heaviest damage of any mouth, and the most genome space', draw(g, c, e) { dinoJawHard(g, c, e, jawShape('m_rex')); } },
+  m_spino: { name: 'fishing jaw', cat: 'mouth', size: 0.5, col: 'base', use: 'long crocodile jaws full of conical teeth: extra reach, good in water', draw(g, c, e) { dinoJawHard(g, c, e, jawShape('m_spino')); } },
   m_short: { name: 'short muzzle', cat: 'mouth', size: 0.6, col: 'base', use: 'a short deep bulldog muzzle: fast, strong bites at close range', draw(g, c, e) { dinoJawHard(g, c, e, jawShape('m_short')); } },
   m_duck: { name: 'duck bill', cat: 'mouth', size: 0.64, col: 'base', use: 'a broad beak with grinding rows behind it: strips plants fast and reaches further', draw(g, c, e) { dinoJawHard(g, c, e, jawShape('m_duck')); } },
   m_hook: { name: 'hooked beak', cat: 'mouth', size: 0.36, col: [0.36, 0.30, 0.26], draw(g, c) {
@@ -7576,12 +7588,14 @@ function jawF(F) {
 // marks the pieces that ride the jaw bone, so they swing when it opens)
 function dinoJawFlesh(F0, S) {
   const F = jawF(F0);
-  const N = 5;
+  const N = Math.max(6, Math.round((S.len + 0.35) * 5));
+  const stepU = (S.len + 0.35) / N;              // spacing along the snout
+  const runU = Math.max(0.16, stepU * 1.25);     // half-length of each blob: they must overlap
   for (let i = 0; i <= N; i++) {
     const u = i / N, x = -0.35 + u * (S.len + 0.35);
     const p = jawProfile(S, u);
     const y = 0.42 - S.curve * u * u * 1.4;
-    F.e(x, y + p.d * 0.30, 0, 0.12, 1, 0, 1, 0, 0, p.w * 1.02, p.d * 0.62, p.w, 0.22);   // upper muzzle
+    F.e(x, y + p.d * 0.30, 0, 0.12, 1, 0, 1, 0, 0, runU, p.d * 0.62, p.w, 0.3);   // upper muzzle
   }
   if (S.brow) for (const s of [1, -1]) F.e(-0.15, 0.95, s * S.wide * 0.8, 0, 1, 0, 1, 0, 0, 0.36, 0.2, 0.28, 0.16);
   F.jaw();
@@ -7589,9 +7603,9 @@ function dinoJawFlesh(F0, S) {
     const u = i / N, x = -0.35 + u * (S.len + 0.3);
     const p = jawProfile(S, u);
     const y = 0.30 - S.curve * u * u * 1.2;
-    F.e(x, y - p.d * 0.34, 0, 0.1, 1, 0, 1, 0, 0, p.w * 0.9, p.d * 0.5, p.w * 0.88, 0.18);  // mandible
+    F.e(x, y - p.d * 0.34, 0, 0.1, 1, 0, 1, 0, 0, runU, p.d * 0.5, p.w * 0.88, 0.26);  // mandible
   }
-  F.e(-0.42, 0.06, 0, 0, 1, 0, 1, 0, 0, 0.5, 0.3, 0.42, 0.2);                               // throat pouch under the chin
+  F.e(-0.42, 0.06, 0, 0, 1, 0, 1, 0, 0, 0.5, 0.3, 0.42, 0.28);                         // throat pouch under the chin
   F.main();
 }
 // the hard half: teeth, gums, tongue, throat, beak and horn ridges
@@ -7615,13 +7629,13 @@ function dinoJawHard(g0, c, e, S) {
   // dark throat behind the teeth, so an open mouth reads as a hole
   g.sp(-0.12, 0.30, 0, 0, 1, 0, 0.34, 0.42 + open * 0.5, S.wide * 0.85, MAW);
   // tooth rows: front fangs longest, tapering back; the lower row interlocks
-  const n = S.teeth;
+  const n = Math.round(S.teeth * 1.4);
   for (let i = 0; i < n; i++) {
     const u = 0.12 + (i / Math.max(1, n - 1)) * 0.84;          // along the jaw
     const p = jawProfile(S, u);
     const x = -0.3 + u * (S.len + 0.3);
     const front = Math.pow(1 - u, 0.8);
-    const size = S.tooth * (0.55 + 0.9 * front) * (i === 0 || i === 1 ? S.fang : 1);
+    const size = Math.min(p.d * 1.15, S.tooth * (0.5 + 0.7 * front) * (i === 0 || i === 1 ? S.fang : 1)) * 0.85;
     const yU = 0.42 - S.curve * u * u * 1.4 - p.d * 0.1;
     const yL = 0.30 - S.curve * u * u * 1.2 - p.d * 0.05;
     for (const s of [1, -1]) {
@@ -7636,8 +7650,8 @@ function dinoJawHard(g0, c, e, S) {
       g.cn(x, yU, z, -0.18, -1, 0, size * 0.34, size, IVORY);
       j.cn(x - 0.05, yL, z * 0.95, -0.12, 1, 0, size * 0.3, size * 0.85, IVORY);
       if (!e.lod) {
-        g.sp(x, yU + 0.03, z, 0, 1, 0, size * 0.4, 0.05, size * 0.3, gum);
-        j.sp(x - 0.05, yL - 0.03, z * 0.95, 0, 1, 0, size * 0.36, 0.05, size * 0.28, gum);
+        g.sp(x, yU + 0.02, z, 0, 1, 0, S.len / n * 0.6, 0.035, size * 0.22, gum);
+        j.sp(x - 0.05, yL - 0.02, z * 0.95, 0, 1, 0, S.len / n * 0.6, 0.035, size * 0.2, gum);
       }
     }
   }
@@ -10700,7 +10714,7 @@ function movePlayer(c, dt) {
 // A flier gets an altitude, not a hover offset. Space climbs, ctrl dives, and
 // letting go sinks slowly instead of dropping you out of the sky. Climbing is
 // charged at the core's own gait rate, so staying up costs food.
-function updateFlight(dt) { flightTick(dt); rearTick(dt); }
+function updateFlight(dt) { flightTick(dt); rearTick(dt); swimTick(dt); }
 
 function updateJump(dt) {
   if (!player.c || !player.c.alive) { player.jumpY = 0; player.jumpV = 0; player.grounded = true; return; }
@@ -12567,6 +12581,66 @@ function r2DrawSky(pass, fog, aspect) {
 }
 
 // =====================================================================
+// SWIMMING: the surface is not a ceiling. A swimmer in deep water goes where
+// it looks, so pitching down and holding forward takes you under; space rises,
+// ctrl (or C) sinks. An air breather is buoyant and drifts back up when you
+// stop working at it, and starts drowning once its head is under. A gill
+// breather is neutral: it stays wherever you leave it, all the way to the
+// sea floor.
+// =====================================================================
+const SWIM = { msg: 0 };
+function swimSurfaceY() { return (terrain && terrain.LV ? terrain.LV.water : 0.42) * HEIGHT_SCALE; }
+// how much water there is under the surface here, in world units
+function swimRoom(c) {
+  return Math.max(0, swimSurfaceY() - groundAt(c.x, c.y));
+}
+function swimmingNow() {
+  const c = player.c;
+  if (!c || !c.alive || player.spectator) return false;
+  if (!c.ph.canSwim) return false;
+  if (c.ph.canFly && player.fly > 0.6) return false;
+  return terrain.isWater(c.x, c.y) && swimRoom(c) > c.ph.radius * BODY_SCALE * 1.2;
+}
+function swimTick(dt) {
+  const c = player.c;
+  if (!c || !c.alive) { player.dive = 0; return; }
+  if (!swimmingNow()) {
+    // surfacing is quick when you leave the deep, so you never pop out inland
+    player.dive = Math.max(0, (player.dive || 0) - 260 * dt);
+    if (c) c._sub = false;
+    return;
+  }
+  const p = c.ph, S = BODY_SCALE;
+  const body = p.radius * S;
+  const maxDive = Math.max(0, swimRoom(c) - body * 1.15);
+  const speed = Math.max(40, p.speedWater * PLAYER_SPEED);
+  let d = player.dive || 0;
+  // swim where you look: forward with the nose down takes you under
+  const fwd = (keys['w'] ? 1 : 0) - (keys['s'] ? 1 : 0);
+  if (fwd) d += -Math.sin(player.pitch) * speed * fwd * dt;
+  // and the explicit controls
+  if (keys[' ']) d -= speed * 0.75 * dt;
+  if (keys['control'] || keys['c']) d += speed * 0.75 * dt;
+  // an air breather floats: let go and it rises. gills are neutral.
+  if (p.airBreath && !p.waterBreath) d -= Math.min(26, 8 + body * 0.5) * dt;
+  player.dive = clamp(d, 0, maxDive);
+  c._sub = player.dive > body * 0.8;          // the core reads this to decide if your head is under
+  // the body noses down as you descend
+  c._swimPitch = clamp((player.dive - (c._diveWas || 0)) / Math.max(1e-3, dt) / Math.max(60, speed), -0.8, 0.8);
+  c._diveWas = player.dive;
+  SWIM.msg -= dt;
+  if (c._sub && !p.waterBreath && SWIM.msg <= 0) { SWIM.msg = 3; toast('Holding your breath. Space to surface.', 1600); }
+}
+function swimHud() {
+  const c = player.c;
+  if (!c || !c.alive || !c.ph.canSwim || !terrain.isWater(c.x, c.y)) return '';
+  const d = player.dive || 0;
+  const air = c.ph.waterBreath ? '' : ' <span style="color:#ffc98a">breath</span>';
+  return `<br><span class="k">depth</span> <span class="v">${d.toFixed(0)}</span>${air}` +
+         `<br><span class="k">look down + W</span> dive · <span class="k">space</span> rise · <span class="k">ctrl</span> sink`;
+}
+
+// =====================================================================
 // FLIGHT: a real glider, not a lift. You fly where you look. Diving trades
 // height for speed, pulling up trades speed back for height, so you can swoop.
 // Flapping costs stamina and buys thrust and lift; big wings beat slowly and
@@ -13057,7 +13131,7 @@ function updateHUD() {
       `<span class="k">age</span> <span class="v">${c.age.toFixed(0)}/${c.maxAge.toFixed(0)}</span> · ` +
       `<span class="k">cells</span> <span class="v">${(p.parts || []).length}</span>` +
       (tags.length ? ` · <span class="v">${tags.join(' ')}</span>` : '') +
-      (p.canFly ? flightHud() : '') +
+      (p.canFly ? flightHud() : '') + swimHud() +
       ((player.rear || 0) > 0.05 ? `<br><span style="color:#7ee787">reared up: reach x${rearReach(p).toFixed(2)}</span>` : '');
   } else {
     $('v-name').textContent = player.spectator ? 'DETACHED CAMERA' : '-';
