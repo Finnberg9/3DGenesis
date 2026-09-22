@@ -2,6 +2,18 @@
 
 Build: `dev/3dgenesis-dev-src.tgz` unpacks to the patch pipeline. `bash build.sh` (edit its `cd` to your folder) turns `g3.v3` + `src/patch_*.py` into `g3.html` (= `index.html`) and extracts `core.js` for node tests.
 
+## 2026-09-22 (night): World detail pass
+- Sky: sun disk, moon with phases (8-day cycle), stars, drifting clouds, sunrise/sunset colours. The sun rises east, arcs over, sets west; noon height follows the season (about 88 deg in summer, 32 deg in winter). Shadows and light follow the sun by day and the moon by night.
+- Terrain: ~2000 boulders (solid, clustered, mostly small with a few huge), pebbles, stones and driftwood as ground cover; rock material with strata, cracks and lichen; bare rock on steep slopes; wet sand at the waterline; large-scale colour variation; softer, less neon ground colours.
+- Water: depth-aware (clear turquoise shallows you can see the sand through, deep blue further out), sun glint, waves breaking as foam on the shore. Lakes in cold country render as ice (visual only; not yet walkable).
+- Exposure lowered, filmic (ACES) tone curve. AO speckle removed (ordered sampling plus blur).
+- Ultra: much further draw distance (plants 18000, trees full detail to 2300, far plane 26000); high raised a little.
+- Time scale default 0.01.
+- First person: eye moved to the top of the head with the head and neck folded away on skinned bodies. UNTESTED in the headless browser; may still need work.
+- V (detached camera): your body is left to its own slow wandering and grazing instead of moving with the camera.
+- Newborn grace: for your first 45 s your own species will not attack you (fixes being killed over and over by a huge parent on respawn).
+- Not done: rivers, frozen lakes you can walk on, tree impostors, TAA.
+
 ## 2026-09-22 (evening): Render 2
 - Sun shadows: cascaded shadow map (near cascade 380 units for creatures and undergrowth, far cascade 2400 units for trees and hills), 3x3 soft filtering, texel-snapped so they do not shimmer. Trees, grass, creatures, skeletons and terrain cast; everything lit receives. Medium: 1 cascade at 1024. High: 2 at 2048. Ultra: 2 at 4096. Low: off.
 - Post-processing: half-res ambient occlusion from depth, screen-space sun shafts, quarter-res bloom, filmic grade (highlight roll-off, contrast, saturation, split toning), vignette, dithering.

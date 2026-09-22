@@ -366,7 +366,7 @@
       <label title="off = asexual budding"><input type="checkbox" id="f_sex" checked> sexual repro</label>
     </div>
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">mutation rate</span><b id="mutv">0.60</b></div><input id="mut" type="range" min="0.1" max="1" step="0.01" value="0.6"><div class="ctl-d">chance each gene mutates per birth. Live.</div></div>
-    <div class="ctl"><div class="ctl-h"><span class="ctl-n">time scale</span><b id="tscalev">0.050</b></div><input id="tscale" type="range" min="0.01" max="1" step="0.01" value="0.05"><div class="ctl-d">how fast biological time runs against wall time. Live.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">time scale</span><b id="tscalev">0.010</b></div><input id="tscale" type="range" min="0.01" max="1" step="0.01" value="0.01"><div class="ctl-d">how fast biological time runs against wall time. Live.</div></div>
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">plant regrowth</span><b id="plantv">20</b></div><input id="plant" type="range" min="5" max="900" step="5" value="20"><div class="ctl-d">plant spawn attempts per biological second. Live.</div></div>
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">plant energy</span><b id="pev">10</b></div><input id="pe" type="range" min="5" max="120" step="5" value="10"><div class="ctl-d">energy in one plant before biome multipliers. Live.</div></div>
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">day length</span><b id="daylv">10</b></div><input id="dayl" type="range" min="1" max="40" step="1" value="10"><div class="ctl-d">length of one day/night cycle. Live.</div></div>
@@ -1909,7 +1909,7 @@
   const FOREST_DENS = { forest: 0.8, marsh: 0.5, taiga: 0.6, plains: 0.09, savanna: 0.08, beach: 0.14,
                         desert: 0.03, tundra: 0.04, rock: 0.02, scree: 0, snow: 0, shallow: 0.05, deep: 0 };
   const FOREST_CELL = 64;
-  const TREE_R = [16, 7.5, 3, 3, 5, 4, 4, 4, 2.2];     // trunk collision radius at scale 1 (bark plus root flare)
+  const TREE_R = [16, 7.5, 3, 3, 5, 4, 4, 4, 2.2, 8.5];     // trunk collision radius at scale 1 (bark plus root flare)
   function buildForest(terrain, w, h, density) {
     const trees = [];
     const hsh = (i, j, s) => { let v = ((i * 73856093) ^ (j * 19349663) ^ (s * 83492791)) >>> 0; v = Math.imul(v ^ (v >>> 15), 2246822519) >>> 0; v = Math.imul(v ^ (v >>> 13), 3266489917) >>> 0; return ((v ^ (v >>> 16)) >>> 0) / 4294967296; };
@@ -1939,6 +1939,20 @@
       else if (b === 'rock') kind = r < 0.5 ? 4 : 3;
       else kind = r < 0.45 ? 1 : r < 0.75 ? 3 : 5;
       trees.push({ x, y, kind, s: sc, rot: hsh(i, j, 6) * 6.2832, v: (hsh(i, j, 7) * 3) | 0, trunkR: TREE_R[kind] * sc, isTree: true, forest: true });
+    }
+    // boulders: scattered everywhere, thick on rock and scree, in clusters
+    const BOULDER = { rock: 0.55, scree: 0.7, tundra: 0.25, snow: 0.12, beach: 0.12, desert: 0.14, savanna: 0.1, plains: 0.07, forest: 0.08, taiga: 0.14, marsh: 0.03 };
+    const BC = 96, bnx = Math.ceil(w / BC), bny = Math.ceil(h / BC);
+    for (let j = 0; j < bny; j++) for (let i = 0; i < bnx; i++) {
+      const x = (i + 0.1 + hsh(i, j, 11) * 0.8) * BC, y = (j + 0.1 + hsh(i, j, 12) * 0.8) * BC;
+      if (x < 8 || y < 8 || x > w - 8 || y > h - 8) continue;
+      const b = terrain.biomeAt(x, y);
+      if (b === 'deep' || b === 'shallow') continue;
+      if (terrain.height(x, y) < terrain.LV.water + 0.002) continue;
+      const clump = 0.5 + 0.9 * hsh(Math.floor(i / 4), Math.floor(j / 4), 13);      // regional clusters
+      if (hsh(i, j, 14) > (BOULDER[b] || 0) * clump) continue;
+      const sc = 0.35 + Math.pow(hsh(i, j, 15), 2.2) * 1.9;                          // mostly small, a few huge
+      trees.push({ x, y, kind: 9, s: sc, rot: hsh(i, j, 16) * 6.2832, v: (hsh(i, j, 17) * 3) | 0, trunkR: TREE_R[9] * sc, isTree: true, forest: true, boulder: true });
     }
     const grid = makeGrid(w, h, 110);
     for (const t of trees) grid.insert(t);
@@ -3957,7 +3971,7 @@ const HEIGHT_SCALE = 2000;    // sim elevation (0..1, unitless) -> world Y units
 const GRID_STEP = 24;        // terrain mesh sample spacing, world units.
                              // At 20 the facets were larger than the animals
                              // standing on them and read as smooth blobs.
-const FAR = 14000;           // far plane, also the fog horizon
+const FAR = 26000;           // far plane, also the fog horizon
 const NEAR = 1.0;
 const FOG_DENSITY = 1 / 6600;
 const LOD_FULL = 900;        // draw every body cell inside this radius
@@ -3971,9 +3985,9 @@ const WARMUP_BIO = 60;      // biological seconds simulated before you take a bo
 
 const clamp = C.clamp;
 const PAL = {
-  deep: [23, 56, 95], shallow: [47, 119, 158], beach: [226, 203, 140], marsh: [84, 120, 76],
-  plains: [126, 178, 84], forest: [56, 116, 52], taiga: [43, 84, 67], savanna: [186, 174, 96],
-  desert: [222, 194, 128], tundra: [143, 155, 135], rock: [138, 131, 120], scree: [171, 166, 157],
+  deep: [23, 56, 95], shallow: [120, 118, 96], beach: [196, 178, 132], marsh: [78, 104, 68],
+  plains: [100, 138, 70], forest: [52, 96, 46], taiga: [43, 78, 62], savanna: [160, 150, 92],
+  desert: [196, 170, 118], tundra: [143, 155, 135], rock: [138, 131, 120], scree: [171, 166, 157],
   snow: [238, 244, 250],
 };
 const BNAMES = ['deep','shallow','beach','marsh','plains','forest','taiga','savanna','desert','tundra','rock','scree','snow'];
@@ -4409,8 +4423,40 @@ struct VO { @builtin(position) pos: vec4<f32>, @location(0) nrm: vec3<f32>,
 @vertex fn vs(@location(0) p: vec3<f32>, @location(1) n: vec3<f32>, @location(2) c: vec3<f32>) -> VO {
   var o: VO; o.pos = g.viewProj * vec4<f32>(p, 1.0); o.nrm = n; o.col = c; o.wpos = p; return o;
 }
+fn th(p: vec2<f32>) -> f32 { var p3 = fract(vec3<f32>(p.x, p.y, p.x) * 0.1031); p3 += dot(p3, p3.yzx + vec3<f32>(33.33)); return fract((p3.x + p3.y) * p3.z); }
+fn tn(p: vec2<f32>) -> f32 {
+  let i = floor(p); let f = fract(p); let u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(th(i), th(i + vec2<f32>(1.0, 0.0)), u.x), mix(th(i + vec2<f32>(0.0, 1.0)), th(i + vec2<f32>(1.0, 1.0)), u.x), u.y);
+}
+fn fbm(p: vec2<f32>) -> f32 { return tn(p) * 0.5 + tn(p * 2.03 + vec2<f32>(5.2, 1.3)) * 0.3 + tn(p * 4.1 + vec2<f32>(2.7, 9.1)) * 0.2; }
 @fragment fn fs(i: VO) -> @location(0) vec4<f32> {
-  return vec4<f32>(shade(i.col, i.nrm, i.wpos), 1.0);
+  var N = normalize(i.nrm);
+  let d = distance(i.wpos, g.camPos.xyz);
+  let det = 1.0 - smoothstep(600.0, 3000.0, d);
+  let xz = i.wpos.xz;
+  var col = i.col;
+  // large patches and fine grain break up the flat vertex colours
+  let mcr = fbm(xz * 0.004);
+  let fine = mix(0.5, fbm(xz * 0.09), det);
+  col *= 0.80 + 0.28 * mcr + 0.16 * (fine - 0.5);
+  // steep ground is bare layered rock
+  let slope = 1.0 - N.y;
+  let rockK = smoothstep(0.22, 0.42, slope + (mcr - 0.5) * 0.12);
+  let strata = tn(vec2<f32>(i.wpos.y * 0.22 + mcr * 3.0, (xz.x + xz.y) * 0.01));
+  let rock = vec3<f32>(0.40, 0.38, 0.34) * (0.72 + 0.45 * strata) * (0.85 + 0.3 * fine);
+  col = mix(col, rock, rockK);
+  // sand darkens where waves wet it
+  let sea = g.params.w;
+  let wet = (1.0 - smoothstep(sea + 0.5, sea + 5.0, i.wpos.y)) * step(sea - 30.0, i.wpos.y);
+  col *= 1.0 - 0.3 * wet;
+  // bump from the fine noise so the sun rakes across the ground
+  let e = 1.5;
+  let h0 = fbm(xz * 0.09); let hx = fbm((xz + vec2<f32>(e, 0.0)) * 0.09); let hz = fbm((xz + vec2<f32>(0.0, e)) * 0.09);
+  N = normalize(N + vec3<f32>(h0 - hx, 0.0, h0 - hz) * 2.2 * det * (0.4 + 0.6 * rockK));
+  var lit = shade(col, N, i.wpos);
+  let V = normalize(g.camPos.xyz - i.wpos);
+  lit += vec3<f32>(0.5) * pow(max(dot(reflect(-normalize(g.lightDir.xyz), N), V), 0.0), 40.0) * wet * 0.25 * g.params.z;
+  return vec4<f32>(lit, 1.0);
 }`;
 
 const WGSL_INST = WGSL_COMMON + `
@@ -4786,7 +4832,21 @@ fn barkTri(p: vec3<f32>, N: vec3<f32>, fine: f32, da: f32, dy: f32) -> f32 {
   var N = normalize(i.nrm);
   if (!ff && i.leaf > 0.5) { N = -N; }
   var col = i.col;
-  if (i.leaf < 0.5) {
+  if (i.leaf < -0.5) {
+    // rock: layered strata, lichen speckle, cracks, a bumped normal
+    let det = 1.0 - smoothstep(200.0, 900.0, d);
+    let q = i.wpos * 0.18;
+    let n1 = fnoise(q.xz + q.yy * 0.7);
+    let strata = fnoise(vec2<f32>(i.wpos.y * 0.9 + n1 * 2.0, (i.wpos.x + i.wpos.z) * 0.02));
+    let crack = smoothstep(0.47, 0.5, abs(fnoise(q.xy * 1.7 + q.zz) - 0.5) + 0.46);
+    let speck = smoothstep(0.78, 0.86, fnoise(i.wpos.xz * 0.9 + i.wpos.yy * 0.4));
+    var rc = col * (0.78 + 0.34 * strata) * (1.0 - 0.35 * (1.0 - crack));
+    rc = mix(rc, vec3<f32>(0.62, 0.64, 0.52), speck * 0.35);
+    col = mix(col, rc, det);
+    let b1 = fnoise(q.xz * 2.0 + q.yy);
+    let b2 = fnoise(q.zy * 2.0 + q.xx);
+    N = normalize(N + (vec3<f32>(b1 - 0.5, 0.0, b2 - 0.5) * 0.6) * det);
+  } else if (i.leaf < 0.5) {
     let det = 1.0 - smoothstep(260.0, 900.0, d);
     if (det > 0.001) {
       let hz = vec2<f32>(N.x, N.z);
@@ -5260,7 +5320,7 @@ function buildCoverMesh(kind, variant) {
 
 // ---- GPU side ---------------------------------------------------------------------------
 const FOL = { ready: false, tree: [], cover: [], instBuf: null, inst: new Float32Array(FOL_MAX_INST * FOL_IF), batches: [], key: '', coverKey: '', count: 0, canopy: null };
-const TREE_VARIANTS = 3, COVER_KINDS = 6, COVER_VARIANTS = 2;
+const TREE_VARIANTS = 3, COVER_KINDS = 9, COVER_VARIANTS = 2;
 function folUpload(m) {
   const vd = new Float32Array(m.v), id = new Uint32Array(m.i);
   const vb = dev.createBuffer({ size: Math.max(16, vd.byteLength), usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
@@ -5269,26 +5329,174 @@ function folUpload(m) {
   dev.queue.writeBuffer(ib, 0, id);
   return { vb, ib, count: id.length, tris: id.length / 3 };
 }
+// =====================================================================
+// TERRAIN 2: rocks and boulders, pebbles, driftwood, and shallow water.
+//
+// Boulders are real obstacles: the core places them with the static forest
+// (kind 9, solid like a trunk). Pebbles, stones and driftwood are ground
+// cover. Every rock is a noise-displaced icosphere, flattened and sunk into
+// the ground, with moss on its top and its own rock material in the shader.
+// Water now knows how deep it is (a height texture of the terrain), so
+// shallows turn clear turquoise over the sand, and small waves roll in and
+// break as foam on the shore.
+// =====================================================================
+function rkHash(x, y, z, s) {
+  let h = (Math.imul(x | 0, 73856093) ^ Math.imul(y | 0, 19349663) ^ Math.imul(z | 0, 83492791) ^ Math.imul(s | 0, 2654435761)) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 2246822519) >>> 0; h = Math.imul(h ^ (h >>> 13), 3266489917) >>> 0;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+function rkNoise(x, y, z, s) {                     // smooth 3D value noise, 0..1
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  const fx = x - xi, fy = y - yi, fz = z - zi;
+  const u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy), w = fz * fz * (3 - 2 * fz);
+  const L = (a, b, t) => a + (b - a) * t;
+  const c = (i, j, k) => rkHash(xi + i, yi + j, zi + k, s);
+  return L(L(L(c(0, 0, 0), c(1, 0, 0), u), L(c(0, 1, 0), c(1, 1, 0), u), v),
+           L(L(c(0, 0, 1), c(1, 0, 1), u), L(c(0, 1, 1), c(1, 1, 1), u), v), w);
+}
+// unit icosphere, subdivided n times; returns { v: [[x,y,z]], f: [[a,b,c]] }
+function rkIco(n) {
+  const t = (1 + Math.sqrt(5)) / 2;
+  let v = [[-1, t, 0], [1, t, 0], [-1, -t, 0], [1, -t, 0], [0, -1, t], [0, 1, t], [0, -1, -t], [0, 1, -t], [t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1]].map(fnorm);
+  let f = [[0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11], [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8],
+           [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9], [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1]];
+  for (let s = 0; s < n; s++) {
+    const mid = new Map(), nf = [];
+    const m = (a, b) => { const k = a < b ? a + '_' + b : b + '_' + a; let i = mid.get(k); if (i == null) { i = v.length; v.push(fnorm(fmul(fadd(v[a], v[b]), 0.5))); mid.set(k, i); } return i; };
+    for (const [a, b, c] of f) { const ab = m(a, b), bc = m(b, c), ca = m(c, a); nf.push([a, ab, ca], [b, bc, ab], [c, ca, bc], [ab, bc, ca]); }
+    f = nf;
+  }
+  return { v, f };
+}
+const RK_ICO = [rkIco(1), rkIco(2), rkIco(3)];
+// one rock: centre c, radius R, vertical squash, colour, detail level 0..2
+function folRock(m, c, R, squash, col, seed, detail, moss) {
+  const ico = RK_ICO[clamp(detail, 0, 2)];
+  const P = [], N = [];
+  const base = c[1] - R * squash * 0.35;              // sunk: the bottom third is below ground
+  const ang = seed * 1.7;
+  const ca = Math.cos(ang), sa = Math.sin(ang);
+  for (const u of ico.v) {
+    const n1 = rkNoise(u[0] * 1.6 + seed, u[1] * 1.6, u[2] * 1.6, seed | 0);
+    const n2 = rkNoise(u[0] * 3.8, u[1] * 3.8 + seed, u[2] * 3.8, (seed | 0) + 7);
+    const n3 = rkNoise(u[0] * 8.5, u[1] * 8.5, u[2] * 8.5 + seed, (seed | 0) + 13);
+    // chunky facets: a blocky low-frequency shape, softer detail on top
+    const r = R * (0.72 + 0.55 * n1 + 0.22 * n2 + 0.06 * n3);
+    let x = u[0] * r * (1.05 + 0.25 * Math.sin(seed)), y = u[1] * r * squash, z = u[2] * r;
+    const xr = x * ca - z * sa, zr = x * sa + z * ca;
+    let py = c[1] + y;
+    if (py < base) py = base + (py - base) * 0.15;     // flatten the buried underside
+    P.push([c[0] + xr, py, c[2] + zr]); N.push([0, 0, 0]);
+  }
+  for (const [a, b, cc] of ico.f) {
+    const n = fcross(fsub(P[b], P[a]), fsub(P[cc], P[a]));
+    for (const k of [a, b, cc]) N[k] = fadd(N[k], n);
+  }
+  const idx = P.map((p, k) => {
+    const n = fnorm(N[k]);
+    const h = rkNoise(p[0] * 0.3, p[1] * 0.3, p[2] * 0.3, 3);
+    let cl = fcol(col, 0.78 + 0.34 * h);
+    const up = n[1];
+    if (moss && up > 0.45) cl = fadd(fmul(cl, 1 - moss * (up - 0.45) * 1.4), fmul([0.20, 0.30, 0.10], moss * (up - 0.45) * 1.4));
+    const ao = 0.55 + 0.45 * clamp((p[1] - base) / Math.max(0.5, R * squash * 0.9), 0, 1);
+    return folV(m, p, n, fcol(cl, ao), 0, -1);
+  });
+  for (const [a, b, cc] of ico.f) m.i.push(idx[a], idx[b], idx[cc]);
+}
+const RK_COLS = [[0.46, 0.44, 0.40], [0.52, 0.47, 0.40], [0.38, 0.37, 0.36], [0.56, 0.52, 0.46]];
+// boulder "tree" kind 9: radius 10 at scale 1, sometimes a split pair
+function buildBoulderMesh(variant, lod) {
+  const m = folMB();
+  const col = RK_COLS[variant % RK_COLS.length];
+  const det = [2, 1, 0][lod];
+  folRock(m, [0, 0, 0], 10, 0.62 + 0.12 * variant, col, 11 + variant * 5, det, 0.8);
+  if (variant === 1 && lod < 2) folRock(m, [9, 0, 4], 5.5, 0.7, fcol(col, 0.95), 29, Math.max(0, det - 1), 0.8);
+  if (variant === 2 && lod < 2) { folRock(m, [-8, 0, -6], 3.2, 0.8, col, 41, 0, 0.6); folRock(m, [6, 0, -8], 2.4, 0.8, col, 47, 0, 0.6); }
+  return { m, H: 14 };
+}
+// ground-cover rocks: 6 pebble scatter, 7 medium stone, 8 driftwood
+function buildRockCover(kind, variant) {
+  const rnd = folRng(7100 + kind * 13 + variant * 5);
+  const m = folMB();
+  if (kind === 6) {
+    const n = 6 + variant * 3;
+    for (let k = 0; k < n; k++) {
+      const a = rnd() * 6.283, r = rnd() * 7, R = 0.35 + rnd() * rnd() * 1.3;
+      folRock(m, [Math.cos(a) * r, 0, Math.sin(a) * r], R, 0.55 + rnd() * 0.3, RK_COLS[(rnd() * 4) | 0], 100 + k * 3 + variant * 50, 0, 0);
+    }
+  } else if (kind === 7) {
+    folRock(m, [0, 0, 0], 2.2 + variant * 1.2, 0.65, RK_COLS[variant + 1], 200 + variant * 9, 1, 0.5);
+    folRock(m, [2.6, 0, 1.2], 0.9, 0.7, RK_COLS[0], 211 + variant, 0, 0.2);
+  } else {
+    // driftwood: a bleached, crooked log with a stub branch
+    const col = [0.62, 0.58, 0.50];
+    const pts = [], rad = [];
+    const len = 16 + variant * 6;
+    for (let k = 0; k <= 5; k++) { const u = k / 5; pts.push([u * len - len / 2, 0.6 + Math.sin(u * 5) * 0.3, Math.sin(u * 3 + variant) * 1.6]); rad.push(1.1 - 0.6 * u); }
+    folTube(m, pts, rad, 6, col, 10, 0, 0.7);
+    folLimb(m, pts[2], fadd(pts[2], [1.5, 2.5, 3.5]), 0.45, 0.2, 0.6, 5, col, 10, 0);
+  }
+  return m;
+}
+
+// ---------------------------------------------------------------- water depth
+let WH = { tex: null, nx: 0, nz: 0 };
+function waterHeightTex() {
+  if (!WH.tex) {
+    WH.tex = dev.createTexture({ size: [1, 1], format: 'rg32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
+    dev.queue.writeTexture({ texture: WH.tex }, new Float32Array([-1000, 0]), { bytesPerRow: 8 }, [1, 1]);
+    WH.nx = 1; WH.nz = 1;
+  }
+  return WH.tex;
+}
+function waterHeightUpload() {
+  if (!terrH || !terrNX) return;
+  const nx = terrNX, nz = terrNZ;
+  if (WH.tex && (WH.nx !== nx || WH.nz !== nz)) { WH.tex.destroy(); WH.tex = null; }
+  if (!WH.tex) WH.tex = dev.createTexture({ size: [nx, nz], format: 'rg32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
+  WH.nx = nx; WH.nz = nz;
+  // r: ground height (world units), g: 1 where the water is frozen (cold country)
+  const data = new Float32Array(nx * nz * 2);
+  const cold = { snow: 1, tundra: 1, taiga: 1, scree: 1 };
+  const coldAt = (x, z) => cold[terrain.biomeAt(clamp(x, 0, WORLD_W - 1), clamp(z, 0, WORLD_H - 1))] ? 1 : 0;
+  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+    const k = j * nx + i;
+    data[k * 2] = terrH[k] * HEIGHT_SCALE;
+    // a lake is frozen if its shore is cold: sample a ring around the point
+    let c = 0;
+    if (terrH[k] < terrain.LV.water && !terrain.isDeep(i * GRID_STEP, j * GRID_STEP) && (i % 2 === 0 || true)) {
+      const x = i * GRID_STEP, z = j * GRID_STEP;
+      c = coldAt(x, z) || coldAt(x + 160, z) || coldAt(x - 160, z) || coldAt(x, z + 160) || coldAt(x, z - 160) ? 1 : 0;
+    }
+    data[k * 2 + 1] = c;
+  }
+  dev.queue.writeTexture({ texture: WH.tex }, data, { bytesPerRow: nx * 8 }, [nx, nz]);
+  if (typeof makeBindGroups === 'function' && bindG) makeBindGroups();
+}
+
 function folInit() {
   if (FOL.ready) return;
   const t0 = performance.now();
   let tris = 0;
-  for (let k = 0; k < 9; k++) {
+  for (let k = 0; k < 10; k++) {
     FOL.tree[k] = [];
     for (let v = 0; v < TREE_VARIANTS; v++) {
       FOL.tree[k][v] = [];
-      for (let l = 0; l < 3; l++) { const { m, H } = buildTreeMesh(k, v, l); const g = folUpload(m); g.H = H; FOL.tree[k][v][l] = g; tris += l === 0 ? g.tris : 0; }
+      for (let l = 0; l < 3; l++) { const { m, H } = k === 9 ? buildBoulderMesh(v, l) : buildTreeMesh(k, v, l); const g = folUpload(m); g.H = H; FOL.tree[k][v][l] = g; tris += l === 0 ? g.tris : 0; }
     }
   }
-  for (let k = 0; k < COVER_KINDS; k++) { FOL.cover[k] = []; for (let v = 0; v < COVER_VARIANTS; v++) FOL.cover[k][v] = folUpload(buildCoverMesh(k, v)); }
+  for (let k = 0; k < COVER_KINDS; k++) { FOL.cover[k] = []; for (let v = 0; v < COVER_VARIANTS; v++) FOL.cover[k][v] = folUpload(k >= 6 ? buildRockCover(k, v) : buildCoverMesh(k, v)); }
   FOL.instBuf = dev.createBuffer({ size: FOL.inst.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
   FOL.ready = true;
   FOL.buildMs = performance.now() - t0; FOL.lod0Tris = tris;
 }
 // Which ground cover grows where, by biome: [kind, weight]...
 const COVER_BY_BIOME = {
-  forest: [[2, 0.55], [5, 0.3], [0, 0.35], [4, 0.2]], plains: [[0, 0.8], [4, 0.08]], savanna: [[1, 0.8], [4, 0.05]],
-  marsh: [[3, 0.8], [0, 0.3]], taiga: [[2, 0.3], [4, 0.2], [0, 0.2]], beach: [[1, 0.12]], tundra: [[0, 0.1]], shallow: [[3, 0.4]],
+  forest: [[2, 0.55], [5, 0.3], [0, 0.35], [4, 0.2], [7, 0.03], [8, 0.015]], plains: [[0, 0.8], [4, 0.08], [6, 0.04], [7, 0.015]],
+  savanna: [[1, 0.8], [4, 0.05], [6, 0.06], [7, 0.02]], marsh: [[3, 0.8], [0, 0.3], [8, 0.02]],
+  taiga: [[2, 0.3], [4, 0.2], [0, 0.2], [6, 0.08], [7, 0.04]], beach: [[1, 0.12], [6, 0.22], [8, 0.025], [7, 0.02]],
+  tundra: [[0, 0.1], [6, 0.3], [7, 0.1]], shallow: [[3, 0.4], [6, 0.15]], rock: [[6, 0.45], [7, 0.22]],
+  scree: [[6, 0.6], [7, 0.2]], snow: [[6, 0.08], [7, 0.04]], desert: [[6, 0.15], [7, 0.05]],
 };
 let COVER_R = 720; const COVER_CELL = 15;
 let TREE_LOD0 = 750, TREE_LOD1 = 2400;
@@ -5374,7 +5582,7 @@ function buildCanopyMap() {
   if (!world || !world.forest) return;
   const cell = 32, nx = Math.ceil(WORLD_W / cell), nz = Math.ceil(WORLD_H / cell);
   const a = new Float32Array(nx * nz);
-  const CR = [85, 55, 22, 18, 28, 36, 0, 30, 12];
+  const CR = [85, 55, 22, 18, 28, 36, 0, 30, 12, 0];
   for (const t of world.forest.trees) {
     const R = CR[t.kind] * t.s; if (!R) continue;
     const i0 = Math.max(0, Math.floor((t.x - R) / cell)), i1 = Math.min(nx - 1, Math.floor((t.x + R) / cell));
@@ -5397,8 +5605,79 @@ struct VO { @builtin(position) pos: vec4<f32>, @location(0) col: vec3<f32> };
 
 const WGSL_WATER = WGSL_COMMON + `
 struct VO { @builtin(position) pos: vec4<f32>, @location(0) wpos: vec3<f32> };
+@group(0) @binding(3) var hTex: texture_2d<f32>;
+fn wh(p: vec2<f32>) -> vec2<f32> {
+  let dim = vec2<i32>(textureDimensions(hTex));
+  let f = p / ${GRID_STEP}.0;
+  let i0 = vec2<i32>(floor(f)); let t = fract(f);
+  let c = dim - vec2<i32>(1);
+  let a = textureLoad(hTex, clamp(i0, vec2<i32>(0), c), 0).rg;
+  let b = textureLoad(hTex, clamp(i0 + vec2<i32>(1, 0), vec2<i32>(0), c), 0).rg;
+  let cc = textureLoad(hTex, clamp(i0 + vec2<i32>(0, 1), vec2<i32>(0), c), 0).rg;
+  let dd = textureLoad(hTex, clamp(i0 + vec2<i32>(1, 1), vec2<i32>(0), c), 0).rg;
+  var r = mix(mix(a, b, t.x), mix(cc, dd, t.x), t.y);
+  if (p.x < 0.0 || p.y < 0.0 || i0.x >= c.x || i0.y >= c.y) { r = vec2<f32>(-2000.0, 0.0); }
+  return r;
+}
+fn wn(p: vec2<f32>) -> f32 { var p3 = fract(vec3<f32>(p.x, p.y, p.x) * 0.1031); p3 += dot(p3, p3.yzx + vec3<f32>(33.33)); return fract((p3.x + p3.y) * p3.z); }
+fn wnoise(p: vec2<f32>) -> f32 {
+  let i = floor(p); let f = fract(p); let u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(wn(i), wn(i + vec2<f32>(1.0, 0.0)), u.x), mix(wn(i + vec2<f32>(0.0, 1.0)), wn(i + vec2<f32>(1.0, 1.0)), u.x), u.y);
+}
 @vertex fn vs(@location(0) p: vec3<f32>) -> VO {
   var o: VO; o.pos = g.viewProj * vec4<f32>(p, 1.0); o.wpos = p; return o;
+}
+@fragment fn fs2(i: VO) -> @location(0) vec4<f32> {
+  let t = g.params.x;
+  let sea = g.params.w;
+  let hc = wh(i.wpos.xz);
+  let depth = max(0.0, sea - hc.x);
+  let V = normalize(g.camPos.xyz - i.wpos);
+  let dist = distance(i.wpos, g.camPos.xyz);
+  let fogf = clamp(1.0 - exp(-(dist * g.params.y) * (dist * g.params.y)), 0.0, 1.0);
+  let L = normalize(g.lightDir.xyz);
+  let day = g.params.z;
+  // frozen: lakes in cold country are ice
+  if (hc.y > 0.5) {
+    let n = wnoise(i.wpos.xz * 0.05) * 0.6 + wnoise(i.wpos.xz * 0.2) * 0.4;
+    let crack = smoothstep(0.02, 0.0, abs(wnoise(i.wpos.xz * 0.03 + vec2<f32>(n)) - 0.5));
+    var ice = mix(vec3<f32>(0.62, 0.76, 0.84), vec3<f32>(0.86, 0.92, 0.96), n);
+    ice = mix(ice, vec3<f32>(0.40, 0.55, 0.66), crack * 0.6);
+    let Ni = normalize(vec3<f32>((n - 0.5) * 0.08, 1.0, (wnoise(i.wpos.zx * 0.2) - 0.5) * 0.08));
+    let sh = shadowAt(i.wpos, Ni);
+    var lit = ice * (mix(vec3<f32>(0.2, 0.24, 0.32), vec3<f32>(0.62, 0.70, 0.80), day) + vec3<f32>(0.9, 0.88, 0.82) * max(dot(Ni, L), 0.0) * 0.55 * sh * day);
+    lit += vec3<f32>(1.0) * pow(max(dot(reflect(-L, Ni), V), 0.0), 60.0) * 0.5 * day * sh;
+    return vec4<f32>(mix(lit, g.fogCol.rgb, fogf), 0.97);
+  }
+  // waves: several travelling ripples, calmer in the shallows
+  let calm = clamp(depth / 25.0, 0.25, 1.0);
+  let w1 = sin(i.wpos.x * 0.021 + i.wpos.z * 0.013 + t * 1.3);
+  let w2 = sin(i.wpos.x * -0.017 + i.wpos.z * 0.029 + t * 1.7);
+  let w3 = wnoise(i.wpos.xz * 0.08 + vec2<f32>(t * 0.4, t * 0.3)) - 0.5;
+  let n = normalize(vec3<f32>((w1 * 0.10 + w3 * 0.25) * calm, 1.0, (w2 * 0.10 + w3 * 0.2) * calm));
+  let fres = 0.03 + 0.97 * pow(1.0 - clamp(dot(n, V), 0.0, 1.0), 5.0);
+  // colour by depth: clear turquoise over sand, deep blue further out
+  let shal = vec3<f32>(0.20, 0.52, 0.52);
+  let mid = vec3<f32>(0.07, 0.30, 0.40);
+  let deep = vec3<f32>(0.03, 0.12, 0.22);
+  var col = mix(shal, mid, smoothstep(2.0, 18.0, depth));
+  col = mix(col, deep, smoothstep(18.0, 90.0, depth));
+  let sh = shadowAt(i.wpos, n);
+  let sky = mix(vec3<f32>(0.08, 0.10, 0.14), vec3<f32>(0.55, 0.66, 0.76), day);
+  var lit = col * (0.3 + 0.7 * day) * (0.75 + 0.25 * sh) + sky * fres * 0.8;
+  lit += vec3<f32>(1.0, 0.95, 0.85) * pow(max(dot(reflect(-L, n), V), 0.0), 120.0) * 1.4 * day * sh;
+  // waves rolling in: bands that travel toward the shore and break as foam
+  var foam = 0.0;
+  if (depth < 14.0) {
+    let band = sin(depth * 0.55 - t * 1.8 + wnoise(i.wpos.xz * 0.02) * 4.0);
+    let crest = smoothstep(0.90, 0.99, band) * (1.0 - smoothstep(1.0, 5.0, depth)) * smoothstep(0.35, 0.6, wnoise(i.wpos.xz * 0.05));
+    let edge = 1.0 - smoothstep(0.0, 1.6 + 0.8 * sin(t * 1.1 + i.wpos.x * 0.01), depth);
+    foam = max(crest * 0.6, edge * 0.85) * (0.55 + 0.45 * wnoise(i.wpos.xz * 0.35 + vec2<f32>(t * 0.5, 0.0)));
+  }
+  lit = mix(lit, vec3<f32>(0.88, 0.92, 0.92) * (0.35 + 0.65 * day), clamp(foam, 0.0, 1.0));
+  // the shallows are see-through: you see the sand and pebbles under them
+  let alpha = clamp(mix(0.25, 0.94, 1.0 - exp(-depth / 9.0)) + fres * 0.3 + foam * 0.6, 0.0, 0.98);
+  return vec4<f32>(mix(lit, g.fogCol.rgb, fogf), mix(alpha, 1.0, fogf));
 }
 @fragment fn fs(i: VO) -> @location(0) vec4<f32> {
   let t = g.params.x;
@@ -5644,7 +5923,7 @@ function buildPipelines() {
     layout: 'auto',
     vertex: { module: wm, entryPoint: 'vs', buffers: [{ arrayStride: 12,
       attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }] }] },
-    fragment: { module: wm, entryPoint: 'fs', targets: [{ format: fmt, blend: {
+    fragment: { module: wm, entryPoint: 'fs2', targets: [{ format: fmt, blend: {
       color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha' },
       alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } }] },
     primitive: { topology: 'triangle-list', cullMode: 'none' },
@@ -5699,7 +5978,7 @@ function makeBindGroups() {
   bindG = {
     terrain: dev.createBindGroup({ layout: terrainPipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: gBuf } }].concat(SE) }),
     inst:    dev.createBindGroup({ layout: instPipe.getBindGroupLayout(0),    entries: [{ binding: 0, resource: { buffer: gBuf } }].concat(SE) }),
-    water:   dev.createBindGroup({ layout: waterPipe.getBindGroupLayout(0),   entries: [{ binding: 0, resource: { buffer: gBuf } }] }),
+    water:   dev.createBindGroup({ layout: waterPipe.getBindGroupLayout(0),   entries: [{ binding: 0, resource: { buffer: gBuf } }, { binding: 3, resource: waterHeightTex().createView() }].concat(SE) }),
     body:    dev.createBindGroup({ layout: bodyPipe.getBindGroupLayout(0),    entries: [{ binding: 0, resource: { buffer: gBuf } }].concat(SE) }),
     unlit:   dev.createBindGroup({ layout: unlitPipe.getBindGroupLayout(0),   entries: [{ binding: 0, resource: { buffer: gBuf } }] }),
     tube:    dev.createBindGroup({ layout: tubePipe.getBindGroupLayout(0),    entries: [{ binding: 0, resource: { buffer: gBuf } }].concat(SE) }),
@@ -8398,12 +8677,16 @@ function drawDesign(des, X) {
     }
     const mp = mouthPart(des);
     if (headA) boneAff((bb + L.head) * 16, headA, 1);
+    // first person: the head and neck fold away into the shoulders so the eye
+    // can sit over your chest and you see your own body, legs and arms
+    const fpZ = X.fpHead ? (() => { const pv = headPivot(sk); const e = 1e-3; return { R: [e, 0, 0, 0, e, 0, 0, 0, e], t: [pv[0] * (1 - e), pv[1] * (1 - e), 0] }; })() : null;
+    if (fpZ) boneAff((bb + L.head) * 16, fpZ, 1);
     if (mp) {
       const pr = partRest(G, mp);
       let J = affAxisAbout(pr.p, pr.fr.z, jawAng * pr.side);
       if (headA && isHeadBall(B, pr.bi)) J = affMul(headA, J);
-      boneAff((bb + L.jaw) * 16, J, 1);
-    } else if (headA) boneAff((bb + L.jaw) * 16, headA, 1);
+      boneAff((bb + L.jaw) * 16, fpZ || J, 1);
+    } else if (headA || fpZ) boneAff((bb + L.jaw) * 16, fpZ || headA, 1);
     for (let li = L.nl; li < nlB; li++) { boneIdentity((bb + L.limb0 + 2 * li) * 16, 1); boneIdentity((bb + L.limb0 + 1 + 2 * li) * 16, 1); }
     // lying along a slope: every bone is carried by the body's tilt
     if (X.tilt) for (let j = 0; j < boneCount; j++) {
@@ -8447,6 +8730,7 @@ function drawDesign(des, X) {
     if (hide && sim && hide.has(sim.t)) continue;
     if (X.lod >= 2 && vis.size * (pt.s || 1) < 0.24) continue;
     const r0 = partRest(G, pt);
+    if (X.fpHead && isHeadBall(B, r0.bi)) continue;          // folded away with the head
     let lp = r0.p, n = r0.fr.y, fx = r0.fr.x, fz = r0.fr.z;
     if (B[r0.bi].g === 'tail') {
       // follow the tail bone: rigid transform of the segment this ball ends
@@ -8530,13 +8814,16 @@ function solveKnee(rootW, footW, L1, L2, poleW) {
 // Where the eye sits, stored relative to the body (forward / up from the ground
 // under it), so the camera follows this frame's position without a frame of lag.
 function fpRecordEye(c, G, toW, Rw, yaw) {
+  // the eye sits just above and inside the top of the head: the head and neck
+  // fold away (skinned bodies), so you look out over your own shoulders and
+  // down at your legs, and are never inside your own skin
   const sk = G.sk, hb = sk.balls[sk.headIdx];
   if (!hb) { c._fpOff = null; return; }
-  const w = toW([hb.x + hb.r * 1.0, hb.y + hb.r * 0.3, 0]);
+  const w = toW([hb.x + hb.r * 0.15, hb.y + hb.r * 1.1 + 0.15, 0]);
   const dx = w[0] - c.x, dz = w[2] - c.y;
   const fwd = dx * Math.cos(yaw) + dz * Math.sin(yaw);
   // clear of the skin by more than the near plane, whatever the body size
-  c._fpOff = { f: fwd + Math.max(NEAR * 2.5, hb.r * Rw * 0.12), y: w[1] - groundAt(c.x, c.y) - (player.jumpY || 0) - (player.fly || 0) };
+  c._fpOff = { f: fwd, y: w[1] - groundAt(c.x, c.y) - (player.jumpY || 0) - (player.fly || 0) };
 }
 function fpHide(c, dead) {
   if (c !== player.c || !isFirstPerson()) return dead;
@@ -8657,7 +8944,7 @@ function drawDesignedCreature(c, t, camDist, A) {
     head, tilt: tiltAff,
     R: Rw, t, seed: c.id * 0.37, toW, toL, yaw: A.yaw, dirW: dW,
     quality: isPlayer ? 2 : camDist < 420 * GFX.crit ? 1 : 0, sync: false, meshFar: true, far: A.far, lod: camDist > 650 * GFX.crit ? 2 : camDist > 420 * GFX.crit ? 1 : 0,
-    hide: fpHide(c, deadTypes(c)), gaitPhase: A.phase0, tailSwing: A.tailSwing * rig.tailMul,
+    hide: fpHide(c, deadTypes(c)), fpHead: c === player.c && isFirstPerson(), gaitPhase: A.phase0, tailSwing: A.tailSwing * rig.tailMul,
     tailAmp: 0.35 + 0.65 * A.gaitAmt, flexAmp: 0.10 + 0.22 * A.gaitAmt,
     flap: Math.sin(t * (airborne ? 6.5 : 3.4) + c.id) * (airborne ? 0.62 : (p.canFly ? 0.18 : 0.08)),
     chomp: rig.chomp != null ? rig.chomp : A.bite > 0 ? A.bite : 0.12 + 0.12 * Math.sin(t * 1.7 + c.id),
@@ -10310,6 +10597,8 @@ function fightHitFilter(victim, att, dmg) {
   if (c && att === c && !player.spectator) return null;
   if (victim !== c || !c || !c.alive || player.spectator) return dmg;
   if (!att || !att.alive || !att.ph) return dmg;
+  // newborn grace: your own kind leaves you alone for your first 45 s
+  if (c._spawnT != null && simT - c._spawnT < 45 && att.speciesId === c.speciesId) return null;
   if (att._stagT > simT) return null;                           // a staggered animal cannot strike
   for (const s of FIGHT.pending) if (s.att === att) return null;  // already winding up
   const windup = clamp(0.40 + 0.09 * Math.sqrt(Math.max(0.1, att.ph.mass)), 0.40, 0.85);
@@ -10501,7 +10790,7 @@ function fightTick(dt) {
     }
   }
   if (!c || !c.alive) { fightReset(); return; }
-  if (c._fightOwner !== c) { c._fightOwner = c; fightReset(); }   // new body: fresh lungs
+  if (c._fightOwner !== c) { c._fightOwner = c; c._spawnT = simT; fightReset(); }   // new body: fresh lungs
   FIGHT.dodgeT = Math.max(0, FIGHT.dodgeT - dt);
   FIGHT.dodgeCD = Math.max(0, FIGHT.dodgeCD - dt);
   FIGHT.iframe = Math.max(0, FIGHT.iframe - dt);
@@ -10633,8 +10922,8 @@ function drawFight(t) {
 const GFX_PRESETS = {
   low:    { res: 0.65, cover: 380,  plant: 2600,  lod0: 420,  lod1: 1600, crit: 0.6, fog: 1.00, folMax: 50000,  shadow: 0, ao: 0, bloom: 0, rays: 0 },
   medium: { res: 0.80, cover: 620,  plant: 4200,  lod0: 700,  lod1: 2600, crit: 0.9, fog: 0.80, folMax: 90000,  shadow: 1, ao: 0, bloom: 1, rays: 1 },
-  high:   { res: 0.90, cover: 900,  plant: 6500,  lod0: 1000, lod1: 3800, crit: 1.3, fog: 0.60, folMax: 140000, shadow: 2, ao: 1, bloom: 1, rays: 1 },
-  ultra:  { res: 1.15, cover: 1250, plant: 11000, lod0: 1500, lod1: 6000, crit: 1.9, fog: 0.42, folMax: 200000, shadow: 3, ao: 1, bloom: 1, rays: 1 },
+  high:   { res: 0.90, cover: 1000, plant: 8000,  lod0: 1200, lod1: 4800, crit: 1.5, fog: 0.50, folMax: 140000, shadow: 2, ao: 1, bloom: 1, rays: 1 },
+  ultra:  { res: 1.15, cover: 1700, plant: 18000, lod0: 2300, lod1: 9500, crit: 2.8, fog: 0.26, folMax: 200000, shadow: 3, ao: 1, bloom: 1, rays: 1 },
 };
 const GFX_ORDER = ['low', 'medium', 'high', 'ultra'];
 const GFX = Object.assign({ name: 'high' }, GFX_PRESETS.high);
@@ -11411,7 +11700,8 @@ fn linZ(d: f32) -> f32 { return P.c.x * P.c.y / max(1e-4, P.c.y - d * (P.c.y - P
     let z0 = linZ(d0);
     // about 9 world units of search radius, shrinking on screen with distance
     let rad = clamp(9.0 / z0 * 1.1, 0.002, 0.045);
-    let rot = phash(i.pos.xy) * 6.2831;
+    let ip = vec2<u32>(i.pos.xy) % vec2<u32>(4u);
+    let rot = (f32(ip.x * 4u + ip.y) / 16.0 + f32((ip.x + ip.y) % 2u) * 0.03) * 6.2831;
     var occ = 0.0;
     for (var k = 0; k < 8; k = k + 1) {
       let a = rot + f32(k) * 0.7853982;
@@ -11428,7 +11718,8 @@ fn linZ(d: f32) -> f32 { return P.c.x * P.c.y / max(1e-4, P.c.y - d * (P.c.y - P
   if (P.a.z > 0.0 && P.a.w > 0.0) {
     let N = 28;
     let delta = (P.a.xy - i.uv) / f32(N);
-    var uv = i.uv + delta * phash(i.pos.xy + vec2<f32>(7.0, 3.0));
+    let ip2 = vec2<u32>(i.pos.xy) % vec2<u32>(4u);
+    var uv = i.uv + delta * (f32(ip2.x * 4u + ip2.y) / 16.0);
     var decay = 1.0;
     for (var s = 0; s < N; s = s + 1) {
       uv += delta;
@@ -11486,7 +11777,13 @@ const WGSL_POST_FINAL = WGSL_POST_COMMON + `
   let amp = sqrt(clamp(min(mn, vec3<f32>(1.0) - mx) / max(mx, vec3<f32>(1e-4)), vec3<f32>(0.0), vec3<f32>(1.0)));
   let w = -amp * mix(0.08, 0.2, P.b.z);
   var col = (c + (n0 + n1 + n2 + n3) * w) / (vec3<f32>(1.0) + 4.0 * w);
-  let f = textureSampleLevel(fxT, smp, i.uv, 0.0);
+  // 4x4 box over the half-res effects: removes the AO sampling pattern
+  let fts = 1.0 / vec2<f32>(textureDimensions(fxT));
+  var f = vec4<f32>(0.0);
+  for (var yy = -1; yy <= 2; yy = yy + 1) { for (var xx = -1; xx <= 2; xx = xx + 1) {
+    f += textureSampleLevel(fxT, smp, i.uv + (vec2<f32>(f32(xx), f32(yy)) - vec2<f32>(0.5)) * fts, 0.0);
+  } }
+  f *= 1.0 / 16.0;
   col *= 1.0 - f.r * P.b.x;
   col += P.d.rgb * f.g;
   col += textureSampleLevel(bloomT, smp, i.uv, 0.0).rgb * P.b.y;
@@ -11494,10 +11791,11 @@ const WGSL_POST_FINAL = WGSL_POST_COMMON + `
   // cool shadows and warm highlights
   col = max(col, vec3<f32>(0.0));
   let g = P.d.w;
-  col = col * (1.0 + 0.18 * g) / (vec3<f32>(1.0) + col * 0.18 * g);
-  col = mix(col, col * col * (vec3<f32>(3.0) - 2.0 * clamp(col, vec3<f32>(0.0), vec3<f32>(1.0))), 0.22 * g);
+  let ex = col * mix(1.0, 0.86, g);
+  let aces = clamp((ex * (2.51 * ex + 0.03)) / (ex * (2.43 * ex + 0.59) + 0.14), vec3<f32>(0.0), vec3<f32>(1.0));
+  col = mix(col, aces * 1.08, g);
   let lum = dot(col, vec3<f32>(0.2126, 0.7152, 0.0722));
-  col = mix(vec3<f32>(lum), col, 1.0 + 0.12 * g);
+  col = mix(vec3<f32>(lum), col, 1.0 + 0.08 * g);
   col += (vec3<f32>(-0.012, 0.0, 0.018) * (1.0 - lum) + vec3<f32>(0.022, 0.010, -0.016) * lum) * g;
   let vq = (i.uv - vec2<f32>(0.5)) * vec2<f32>(1.15, 1.0);
   col *= mix(1.0, smoothstep(0.98, 0.32, length(vq)), P.c.w);
@@ -11647,6 +11945,7 @@ function r2BuildPipelines() {
     };
     R2.postBuf = dev.createBuffer({ size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     R2.linSmp = dev.createSampler({ magFilter: 'linear', minFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
+    r2SkyInit();
     R2.ok = true;
   } catch (e) { console.warn('render2 unavailable', e); R2.ok = false; }
 }
@@ -11792,6 +12091,121 @@ function r2Hud() {
   if (el) el.textContent = Math.round(R2.fps) + ' fps · ' + Math.round(r2SceneScale() * 100) + '%';
 }
 
+// ---------------------------------------------------------------- sun, moon, sky
+// The sun rises in the east, arcs over and sets in the west once per day. Its
+// noon height follows the season: nearly overhead in summer, low in winter.
+// The moon runs opposite it and goes through phases over eight days.
+const SKY = { pipe: null, buf: null, bg: null, arr: new Float32Array(32), sun: [0, 1, 0], moon: [0, -1, 0], sunUp: 1, moonPhase: 0 };
+function r2SunMoon() {
+  const P = world.params, bt = world.bt || 0;
+  const dl = P.dayLen || 10, yl = P.yearLen || 70;
+  const a = (bt / dl) * 2 * Math.PI;                               // matches world.light's day curve
+  const season = world.flags && world.flags.seasons === false ? 0.5 : 0.5 + 0.5 * Math.sin((bt / yl) * 2 * Math.PI);
+  const maxEl = (32 + 56 * season) * Math.PI / 180;                 // winter noon 32 deg, summer 88 deg
+  const sun = [Math.cos(a), Math.sin(a) * Math.sin(maxEl), Math.sin(a) * Math.cos(maxEl)];
+  const moon = [-sun[0], -sun[1], -sun[2] * 0.6 + 0.25];
+  const ml = Math.hypot(moon[0], moon[1], moon[2]); moon[0] /= ml; moon[1] /= ml; moon[2] /= ml;
+  SKY.sun = sun; SKY.moon = moon; SKY.moonPhase = ((bt / (dl * 8)) % 1 + 1) % 1;
+  // light for shading and shadows: the sun by day, the moon by night, never grazing
+  const src = sun[1] > -0.05 ? sun : moon;
+  SKY.sunUp = sun[1] > -0.05 ? 1 : 0;
+  const y = Math.max(0.14, src[1]);
+  const hl = Math.hypot(src[0], src[2]) || 1, k = Math.sqrt(Math.max(0, 1 - y * y)) / hl;
+  gArr[20] = src[0] * k; gArr[21] = y; gArr[22] = src[2] * k; gArr[23] = 0;
+}
+const WGSL_SKY = `
+struct S { sun: vec4<f32>, moon: vec4<f32>, right: vec4<f32>, up: vec4<f32>, fwd: vec4<f32>, fog: vec4<f32>, p: vec4<f32>, q: vec4<f32> };
+// p: tanHalfFovY, aspect, time, daylight   q: moon phase, cloud cover, -, -
+@group(0) @binding(0) var<uniform> U: S;
+struct VO { @builtin(position) pos: vec4<f32>, @location(0) ndc: vec2<f32> };
+@vertex fn vs(@builtin(vertex_index) i: u32) -> VO {
+  var p = array<vec2<f32>, 3>(vec2<f32>(-1.0, -1.0), vec2<f32>(3.0, -1.0), vec2<f32>(-1.0, 3.0));
+  var o: VO; o.pos = vec4<f32>(p[i], 1.0, 1.0); o.ndc = p[i]; return o;
+}
+fn h2(p: vec2<f32>) -> f32 { var p3 = fract(vec3<f32>(p.x, p.y, p.x) * 0.1031); p3 += dot(p3, p3.yzx + vec3<f32>(33.33)); return fract((p3.x + p3.y) * p3.z); }
+fn n2(p: vec2<f32>) -> f32 {
+  let i = floor(p); let f = fract(p); let u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(h2(i), h2(i + vec2<f32>(1.0, 0.0)), u.x), mix(h2(i + vec2<f32>(0.0, 1.0)), h2(i + vec2<f32>(1.0, 1.0)), u.x), u.y);
+}
+fn fbm(p0: vec2<f32>) -> f32 { var p = p0; var a = 0.5; var s = 0.0; for (var k = 0; k < 5; k = k + 1) { s += a * n2(p); p = p * 2.02 + vec2<f32>(3.1, 1.7); a *= 0.5; } return s; }
+@fragment fn fs(i: VO) -> @location(0) vec4<f32> {
+  let dir = normalize(U.fwd.xyz + U.right.xyz * i.ndc.x * U.p.x * U.p.y + U.up.xyz * i.ndc.y * U.p.x);
+  let day = U.p.w;
+  let sun = normalize(U.sun.xyz);
+  let moon = normalize(U.moon.xyz);
+  let t = U.p.z;
+  let up = max(dir.y, 0.0);
+  // base gradient: deep blue overhead, pale at the horizon, near black at night
+  let zenD = vec3<f32>(0.20, 0.42, 0.72); let horD = vec3<f32>(0.62, 0.74, 0.84);
+  let zenN = vec3<f32>(0.006, 0.012, 0.03); let horN = vec3<f32>(0.03, 0.05, 0.07);
+  var col = mix(mix(horN, horD, day), mix(zenN, zenD, day), pow(up, 0.55));
+  // sunrise and sunset: orange and red around the sun near the horizon
+  let low = 1.0 - smoothstep(0.0, 0.35, abs(sun.y));
+  let toward = pow(max(dot(normalize(vec3<f32>(dir.x, 0.0, dir.z)), normalize(vec3<f32>(sun.x, 0.0, sun.z))), 0.0), 3.0);
+  col = mix(col, vec3<f32>(0.98, 0.52, 0.24), low * toward * (1.0 - smoothstep(0.0, 0.45, up)) * 0.8);
+  // stars
+  if (day < 0.5 && dir.y > 0.0) {
+    let sp = dir.xz / (dir.y + 0.3) * 220.0;
+    let st = h2(floor(sp));
+    let tw = 0.6 + 0.4 * sin(t * 3.0 + st * 60.0);
+    col += vec3<f32>(smoothstep(0.994, 1.0, st) * tw * (1.0 - day * 2.0) * smoothstep(0.0, 0.2, dir.y));
+  }
+  // sun disk and glow
+  let sd = dot(dir, sun);
+  col += vec3<f32>(1.0, 0.85, 0.6) * pow(max(sd, 0.0), 300.0) * 1.2 * step(-0.05, sun.y);
+  col += vec3<f32>(1.0, 0.95, 0.8) * smoothstep(0.9993, 0.9996, sd) * 4.0;
+  // moon: a disk lit from the side by its phase, with dark maria
+  let md = dot(dir, moon);
+  if (md > 0.9985 && moon.y > -0.05) {
+    let mr = normalize(cross(moon, vec3<f32>(0.0, 1.0, 0.0)));
+    let mu = normalize(cross(mr, moon));
+    let lp = vec2<f32>(dot(dir - moon, mr), dot(dir - moon, mu)) / 0.055;
+    let ph = U.q.x * 6.2831;
+    let lit = smoothstep(-0.05, 0.05, lp.x * cos(ph) + sqrt(max(0.0, 1.0 - dot(lp, lp))) * sin(ph));
+    let maria = 0.75 + 0.25 * n2(lp * 4.0 + vec2<f32>(5.0));
+    col = mix(col, vec3<f32>(0.9, 0.92, 0.88) * maria * (0.15 + 0.85 * lit), smoothstep(0.9985, 0.99875, md));
+  }
+  col += vec3<f32>(0.5, 0.55, 0.6) * pow(max(md, 0.0), 80.0) * 0.12 * (1.0 - day) * step(-0.05, moon.y);
+  // clouds: an fbm layer on a plane high above, drifting with the wind
+  if (dir.y > 0.01) {
+    let cp = dir.xz / dir.y * 1.4 + vec2<f32>(t * 0.012, t * 0.006);
+    let c = fbm(cp);
+    let cover = U.q.y;
+    let dens = smoothstep(0.62 - cover * 0.3, 0.95 - cover * 0.2, c);
+    let thick = fbm(cp + normalize(sun.xz + vec2<f32>(1e-4)) * 0.06);
+    let shade = clamp(1.0 - (thick - c) * 3.0, 0.45, 1.0);
+    let cday = mix(vec3<f32>(0.05, 0.06, 0.08), vec3<f32>(1.0, 0.98, 0.95), day);
+    var ccol = cday * mix(0.6, 1.0, shade);
+    ccol = mix(ccol, vec3<f32>(1.0, 0.62, 0.40) * max(day, 0.25), low * toward * 0.6);
+    col = mix(col, ccol, dens * smoothstep(0.01, 0.12, dir.y) * 0.92);
+  }
+  // melt into the fog colour at the horizon so terrain and sky meet cleanly
+  col = mix(U.fog.rgb, col, smoothstep(-0.02, 0.18, dir.y));
+  return vec4<f32>(col, 1.0);
+}`;
+function r2SkyInit() {
+  const m = dev.createShaderModule({ code: WGSL_SKY });
+  SKY.pipe = dev.createRenderPipeline({ layout: 'auto', vertex: { module: m, entryPoint: 'vs' },
+    fragment: { module: m, entryPoint: 'fs', targets: [{ format: fmt }] }, primitive: { topology: 'triangle-list' },
+    depthStencil: { format: 'depth24plus', depthWriteEnabled: false, depthCompare: 'always' }, multisample: { count: SAMPLES } });
+  SKY.buf = dev.createBuffer({ size: 128, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  SKY.bg = dev.createBindGroup({ layout: SKY.pipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: SKY.buf } }] });
+}
+function r2DrawSky(pass, fog, aspect) {
+  if (!SKY.pipe) return;
+  const A = SKY.arr;
+  const cp = Math.cos(player.pitch), sp = Math.sin(player.pitch), cy = Math.cos(player.yaw), sy = Math.sin(player.yaw);
+  const fwd = [cy * cp, sp, sy * cp];
+  let right = [-sy, 0, cy];                      // matches m4look's handedness: +x screen = this
+  const up = [right[1] * fwd[2] - right[2] * fwd[1], right[2] * fwd[0] - right[0] * fwd[2], right[0] * fwd[1] - right[1] * fwd[0]];
+  A.set([SKY.sun[0], SKY.sun[1], SKY.sun[2], 0, SKY.moon[0], SKY.moon[1], SKY.moon[2], 0,
+         right[0], right[1], right[2], 0, up[0], up[1], up[2], 0, fwd[0], fwd[1], fwd[2], 0,
+         fog[0], fog[1], fog[2], 1, Math.tan(1.15 / 2), aspect, performance.now() / 1000, clamp(world.light != null ? world.light : 1, 0, 1),
+         SKY.moonPhase, 0.35 + 0.3 * (1 - (world.season != null ? world.season : 1)), 0, 0]);
+  dev.queue.writeBuffer(SKY.buf, 0, A);
+  pass.setPipeline(SKY.pipe); pass.setBindGroup(0, SKY.bg); pass.draw(3);
+}
+
 function stepSim(dt) {
   if (player.atkCD > 0) player.atkCD = Math.max(0, player.atkCD - dt);
   fightTick(dt);
@@ -11811,8 +12225,8 @@ function stepSim(dt) {
   }
   if (alive && c.alive) {
     // discard whatever the brain decided for this body; it is yours to steer
-    c.x = px; c.y = py;
-    movePlayer(c, dt);
+    if (player.spectator) { c.x = px + (c.x - px) * 0.35; c.y = py + (c.y - py) * 0.35; }
+    else { c.x = px; c.y = py; movePlayer(c, dt); }
   }
   fightApplyKnocks(dt);
   if (c && !c.alive && c._fatalBy && c.deathCause !== 'predation') c.deathCause = 'predation';
@@ -11935,8 +12349,7 @@ function renderFrame(t) {
   ];
   gArr.set(vpM, 0);
   gArr[16] = player.camX; gArr[17] = player.camY; gArr[18] = player.camZ; gArr[19] = 0;
-  const sunA = (world.bt || 0) * 0.4;
-  gArr[20] = Math.cos(sunA) * 0.45; gArr[21] = 0.72 + 0.28 * lt; gArr[22] = Math.sin(sunA) * 0.45; gArr[23] = 0;
+  r2SunMoon();
   gArr[24] = fog[0]; gArr[25] = fog[1]; gArr[26] = fog[2]; gArr[27] = 1;
   r2FrameGlobals();
   gArr[28] = t; gArr[29] = FOG_DENSITY * GFX.fog * (1 + 2.4 * can) * (1 + 3.2 * (1 - lt2)); gArr[30] = (0.1 + 0.9 * lt2) * (1 - 0.22 * can); gArr[31] = terrain.LV.water * HEIGHT_SCALE;
@@ -11955,6 +12368,7 @@ function renderFrame(t) {
     depthStencilAttachment: { view: (R2on ? R2.sceneDepth : depthTex).createView(), depthClearValue: 1.0,
       depthLoadOp: 'clear', depthStoreOp: 'store' },
   });
+  if (R2on) r2DrawSky(pass, fog, aspect);
   pass.setPipeline(terrainPipe); pass.setBindGroup(0, bindG.terrain);
   pass.setVertexBuffer(0, terrVB); pass.setIndexBuffer(terrIB, 'uint32');
   pass.drawIndexed(terrCount);
@@ -12080,7 +12494,7 @@ function panelOpts() {
     startPop: clamp(num('startPop', 50) | 0, 2, 2000),
     startPlants: clamp(num('startPlants', 500) | 0, 0, 40000),
     mutationRate: num('mut', 0.6), plantRate: num('plant', 20),
-    timeScale: num('tscale', 0.05), plantEnergy: num('pe', 10),
+    timeScale: num('tscale', 0.01), plantEnergy: num('pe', 10),
     dayLen: num('dayl', 10), yearLen: num('yearl', 10),
     carrionLife: num('clife', 50), carrionYield: num('cy', 0.5),
     founderDiversity: num('fd', 0.6), foodPatchiness: num('fp', 0.5), flags: panelFlags(),
@@ -12119,7 +12533,7 @@ async function rebuildWorld() {
   world = C.makeWorld(Object.assign({ w: WORLD_W, h: WORLD_H, tileSize: TILE, seed, featureScale: 2, heightScale: HEIGHT_SCALE, maxSlope: 1, baseRelief: 0.35, plantArea: 0.5 }, panelOpts()));
   terrain = world.terrain;
   buildCanopyMap(); FOL.key = '';
-  buildTerrain(); buildWater(); buildMinimap();
+  buildTerrain(); buildWater(); waterHeightUpload(); buildMinimap();
   await warmUp(panelWarmup());
   const dl = world.params.dayLen || 6;
   world.bt = Math.ceil((world.bt || 0) / dl) * dl + dl * 0.25;
@@ -14232,6 +14646,7 @@ async function init() {
   folInit(); buildCanopyMap(); FOL.key = '';
   const info = buildTerrain();
   buildWater();
+  waterHeightUpload();
   buildMinimap();
 
   await warmUp(panelWarmup());
