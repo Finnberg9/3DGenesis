@@ -2,6 +2,96 @@
 
 Build: `dev/3dgenesis-dev-src.tgz` unpacks to the patch pipeline. `bash build.sh` (edit its `cd` to your folder) turns `g3.v3` + `src/patch_*.py` into `g3.html` (= `index.html`) and extracts `core.js` for node tests.
 
+## 2026-09-23 (later still): The cages are metal
+
+The cages were being drawn through the foliage shader's **bark** path, which was putting tree furrows, moss and lichen on steel. That is why they read as flat blue-grey slabs. They have their own material now.
+
+- **Dark grey steel**: plate with a slow mill grain, fine pitting, and a tight highlight on whatever is still clean. The base greys are warmed slightly, because the scene's ambient light is strongly blue and a neutral grey reads as blue steel once it is in shade.
+- **Rust** blooms out of the joints and off the faces that hold water (top faces go first), and runs downward in streaks below wherever it has taken hold. Rust kills the highlight, so the weathered parts go matte while the bare metal still catches the sun.
+- **The lamps and the bay numerals** get a lit material instead, so they are not weathered with the rest of the cage and they carry at night.
+- The material slot in the foliage vertex format now reads: 1 two-sided leaf, 0 bark, -1 rock, -2 weathered steel, -3 lit glass.
+
+Two tuning passes were needed. The first was far too dark and the grain ran at 1.7 cycles per world unit vertically, which put about eighty bands up a 46-unit bar and read as diagonal hatching on anything thin. The grain is slow now and the bump off it is gentle.
+
+## 2026-09-23 (later still): Buying moved onto the part cards
+
+The shop was a separate panel, which was wrong: it made buying a place you go rather than something you do while you are looking at the part. It is gone.
+
+- Every card in the right-hand palette now carries its own price and its own button. A locked card reads its genome cost, its tier (colour-coded: weak, solid, super, ultra, alpha) and a **buy** button with the price. Click it and the part unlocks in place: the lock badge comes off the tile, the card turns into a **sell** and you can drag it onto your creature immediately.
+- A price you cannot afford is dimmed and refuses, rather than letting you click into a failure.
+- Selling takes two clicks on the same button: the first arms it and it reads "sell for 25?", the second does it. A part is too dear to lose to a slip. A part your creature is currently wearing still cannot be sold at all.
+- The balance lives in the builder toolbar where the shop button used to be. The bundle prices (100 for $2, 500 for $5, 10000 for $30) are its tooltip, with the note that they need an account server this build does not have.
+- `test_shop_steps.js`: eleven checks that the separate panel is gone, that buying and selling work off the card, that the balance follows, that the sell confirm holds, that a worn part is protected and that an unaffordable card refuses.
+
+## 2026-09-23 (later): Match settings are locked
+
+A match is a fair fight or it is nothing, so none of the world is the player's to set any more.
+
+### Locked
+- **The island itself.** Entering a match is now three steps, not one: `join()` hands down the seed and the ruleset, the island is rebuilt from exactly those, and only then does the match begin. Everyone in a match is on the same island because the island is built from the match's own seed rather than from whatever world the player happened to be standing in.
+- **Every control.** While a match runs, the world panel's sliders and checkboxes do not reach `world.params`: `panelOpts()` ignores the DOM entirely and answers with the match ruleset however the controls have been dragged, `panelFlags()` and `panelWarmup()` do the same, and the controls are put back where the match says they are, disabled and greyed, with a banner across the top of the panel saying why. The panel is re-asserted once a second so nothing that reaches in and edits a control can leave the display disagreeing with the match.
+- **The seed box and its lock**, which now have no say in what island a match builds.
+- **Reset World**, from the HUD button and from the panel. Both refuse and say so instead of doing nothing.
+- **The clock.** Time scale, day length, season length and the pre-run are all fixed. One match is about one in-game day.
+- **Climate drift is off on purpose.** It re-classifies biomes as the match runs, so a player whose ground shifted under them would gain or lose cover through no choice of their own.
+
+The ruleset lives in one frozen object, `BR_RULES`, and is delivered through `join()` — which is `brNetLocal()` today and a server tomorrow. The locked values: 200 founders, 30 biological seconds of pre-run so the island is not empty when the gates open, mutation 0.8, time scale 0.01, day 10, year 5, plant rate 20, plant energy 10, carrion 50 / 0.5, founder diversity 0.8, patchiness 0.5, terrain and tree density 1, and brains / sexual / day-night / seasons / toxins on with climate off.
+
+To be plain about what this is: it stops the controls being a cheat, and it makes every player's island the same island. It is not anti-cheat against someone editing `world.params` from a console — nothing running in the player's own browser can be. That is a reason the real thing needs a server, and the roadmap says so.
+
+### Also
+- The free-roam goal box and the Reset World button are hidden during a match. Neither belongs in one.
+- Bots that only ever ran for the middle of the ring never met, so the last minutes were the fog killing everyone rather than a fight. A bot whose ring has closed below 1400 units, or who has a rival within 260, stops running and starts hunting. A match now finishes with real player-versus-player kills in the feed (a sample run: 6 of 19 deaths by a player, the winner with 4 kills).
+- The match HUD is drawn from the match tick rather than the frame loop, so it can never fall behind the state it reports — including the death offer, which has to appear the instant you are killed.
+- The end condition is checked every tick, not only when a kill reports one, so a side that quietly stops existing still ends the match.
+- `test_br_steps.js` is now a real suite: 17 checks covering the lock (no slider, flag, seed or reset reaches a running match), who may hit whom in a cage, the gates, the closing zone, the recorded result, and the panel coming back when the match is over. It plays a full fifteen-minute match through the simulation clock.
+
+## 2026-09-23: Battle royale, the bones economy, and the underwater world
+
+### Battle royale (new game mode: BATTLE ROYALE on the main menu)
+- A fifteen-minute match. Twenty-four creatures, one island, a fog that closes in until one side is left.
+- **The cages.** Every player starts locked in their own steel cage on a ring around the island: plate floor, barred walls and roof, a gate on the face turned toward the middle, and a lit bay number on a plate above it so "bay 7" means something you can find. You walk around inside for thirty seconds. The ring is laid out at the map edge and then walked inward until each bay finds dry land, so the cages stand on the coast facing in rather than out in the sea. Nothing can touch you in the cage and nothing can wear you down: no hunger, no drowning, no wildlife.
+- **Gates open** together and slide up out of their frames.
+- **Grace, five minutes.** No player can hurt another. The island's own animals are fair game both ways, and killing them is how you build your beast before the fighting starts.
+- **Open season.** Everyone can kill everyone.
+- **Killing a player** feeds you (you grow through the same path any meal uses), pays 5 bones, and offers you one part off their body to keep.
+- **The loser chooses**: watch the rest of the match, or come back as their killer's young. A pack cannot hurt itself, fights together, and wins together. A dead leader frees its pack.
+- **The fog** starts ninety seconds in and closes on an ease so the last minutes shut fast. Inside it visibility collapses to a couple of body lengths and the world washes grey-green, and it takes 7 health a second at its worst. The HUD tells you how far you are from safety, or how far into the fog you already are.
+- **Winning** is recorded (wins and best kill count), and pays 25 bones on top of what you took.
+- If time runs out with more than one side standing, the match is decided on kills, then on how much fight is left. It never ends in a draw.
+
+### What is real and what is not
+This build has no game server, and it is one static HTML file. The match, the zone, the grace period, the looting, the packs and the win are all real and run to the end; the other twenty-three are bots on your machine, and nothing talks to the network. Every rule is settled through one transport interface (`BR_NET`, with `brNetLocal()` as the only implementation today), so pointing it at a real server is a swap rather than a rewrite. `brHitAllowed()` is the single place that decides who may hit whom, so a client and a server cannot disagree about it. The online menu page says all of this plainly rather than implying a lobby that is not there.
+
+### Bones: the parts economy
+- **5 bones for every kill**, kept with the rest of your progress.
+- **Five tiers price every part**: weak 50, solid 100, super 200, ultra 500, alpha 2000. All 52 parts are in the table, and the build fails loudly if one is ever missing rather than quietly pricing it wrong.
+- **A shop in the builder** (the "shop" button in the toolbar): every part in the game grouped by tier, with its price, what it does, and a buy button. A part you buy is unlocked exactly as a kill would unlock it.
+- **Selling** gives back a quarter, rounded down. A part your creature is currently wearing cannot be sold out from under it.
+- **Locked palette cards now show their price**, and the tooltip tells you both ways to get one.
+- **Rarity in the wild matches the tier.** Weak parts are on half the animals you meet; an alpha part is born on roughly one hunter in fifteen hundred. Wild bodies now draw from the whole ladder, so a founder can be born with a crushing jaw, a sail-back snout, antlers or a shell.
+- **Per-world rarity roll.** Every island rolls a ceiling from its seed: about 18% of worlds grow no ultra or alpha parts at all, about 64% grow no alpha, and about 18% can grow anything. The same seed is always the same world. The ceiling governs what the roll may add to a body, not the parts a body plan is made of: a pterosaur has wings in every world.
+- **Bundles are listed with their prices and cannot be bought.** Taking money needs a payment processor and an account server to credit, and a button that handed out bones for free would wreck the economy the rest of the system exists to keep honest. The shop says so.
+
+### The underwater world
+- **No tree grows in water any more.** The biome map calls the tidal fringe "shallow" and "marsh", so biome alone had been planting mangroves and palms out in the sea; the height against the water line is what decides now.
+- **Underwater light.** Only the stretch of the view ray that actually runs through water absorbs, so a fish seen from the bank greens out with its own depth rather than with how far off it is, and air fog is charged only for the dry stretch. Red is gone in about sixty units, blue carries two hundred and fifty, which is why everything deep goes blue. Sunlight is spent on the way down, so the floor darkens with depth.
+- **Caustics**: two crossing ripple fields focus the sun into moving filaments on anything facing up, strongest just under the surface.
+- **The surface from below** is a mirror everywhere except a bright disc straight overhead. That disc is Snell's window, and the ripples make its edge crawl. The sun burns through it, smeared.
+- **Sea-floor flora**, placed by depth and by how warm the water is: giant kelp on the cold shelf (shrunk to fit the water column so a bed never pokes out of the sea), sea grass and weed in the wash, coral heads with staghorn thickets and anemones on warm reefs, sea fans standing on edge, and shells, urchins and rubble on the sand.
+- **Shoals of small fish** drift through the water column, each fish wiggling on its own phase, and **a diver trails bubbles** — far more of them if you are holding your breath than if you have gills.
+
+### Tests and tooling
+- `test_bones.js`: the tier table must cover exactly the parts the simulation knows, prices must be the published ladder, and the per-world ceiling must actually gate what the wild rolls. Nineteen assertions, all from the shipping source rather than a copy.
+- `test_br_steps.js`: a harness script that plays a whole match through the sim clock and prints the zone, the survivor count and the result each minute.
+- The headless harness could build a creature but had no way to leave the main menu, so every automated screenshot was of the menu. `__G3D.beginPlay()` fixes that, and `__G3D.bones` / `__G3D.br` expose the two new systems to it.
+- Google Fonts is blocked in the harness, which made every screenshot wait thirty seconds for it. The harness now refuses that request outright.
+- The match clock advances with the simulation step, not the frame loop, so a dropped frame is not a dropped second.
+
+### Fixed
+- The menu track now loops, fades out over two seconds when you leave the menu, and stops on NEW GAME as well. Its autoplay had lost its fallback, so it would never start until something else happened to trigger it; it tries on load and again on the first click or key.
+- The start-population slider and its number box disagreed (200 against 100). The mutation rate, pre-run, season length, founder diversity and population defaults set by hand in `index.html` are now in the build, so a rebuild stops reverting them. The season-length slider's floor was above its own default value, which the browser silently clamped away.
+
 ## 2026-09-22 (night): Title and menu background
 
 - GENESIS is now the title of the screen, much larger than the menu heading under it: cast-concrete lettering built from fractal noise lit from the upper left, with grit, a displaced rough edge, and a short extrusion so it stands slightly off the page.

@@ -1,6 +1,36 @@
 # 3DGenesis roadmap: future game modes (Finn's vision, noted 2026-09-22)
 
-Not being built yet. Recorded so every daily run knows where the game is headed and keeps the code compatible with it.
+Recorded so every daily run knows where the game is headed and keeps the code compatible with it.
+
+## STATUS (2026-09-23)
+- **Battle royale: built, single-machine.** The match runs end to end against bots: cages with bay numbers, gates, the five-minute grace, open combat, looting a kill's parts, the pack-or-spectate choice, the closing fog with its kill band, and a recorded win. Every world parameter is locked for the duration and the island is built from the match seed, so the fight is the same fight for everyone in it. See `src/br.js` and `src/brmesh.js`.
+- **Bones: built.** Tiers, prices, sell-back, the shop in the builder, and tier-matched rarity in the wild with a per-world ceiling. See `src/bones.js`.
+- **Water world: mostly built.** No trees in water, underwater absorption and caustics, Snell's window, kelp/coral/sea-fan/rubble beds, fish shoals and diver bubbles. Still missing: underwater caves (needs real geometry beyond the heightmap), and sand ripples.
+
+### What the online mode still needs (the only part that cannot be built here)
+This repo is one static HTML file with no server, so the twenty-three opponents are bots. Everything a server would decide already goes through one seam:
+- `BR_NET` — the transport contract, with `brNetLocal()` as the only implementation. `join / ready / send / poll / leave`, plain JSON events. A socket implementation is a drop-in.
+- `brHitAllowed(victim, attacker)` — the single place that decides who may hit whom (grace period, packs, self). Client and server call the same function, so they cannot disagree.
+- `BR_RULES` — the frozen ruleset a match runs on, handed down by `join()`. A server replaces it per match; nothing else in the page may write it.
+- `BONES.remote` — set it to an object with `credit/debit` and the local balance is never touched again. Until then balances live in the player's own browser and are trivially editable, which is exactly why a real economy needs the server.
+### Measured, 2026-09-23, so nobody has to guess again
+`core.js` runs in Node unmodified. A full 15-minute match simulated server-side on one core of this container:
+
+| what the server simulates | ms/tick | matches per core (60% load) |
+|---|---|---|
+| full island, 200 creatures, 20Hz | 11.53 | 2 |
+| full island, 200 creatures, 10Hz | 19.93 | 3 |
+| players only, 24 creatures, 20Hz | 0.83 | 36 |
+| players only, 24 creatures, 10Hz | 1.28 | 46 |
+
+World generation is about 1.7 s. The 20x gap is the whole hosting-cost question, and the answer is **players-only authority**: the server owns the 24 players and the match rules, wildlife stays client-local and cosmetic. The island is a pure function of `seed + BR_RULES`, so terrain costs no bandwidth at all, and nobody can exploit a fish being two metres out of place in a deathmatch.
+
+Rough shape when it is time: Node plus `ws` (or Colyseus, whose room-per-match model fits almost exactly) on a ~$5/month VPS. The genuinely hard part is melee lag compensation, not the networking. Accounts and bones need a database or the balance stays editable.
+
+**Decision 2026-09-23: not yet.** Finn is keeping the daily runs on the game itself. The seam stays where it is.
+
+One thing the seam cannot do locally: the parameter lock stops the controls being a cheat, but nothing running in a player's own browser can stop that player editing `world.params` from a console. Only a server that runs the simulation itself can, which is the strongest argument for making the server authoritative over the sim rather than just over matchmaking.
+Still to decide and build elsewhere: the game server itself, matchmaking, accounts, and the public win/leaderboard record. Damage is already deterministic and the core sim is DOM-free, so a server can run it headlessly.
 
 ## Two modes from the main menu
 1. **Free roam** (single player): the current game. Live on the island, evolve, mate, die and continue your line.

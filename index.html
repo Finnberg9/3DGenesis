@@ -36,6 +36,20 @@
   .edcuse{font-size:10.5px;line-height:1.35;color:#8fb8c6;min-height:28px}
   .edccost{font-size:10px;color:#6d97a4}
   .edcard.locked .edcname{color:#8aa3ab}
+  .edtierb{font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-size:9.5px}
+  .edbuy{display:flex;justify-content:space-between;align-items:center;gap:6px;width:100%;margin-top:4px;
+    font:inherit;font-size:11px;padding:5px 9px;border-radius:8px;cursor:pointer;
+    background:rgba(10,32,29,.75);border:1px solid #2c4b45;color:#dff3ec}
+  .edbuy b{font-size:12px}
+  .edbuy:hover{background:rgba(20,52,46,.9)}
+  .edbuy.poor{opacity:.42;cursor:not-allowed}
+  .edsell{width:100%;margin-top:4px;font:inherit;font-size:10.5px;padding:5px 9px;border-radius:8px;cursor:pointer;
+    background:transparent;border:1px solid rgba(140,190,210,.2);color:#7fa3b4;text-align:center}
+  .edsell:hover{border-color:#8a6a4a;color:#e8c9a8}
+  .edsell.arm{background:rgba(90,50,20,.5);border-color:#b07a3a;color:#ffe0c0}
+  .edowned{margin-top:4px;font-size:10.5px;color:#6d97a4;text-align:center}
+  #edBones{margin-left:6px;font-size:12px;color:#8fb4c4;align-self:center}
+  #edBoneN{color:#e8d9a8;font-size:13px}
   body.editing #objective{display:none !important}
   #env{right:14px;top:14px;min-width:210px;text-align:right}
   #evt{left:50%;transform:translateX(-50%);bottom:96px;text-align:center;opacity:0;transition:opacity .4s;
@@ -162,6 +176,31 @@
     padding:0 4px;margin:0 2px;color:var(--ink)}
   #act .keys .hit{color:#ff7a6b;border-color:#7a2c26}
   #act .keys .ok{color:#35e0d8;border-color:#2f7d74}
+  #panel.brlocked{filter:saturate(.45) brightness(.78)}
+  #panel.brlocked .ctl,#panel.brlocked .pop-row,#panel.brlocked .flags{pointer-events:none}
+  /* ::after would land at the BOTTOM of the panel, so both lines go in ::before */
+  #panel.brlocked::before{content:'MATCH SETTINGS LOCKED\A everyone in the match plays the same island, on the same clock';
+    white-space:pre-line;display:block;margin:34px 0 12px;padding:8px 10px;border-radius:8px;font-size:11px;letter-spacing:.14em;
+    line-height:1.9;background:rgba(120,30,20,.38);border:1px solid #8a3a2c;color:#ffd9cf;text-align:center;pointer-events:none}
+  /* free-roam furniture that has no business in a match */
+  body.brmatch #objective{display:none !important}
+  body.brmatch #resetbtn{display:none !important}
+  #brPanel{position:fixed;right:14px;top:120px;display:none;min-width:240px;padding:11px 14px;border-radius:12px;
+    background:rgba(8,14,18,.82);border:1px solid #3a5a52;color:#dfeee9;font-size:13px;line-height:1.55;z-index:40}
+  #brPanel .brtop b{font-size:20px;color:#fff;letter-spacing:.06em}
+  #brPanel .brphase{color:#8fd8c2;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;margin-top:3px}
+  #brPanel .brzone{margin-top:5px;color:#a9c0b8;font-size:12px}
+  #brPanel .brzone .bad{color:#ff8f7a;font-weight:600}
+  #brPanel .brk{margin-top:4px;color:#e8d9a8;font-size:12px}
+  #brMsg{position:fixed;left:50%;top:150px;transform:translateX(-50%);display:none;padding:12px 24px;border-radius:12px;
+    background:rgba(10,18,16,.9);border:1px solid #4a7a6c;color:#eafaf4;font-size:17px;letter-spacing:.08em;text-align:center;z-index:41}
+  #brChoice{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);display:none;padding:26px 34px;border-radius:16px;
+    background:linear-gradient(180deg,rgba(14,26,24,.98),rgba(6,14,14,.98));border:1px solid #4a7a6c;color:#eafaf4;z-index:60;text-align:center;max-width:460px}
+  #brChoice h3{margin:0 0 10px;font-size:19px;letter-spacing:.12em}
+  #brChoice p{margin:0 0 18px;font-size:13.5px;line-height:1.6;color:#a9c0b8}
+  #brChoice button{font:inherit;font-size:14px;margin:0 6px;padding:9px 20px;border-radius:9px;cursor:pointer;
+    background:#0a201d;border:1px solid #3d6a5e;color:#dff3ec}
+  #brChoice button:hover{border-color:#b3140c;color:#fff}
   #warn{position:fixed;left:50%;top:112px;transform:translateX(-50%);z-index:12;display:none;
     font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.12em;text-transform:uppercase;
     color:#ff8a76;background:rgba(38,10,8,.72);border:1px solid #7a2c26;border-radius:20px;
@@ -370,6 +409,9 @@
 <div id="cross"></div>
 <div id="act"></div>
 <div id="picker"></div>
+<div id="brPanel"></div>
+<div id="brMsg"></div>
+<div id="brChoice"></div>
 <button id="ptab">controls</button>
 <button id="edOpenBtn" title="edit your creature (B)">edit creature (B)</button>
 <div id="panel" class="hidden">
@@ -385,7 +427,7 @@
         <button type="button" id="uiDown" aria-label="smaller interface">&minus;</button><b id="uiVal">auto</b><button type="button" id="uiUp" aria-label="larger interface">+</button><button type="button" id="uiAuto">auto</button></div>
       <div class="popbox" title="number of founder animals placed on the island. Takes effect on reset.">
         <div class="pop-h"><span>start population</span><em>applies on reset</em></div>
-        <div class="pop-row"><input id="startPopR" type="range" min="2" max="500" step="1" value="200" aria-label="start population slider"><input id="startPop" type="number" min="2" max="2000" value="100" aria-label="start population"></div>
+        <div class="pop-row"><input id="startPopR" type="range" min="2" max="500" step="1" value="200" aria-label="start population slider"><input id="startPop" type="number" min="2" max="2000" value="200" aria-label="start population"></div>
         <div class="ctl-d">founders placed on the island. Slider covers 2 to 500; type up to 2000.</div>
       </div>
     <div class="toggles">
@@ -401,7 +443,7 @@
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">plant regrowth</span><b id="plantv">20</b></div><input id="plant" type="range" min="5" max="900" step="5" value="20"><div class="ctl-d">plant spawn attempts per biological second. Live.</div></div>
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">plant energy</span><b id="pev">10</b></div><input id="pe" type="range" min="5" max="120" step="5" value="10"><div class="ctl-d">energy in one plant before biome multipliers. Live.</div></div>
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">day length</span><b id="daylv">10</b></div><input id="dayl" type="range" min="1" max="40" step="1" value="10"><div class="ctl-d">length of one day/night cycle. Live.</div></div>
-    <div class="ctl"><div class="ctl-h"><span class="ctl-n">season length</span><b id="yearlv">5</b></div><input id="yearl" type="range" min="10" max="300" step="10" value="5"><div class="ctl-d">length of one year, which drives seasons. Live.</div></div>
+    <div class="ctl"><div class="ctl-h"><span class="ctl-n">season length</span><b id="yearlv">5</b></div><input id="yearl" type="range" min="5" max="300" step="5" value="5"><div class="ctl-d">length of one year, which drives seasons. Live.</div></div>
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">corpse lifespan</span><b id="clifev">50</b></div><input id="clife" type="range" min="2" max="60" step="1" value="50"><div class="ctl-d">how long a corpse lies there. Live, applies to new corpses.</div></div>
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">corpse yield</span><b id="cyv">0.5</b></div><input id="cy" type="range" min="0.2" max="4" step="0.1" value="0.5"><div class="ctl-d">multiplier on corpse energy. Live, applies to new corpses.</div></div>
     <div class="ctl"><div class="ctl-h"><span class="ctl-n">pre-run</span><b id="prerunv">10</b></div><input id="prerun" type="range" min="0" max="300" step="10" value="10"><div class="ctl-d">biological seconds to run the world before you enter it. 0 = you witness the very first generation. Takes effect on reset.</div></div>
@@ -2018,7 +2060,7 @@
   // by biome. Kinds: 0 emergent giant, 1 canopy broadleaf, 2 palm, 3 understory
   // tree, 4 conifer, 5 acacia, 6 cactus, 7 mangrove, 8 tree fern.
   const FOREST_DENS = { forest: 0.8, marsh: 0.5, taiga: 0.6, plains: 0.09, savanna: 0.08, beach: 0.14,
-                        desert: 0.03, tundra: 0.04, rock: 0.02, scree: 0, snow: 0, shallow: 0.05, deep: 0 };
+                        desert: 0.03, tundra: 0.04, rock: 0.02, scree: 0, snow: 0, shallow: 0.03, deep: 0 };
   const FOREST_CELL = 64;
   const TREE_R = [16, 7.5, 3, 3, 5, 4, 4, 4, 2.2, 8.5];     // trunk collision radius at scale 1 (bark plus root flare)
   function buildForest(terrain, w, h, density) {
@@ -2030,6 +2072,10 @@
       const x = (i + 0.15 + hsh(i, j, 1) * 0.7) * FOREST_CELL, y = (j + 0.15 + hsh(i, j, 2) * 0.7) * FOREST_CELL;
       if (x < 8 || y < 8 || x > w - 8 || y > h - 8) continue;
       const b = terrain.biomeAt(x, y);
+      // Nothing with a trunk grows in water. The biome map calls the tidal
+      // fringe 'shallow' and 'marsh', so biome alone put mangroves and palms
+      // out in the sea; the height against the water line is what decides.
+      if (terrain.height(x, y) <= terrain.LV.water + 0.0015) continue;
       let dens = (FOREST_DENS[b] || 0) * density;
       if (!dens) continue;
       const m = terrain.moistureAt(x, y);
@@ -2216,6 +2262,7 @@
       for (let i = 0; i < B.length; i++) B[i] = rng();
       world.fertLat = { a: A, b: B, cellA: Math.max(240, w / 26), cellB: Math.max(90, w / 84) };
     }
+    world.rarityCap = (opts && opts.rarityCap) || 'ultra';
     world.forest = buildForest(terrain, w, h, world.params.treeDensity || 1);
     world.pGrid._forest = world.forest;
     // Seed the flora to a real starting density (attempt-capped): the biome
@@ -3778,7 +3825,7 @@
     return d;
   }
   const DESIGN_API = {
-    ITEM_SIM, ITEM_SINGLE, PLANS, BODY_RANGE, planProfile, buildDesignSkeleton, skinField, raySkin, snapToSkin,
+    ITEM_SIM, ITEM_SINGLE, PLANS, BODY_RANGE, planProfile, buildDesignSkeleton, skinField, raySkin, snapToSkin, rarityCap: 'ultra',
     anchorPos, setAnchor, reseatDesign, classifyLimbs, designCost, cloneDesign, compileDesign, jitterDesign,
     nearestBall, fieldNormal, SKIN_REACH, SKIN_ISO, sdfSkin, sdRoundCone, primDist, smin,
   };
@@ -4064,7 +4111,9 @@
     return { base, coat, detail, pat, skin };
   }
   // ornaments a wild animal may carry
-  function addOrnaments(d, rng, n) {
+  function addOrnaments(d, rng, n, rarityCap) {
+    const ocap = rarityCap || DESIGN_API.rarityCap || 'ultra';
+    const opick = (o) => (DESIGN_API.boneWeighted ? DESIGN_API.boneWeighted(rng, o, ocap) : pickW(rng, o));
     const sk = buildDesignSkeleton(d);
     const B = sk.balls, head = B[sk.headIdx], snout = B[sk.headIdx + 1];
     const a = sk.a, b = sk.b, hr = head.r;
@@ -4088,14 +4137,14 @@
       const kind = pickW(rng, [['dorsal', 3], ['horns', 2.2], ['nose', 0.8], ['crest', 1], ['frill', 0.7], ['tailclub', 0.5], ['fin', 0.6], ['knobs', 0.8], ['antenna', 0.5]]);
       const sz = 0.75 + rng() * 0.5;
       if (kind === 'dorsal') {
-        const id = pickW(rng, [['s_spike', 3], ['s_plate', 2], ['s_quills', 1.2]]);
+        const id = opick([['s_spike', 3], ['s_plate', 2], ['s_quills', 1.2], ['s_shell', 0.9]]);
         const cnt = 2 + ((rng() * 3) | 0);
         for (let j = 0; j < cnt; j++) {
           const u = 0.45 - j * (0.9 / Math.max(1, cnt - 1)) * (0.7 + rng() * 0.2);
           put(id, a * u, b * 1.4, 0, 0, 1, 0, sz * (1 - Math.abs(u) * 0.4), false);
         }
       } else if (kind === 'horns' && !has('HORN')) {
-        const id = pickW(rng, [['h_straight', 2], ['h_curved', 2], ['h_ram', 1], ['h_antler', 1], ['h_tusk', 0.6]]);
+        const id = opick([['h_straight', 2], ['h_curved', 2], ['h_ram', 1.4], ['h_antler', 1.6], ['h_tusk', 0.6], ['h_rhino', 1.2]]);
         if (id === 'h_tusk') put(id, snout.x + snout.r * 0.4, snout.y - snout.r * 0.4, snout.r * 0.6, 0.5, -0.4, 0.8, sz * 0.8, true);
         else put(id, head.x - hr * 0.1, head.y + hr, hr * 0.35, -0.25, 1, 0.35, sz * 0.7, true);
       } else if (kind === 'nose' && !has('HORN')) {
@@ -4117,20 +4166,29 @@
   }
   function randomDesign(rng, opt) {
     opt = opt || {};
+    // The world's rarity ceiling, handed down by the caller. Falls back to
+    // 'ultra' (no alpha) so a design rolled outside a world is never richer
+    // than an ordinary island.
+    const rcap = opt.rarityCap || (DESIGN_API.rarityCap || 'ultra');
+    const wpick = (o) => (DESIGN_API.boneWeighted ? DESIGN_API.boneWeighted(rng, o, rcap) : pickW(rng, o));
     const div = clamp(numOr(opt.diversity, 0.5), 0, 1);
     const pi = opt.plan != null ? opt.plan : pickW(rng, opt.water ? FOUNDER_PLANS.concat([[6, 2]]) : FOUNDER_PLANS);
     const R = BODY_RANGE, span = 0.25 + div * 0.55;
     const pick = (k, c) => clamp(c + (rng() - 0.5) * span * (R[k][1] - R[k][0]) * 0.7, R[k][0], R[k][1]);
     const body = { len: pick('len', 1), girth: pick('girth', 1), neck: pick('neck', 1), tail: pick('tail', 1) };
     const carn = opt.diet === 'carn';
-    const eye = pi === 4 || pi === 5 ? pickW(rng, [['e_bug', 2], ['e_round', 1], ['e_cluster', 1]])
-              : pi === 9 ? pickW(rng, [['e_stalk', 2], ['e_round', 1], ['e_big', 0.5]])
-              : pickW(rng, [['e_round', 3], ['e_slit', 2.2], ['e_big', 0.8], ['e_stalk', 0.25]]);
-    const mouth = carn ? pickW(rng, [['m_jaws', 3], ['m_maw', 1]]) : pickW(rng, [['m_beak', 2], ['m_grazer', 3], ['m_trunk', 0.35]]);
+    const eye = pi === 4 || pi === 5 ? wpick([['e_bug', 2], ['e_round', 1], ['e_cluster', 1]])
+              : pi === 9 ? wpick([['e_stalk', 2], ['e_round', 1], ['e_big', 0.5]])
+              : wpick([['e_round', 3], ['e_slit', 2.2], ['e_big', 0.8], ['e_stalk', 0.25], ['e_cluster', 0.3]]);
+    // Hunters can now be born with the whole jaw ladder, down to the apex
+    // crushing jaw. The tier weights make that vanishingly rare, and the
+    // world's ceiling may forbid it outright.
+    const mouth = carn ? wpick([['m_jaws', 3], ['m_maw', 1.2], ['m_hook', 0.8], ['m_short', 0.7], ['m_spino', 0.5], ['m_rex', 0.4]])
+                       : wpick([['m_beak', 2], ['m_grazer', 3], ['m_duck', 1.1], ['m_trunk', 0.35]]);
     const tipFor = (id) => {
-      if (id === 't_paw' || id === 't_hoof') return carn ? pickW(rng, [['t_paw', 2], ['t_claw', 1.5], ['t_talon', 1]]) : pickW(rng, [['t_paw', 2], ['t_hoof', 2], ['t_pad', 1]]);
-      if (id === 't_claw') return carn ? pickW(rng, [['t_claw', 2], ['t_pincer', 1], ['t_hand', 1]]) : pickW(rng, [['t_hand', 2], ['t_paw', 1], ['t_claw', 0.5]]);
-      if (id === 't_talon') return pickW(rng, [['t_talon', 2], ['t_paw', 1]]);
+      if (id === 't_paw' || id === 't_hoof') return carn ? wpick([['t_paw', 2], ['t_claw', 1.5], ['t_talon', 1]]) : wpick([['t_paw', 2], ['t_hoof', 2], ['t_pad', 1]]);
+      if (id === 't_claw') return carn ? wpick([['t_claw', 2], ['t_pincer', 1], ['t_hand', 1]]) : wpick([['t_hand', 2], ['t_paw', 1], ['t_claw', 0.5]]);
+      if (id === 't_talon') return wpick([['t_talon', 2], ['t_paw', 1]]);
       return id;
     };
     const map = (id) => {
@@ -4142,12 +4200,13 @@
       if (s.t === 'HORN' && rng() < 0.4) return null;
       return id;
     };
-    const spring = (pi === 0 || pi === 2 || pi === 7) && rng() < 0.14;
+    const spring = (pi === 0 || pi === 2 || pi === 7) && rng() < 0.14
+                   && (!DESIGN_API.boneWildWeight || DESIGN_API.boneWildWeight('l_spring', rcap) > 0);
     const d = defaultDesign(pi, { body, map, mapLimb: (id) => (spring && id === 'l_leg' ? 'l_spring' : id) });
     reseatDesign(d);
     d.col = randomColours(rng, pi);
     const nOrn = Math.floor(rng() * (1 + div * 3.2));
-    if (nOrn) addOrnaments(d, rng, nOrn);
+    if (nOrn) addOrnaments(d, rng, nOrn, rcap);
     // limb proportions
     for (const lb of d.limbs) { const k = 0.9 + rng() * 0.25 * (0.5 + div); lb.k = lb.k.map(v => v * k); lb.f = lb.f.map(v => v * k); lb.th = clamp(numOr(lb.th, 1) * (0.85 + rng() * 0.35), 0.5, 2); }
     for (const pt of d.parts) if (ITEM_SIM[pt.id] && ITEM_SIM[pt.id].t === 'EYE') pt.s = clamp(numOr(pt.s, 1) * (0.8 + rng() * 0.35), 0.3, 3);
@@ -4171,6 +4230,7 @@
 
   const API = {
     ...DESIGN_API,
+    DESIGN_API,
     pushOutOfTrees, trunkClearance,
     onHit, HURT_TIME,
     makeRNG, gauss, clamp, PART, PART_TYPES, MOUTH_MODES, SINGLETON, CAPS, IN, OUT, MAX_SEGS, MAX_RADIAL,
@@ -4624,6 +4684,23 @@ fn shadowAt(wpos: vec3<f32>, N: vec3<f32>) -> f32 {
   return mix(1.0, s, g.shadowP.w);
 }
 
+// Caustics. Two ripple fields crossing at an angle; where their crests
+// coincide the surface acts as a lens and focuses the sun into the bright
+// moving filaments you see on a sea floor. A third, slower field breaks up the
+// regularity so it does not read as a grid.
+fn caustic(p: vec2<f32>, t: f32) -> f32 {
+  let a = sin(p.x * 0.085 + t * 0.85) + sin(p.y * 0.097 - t * 0.66);
+  let b = sin((p.x + p.y) * 0.061 + t * 1.10) + sin((p.x - p.y) * 0.073 - t * 0.81);
+  let c = sin(p.x * 0.029 - t * 0.47) + sin(p.y * 0.026 + t * 0.55);
+  let v = abs(a) * abs(b) * 0.25 * (0.55 + 0.45 * abs(c) * 0.5);
+  return pow(clamp(v, 0.0, 1.0), 3.5);
+}
+// Per-unit extinction. Water eats red first: red is gone in about 60 units,
+// green carries 170 and blue 250, which is why everything deep goes blue.
+const WATER_EXT = vec3<f32>(0.0168, 0.0058, 0.0040);
+fn waterMurk(day: f32, depth: f32) -> vec3<f32> {
+  return mix(vec3<f32>(0.016, 0.052, 0.062), vec3<f32>(0.052, 0.150, 0.165), day) * exp(-depth * 0.006);
+}
 fn shade(col: vec3<f32>, nrm: vec3<f32>, wpos: vec3<f32>) -> vec3<f32> {
   let N = normalize(nrm);
   let L = normalize(g.lightDir.xyz);
@@ -4646,7 +4723,37 @@ fn shade(col: vec3<f32>, nrm: vec3<f32>, wpos: vec3<f32>) -> vec3<f32> {
   let rim = pow(1.0 - max(dot(N, V), 0.0), 3.0);
   lit += mix(vec3<f32>(0.05, 0.07, 0.10), vec3<f32>(0.30, 0.38, 0.48), day) * rim * 0.35;
   let d = distance(wpos, g.camPos.xyz);
-  let f = clamp(1.0 - exp(-(d * g.params.y) * (d * g.params.y)), 0.0, 1.0);
+  // ---- water ---------------------------------------------------------------
+  // Only the stretch of the view ray that actually runs through water absorbs,
+  // so a fish seen from the bank greens out with its own depth rather than with
+  // how far off it is, and the air fog is charged only for the dry stretch.
+  var uw = 0.0;
+  if (g.camPos.w < 0.5) {
+    let seaY = g.params.w;
+    let camUW = g.camPos.y < seaY;
+    let ptUW = wpos.y < seaY;
+    if (camUW && ptUW) {
+      uw = d;
+    } else if (ptUW) {
+      uw = d * clamp((seaY - wpos.y) / max(1e-3, g.camPos.y - wpos.y), 0.0, 1.0);
+    } else if (camUW) {
+      uw = d * clamp((seaY - g.camPos.y) / max(1e-3, wpos.y - g.camPos.y), 0.0, 1.0);
+    }
+    if (ptUW) {
+      // the sun is spent on the way down, so the floor darkens with depth
+      let shaft = exp(-(seaY - wpos.y) * 0.0075);
+      lit *= 0.15 + 0.85 * shaft;
+      // and what is left of it dances on anything facing up
+      lit += sunCol * caustic(wpos.xz, g.params.x) * clamp(N.y, 0.0, 1.0) * day * shaft * shd * 0.6;
+    }
+    if (uw > 0.0) {
+      let trans = exp(-uw * WATER_EXT);
+      let murk = waterMurk(day, max(0.0, seaY - min(g.camPos.y, wpos.y)));
+      lit = lit * trans + murk * (vec3<f32>(1.0) - trans);
+    }
+  }
+  let dAir = max(0.0, d - uw);
+  let f = clamp(1.0 - exp(-(dAir * g.params.y) * (dAir * g.params.y)), 0.0, 1.0);
   return mix(lit, g.fogCol.rgb, f);
 }
 `;
@@ -5066,7 +5173,42 @@ fn barkTri(p: vec3<f32>, N: vec3<f32>, fine: f32, da: f32, dy: f32) -> f32 {
   var N = normalize(i.nrm);
   if (!ff && i.leaf > 0.5) { N = -N; }
   var col = i.col;
-  if (i.leaf < -0.5) {
+  var metalSpec = 0.0;
+  var glow = 0.0;
+  if (i.leaf < -2.5) {
+    // lamp glass and the bay numerals: lit from inside, so they read at night
+    glow = 1.0;
+  } else if (i.leaf < -1.5) {
+    // Weathered steel. Rust is biased onto faces that hold water and runs
+    // downward below wherever it has taken hold, which is what makes painted
+    // metal read as old rather than as flat grey.
+    let det = 1.0 - smoothstep(340.0, 1400.0, d);
+    let grain = fnoise(i.wpos.xz * 1.9 + i.wpos.yy * 0.30);
+    var mcol = col * (0.93 + 0.14 * grain);
+    if (det > 0.001) {
+      let b0 = fnoise(vec2<f32>(i.wpos.x * 0.10 + i.wpos.z * 0.10, i.wpos.y * 0.045));
+      let b1 = fnoise(vec2<f32>(i.wpos.x * 0.34 - i.wpos.z * 0.29, i.wpos.y * 0.105));
+      let bloom = b0 * 0.65 + b1 * 0.35;
+      let up = clamp(N.y, 0.0, 1.0);                      // top faces puddle, so they go first
+      let rust0 = smoothstep(0.58, 0.88, bloom + up * 0.12);
+      // the run below a bloom: the same field stretched hard down the surface
+      let run = smoothstep(0.60, 0.96, fnoise(vec2<f32>(i.wpos.x * 0.55 + i.wpos.z * 0.55, i.wpos.y * 0.009)));
+      let rusty = clamp(rust0 + run * rust0 * 0.45, 0.0, 1.0);
+      let rustCol = mix(vec3<f32>(0.40, 0.200, 0.095), vec3<f32>(0.62, 0.345, 0.155), b1);
+      mcol = mix(mcol, rustCol * (0.86 + 0.28 * grain), rusty * 0.80);
+      let pit = smoothstep(0.74, 0.92, fnoise(i.wpos.xz * 3.2 + i.wpos.yy * 0.9));
+      mcol *= 1.0 - 0.16 * pit;
+      let e = 0.6;
+      let hx = fnoise((i.wpos.xz + vec2<f32>(e, 0.0)) * 1.9 + i.wpos.yy * 0.30);
+      let hz = fnoise((i.wpos.xz + vec2<f32>(0.0, e)) * 1.9 + i.wpos.yy * 0.30);
+      N = normalize(N + vec3<f32>(grain - hx, 0.0, grain - hz) * 0.45 * det);
+      // bare steel takes a tight highlight; rust has none
+      let Lm = normalize(g.lightDir.xyz);
+      let Vm = normalize(g.camPos.xyz - i.wpos);
+      metalSpec = pow(max(dot(reflect(-Lm, N), Vm), 0.0), 58.0) * (1.0 - rusty) * 0.6 * g.params.z * det;
+    }
+    col = mix(col, mcol, det);
+  } else if (i.leaf < -0.5) {
     // rock: layered strata, lichen speckle, cracks, a bumped normal
     let det = 1.0 - smoothstep(200.0, 900.0, d);
     let q = i.wpos * 0.18;
@@ -5109,6 +5251,12 @@ fn barkTri(p: vec3<f32>, N: vec3<f32>, fine: f32, da: f32, dy: f32) -> f32 {
     }
   }
   var lit = shade(col, N, i.wpos);
+  if (metalSpec > 0.0) { lit += vec3<f32>(0.78, 0.80, 0.84) * metalSpec * shadowAt(i.wpos, N); }
+  if (glow > 0.0) {
+    // bright enough to carry at night, and it does not take the fog's grade
+    let flick = 0.95 + 0.05 * fnoise(vec2<f32>(g.params.x * 0.6, i.wpos.y * 0.03));
+    lit = mix(lit, col * (1.55 + 0.75 * (1.0 - g.params.z)) * flick, 0.88);
+  }
   if (i.leaf > 0.5) {
     // light through the leaf from behind
     let L = normalize(g.lightDir.xyz);
@@ -5554,7 +5702,7 @@ function buildCoverMesh(kind, variant) {
 
 // ---- GPU side ---------------------------------------------------------------------------
 const FOL = { ready: false, tree: [], cover: [], instBuf: null, inst: new Float32Array(FOL_MAX_INST * FOL_IF), batches: [], key: '', coverKey: '', count: 0, canopy: null };
-const TREE_VARIANTS = 3, COVER_KINDS = 9, COVER_VARIANTS = 2;
+const TREE_VARIANTS = 3, COVER_KINDS = 14, COVER_VARIANTS = 2;
 function folUpload(m) {
   const vd = new Float32Array(m.v), id = new Uint32Array(m.i);
   const vb = dev.createBuffer({ size: Math.max(16, vd.byteLength), usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
@@ -5708,6 +5856,580 @@ function waterHeightUpload() {
   if (typeof makeBindGroups === 'function' && bindG) makeBindGroups();
 }
 
+// =====================================================================
+// SEA FLOOR
+// What grows under the water, built as ordinary ground-cover meshes so it
+// goes through the same instanced draw as grass and ferns: giant kelp on the
+// cold shelf, sea grass in the wash, coral heads and sea fans on warm reefs,
+// and shells, urchins and rubble on the sand. Placement is by depth below the
+// surface and by how warm the water is, which is the same north-cold /
+// south-warm gradient the terrain generator uses for its biomes.
+// Kinds 9..13 (land cover is 0..5, rock cover 6..8).
+// =====================================================================
+const SEA_KIND_KELP = 9, SEA_KIND_WEED = 10, SEA_KIND_CORAL = 11, SEA_KIND_FAN = 12, SEA_KIND_RUBBLE = 13;
+
+// A kelp stipe: a long limp rope from the floor with blades hanging off it.
+// Sway rises steeply with height so the holdfast stays put and the canopy
+// rolls, which is what a kelp bed does in a swell.
+function seaKelpStipe(m, x0, z0, H, rnd, col, bladeCol) {
+  const pts = [], rad = [];
+  const leanX = (rnd() - 0.5) * H * 0.28, leanZ = (rnd() - 0.5) * H * 0.28;
+  const N = 6;
+  for (let k = 0; k <= N; k++) {
+    const u = k / N;
+    pts.push([x0 + leanX * u * u, H * u, z0 + leanZ * u * u]);
+    rad.push(0.55 * (1 - 0.45 * u) * (0.8 + rnd() * 0.4));
+  }
+  folTube(m, pts, rad, 5, col, H, 3.4, 0.55);
+  // blades: paired, alternating up the stipe, wider toward the top
+  const nb = 7 + ((rnd() * 4) | 0);
+  for (let b = 0; b < nb; b++) {
+    const u = 0.18 + (b / nb) * 0.8;
+    const c0 = [x0 + leanX * u * u, H * u, z0 + leanZ * u * u];
+    const a = b * 2.39996 + rnd() * 0.6;                       // golden angle: no two blades line up
+    const out = fnorm([Math.cos(a), -0.25 - rnd() * 0.35, Math.sin(a)]);
+    const L = H * (0.13 + rnd() * 0.10) * (0.55 + 0.75 * u);
+    const c = fadd(c0, fmul(out, L * 0.45));
+    const nrm = fnorm(fadd(fcross(out, [Math.cos(a + 1.57), 0, Math.sin(a + 1.57)]), [0, 0.25, 0]));
+    folLeaf(m, c, nrm, out, L, L * 0.30, fcol(bladeCol, 0.8 + rnd() * 0.4), fsw(c[1], H, 3.4) + L * 0.05);
+  }
+  // gas bladder at the tip so the frond reads as buoyant
+  folBlob(m, [x0 + leanX, H * 1.01, z0 + leanZ], H * 0.035, 1.1, fcol(bladeCol, 1.15), rnd, H, 3.6, 5);
+}
+
+// Branching staghorn coral: a recursive fork, thickest at the base.
+function seaCoralBranch(m, p, dir, len, rad, depth, col, rnd, H) {
+  const tip = fadd(p, fmul(dir, len));
+  const pts = [p, fadd(p, fmul(dir, len * 0.5)), tip];
+  folTube(m, pts, [rad, rad * 0.78, rad * 0.55], 5, col, H, 0, 0.6);
+  if (depth <= 0) {
+    folBlob(m, tip, rad * 1.5, 1.0, fcol(col, 1.25), rnd, H, 0, 5);   // pale growing tip
+    return;
+  }
+  const n = 2 + ((rnd() * 2) | 0);
+  for (let k = 0; k < n; k++) {
+    const a = rnd() * 6.2832;
+    const d2 = fnorm(fadd(fmul(dir, 1.5), [Math.cos(a) * 0.95, 0.25 + rnd() * 0.5, Math.sin(a) * 0.95]));
+    seaCoralBranch(m, tip, d2, len * (0.62 + rnd() * 0.18), rad * 0.66, depth - 1, col, rnd, H);
+  }
+}
+
+// A sea fan: a flat lattice standing on edge, so it catches the current
+// broadside on. Two-sided (leaf = 1) and swaying from the base.
+function seaFan(m, c, yaw, R, col, rnd, H) {
+  const ax = [Math.cos(yaw), 0, Math.sin(yaw)];
+  const nrm = [-Math.sin(yaw), 0, Math.cos(yaw)];
+  const ribs = 9;
+  for (let r = 0; r < ribs; r++) {
+    const u = (r / (ribs - 1)) * 2 - 1;                       // -1..1 across the fan
+    const spread = Math.sqrt(Math.max(0, 1 - u * u));
+    const top = R * (0.45 + 0.55 * spread);
+    const pts = [], rad = [];
+    for (let k = 0; k <= 4; k++) {
+      const v = k / 4;
+      pts.push(fadd(c, [ax[0] * u * R * 0.55 * v, top * v, ax[2] * u * R * 0.55 * v]));
+      rad.push(R * 0.035 * (1 - 0.6 * v));
+    }
+    folTube(m, pts, rad, 4, col, H, 1.7, 0.7);
+    // webbing between this rib and the next, as a run of small blades
+    if (r < ribs - 1) for (let k = 1; k <= 3; k++) {
+      const v = k / 3.4;
+      const p = fadd(c, [ax[0] * (u + 0.5 / (ribs - 1) * 2) * R * 0.55 * v, top * v, ax[2] * (u + 0.5 / (ribs - 1) * 2) * R * 0.55 * v]);
+      folLeaf(m, p, nrm, ax, R * 0.22, R * 0.16, fcol(col, 0.85 + rnd() * 0.3), fsw(p[1], H, 1.7));
+    }
+  }
+}
+
+// An anemone: a squat column with a crown of waving tentacles.
+function seaAnemone(m, c, R, col, tipCol, rnd, H) {
+  folTube(m, [c, fadd(c, [0, R * 0.9, 0])], [R * 0.62, R * 0.5], 6, col, H, 0.6, 0.6);
+  const top = fadd(c, [0, R * 0.9, 0]);
+  const n = 16;
+  for (let k = 0; k < n; k++) {
+    const a = k / n * 6.2832 + rnd() * 0.2;
+    const out = fnorm([Math.cos(a), 0.75 + rnd() * 0.5, Math.sin(a)]);
+    const L = R * (0.7 + rnd() * 0.5);
+    const p = fadd(top, fmul(out, L * 0.5));
+    const nrm = fnorm(fcross(out, [Math.cos(a + 1.57), 0, Math.sin(a + 1.57)]));
+    folLeaf(m, p, nrm, out, L, L * 0.16, fcol(tipCol, 0.85 + rnd() * 0.35), fsw(p[1], H, 2.6) + L * 0.12);
+  }
+}
+
+// A scallop shell: a ribbed fan lying on the sand.
+function seaShell(m, c, R, yaw, col, rnd) {
+  const ribs = 7;
+  const prev = [];
+  for (let r = 0; r <= ribs; r++) {
+    const a = yaw - 0.9 + (r / ribs) * 1.8;
+    const bulge = Math.sin((r / ribs) * Math.PI);
+    const p = [c[0] + Math.cos(a) * R, c[1] + R * 0.24 * bulge, c[2] + Math.sin(a) * R];
+    const n = fnorm([Math.cos(a) * 0.35, 1, Math.sin(a) * 0.35]);
+    prev.push(folV(m, p, n, fcol(col, 0.85 + 0.3 * (r % 2)), 0, -1));
+  }
+  const hinge = folV(m, c, [0, 1, 0], fcol(col, 0.75), 0, -1);
+  for (let r = 0; r < ribs; r++) m.i.push(hinge, prev[r], prev[r + 1]);
+}
+
+const SEA_KELP_COL = [0.20, 0.17, 0.07], SEA_BLADE_COL = [0.26, 0.29, 0.10];
+const SEA_CORAL_COLS = [[0.72, 0.30, 0.34], [0.86, 0.52, 0.22], [0.48, 0.30, 0.62], [0.90, 0.74, 0.34], [0.26, 0.56, 0.58]];
+const SEA_FAN_COLS = [[0.74, 0.24, 0.30], [0.84, 0.44, 0.20], [0.42, 0.26, 0.58]];
+
+function buildSeaCover(kind, variant) {
+  const rnd = folRng(9300 + kind * 37 + variant * 11);
+  const m = folMB();
+  if (kind === SEA_KIND_KELP) {
+    // a holdfast clump of 3-5 stipes, 55-105 units tall
+    const n = 3 + ((rnd() * 3) | 0);
+    const H = 55 + variant * 26 + rnd() * 24;
+    for (let k = 0; k < n; k++) {
+      const a = rnd() * 6.2832, r = rnd() * 3.2;
+      seaKelpStipe(m, Math.cos(a) * r, Math.sin(a) * r, H * (0.72 + rnd() * 0.45), rnd, SEA_KELP_COL, SEA_BLADE_COL);
+    }
+    folRock(m, [0, 0, 0], 2.4, 0.45, [0.22, 0.24, 0.20], 800 + variant, 0, 0);   // holdfast
+  } else if (kind === SEA_KIND_WEED) {
+    // sea grass: shorter, limper and bluer than land grass, plus a weed frond
+    folGrass(m, rnd, 20, 5, 13 + variant * 4, [0.10, 0.22, 0.14], [0.26, 0.48, 0.28], 0.85);
+    for (let k = 0; k < 3; k++) {
+      const a = rnd() * 6.2832;
+      folFrond(m, [Math.cos(a) * 2, 0.5, Math.sin(a) * 2], fnorm([Math.cos(a), 0.9, Math.sin(a)]),
+               7 + rnd() * 5, 1.4, 0.8, [0.14, 0.34, 0.20], rnd, 12, 2.2, 1);
+    }
+  } else if (kind === SEA_KIND_CORAL) {
+    // a reef head: staghorn thickets over a brain-coral boulder
+    const col = SEA_CORAL_COLS[(variant * 2 + 1) % SEA_CORAL_COLS.length];
+    folRock(m, [0, 0, 0], 4.5 + variant * 1.6, 0.62, fcol(col, 0.55), 830 + variant * 7, 1, 0);
+    const n = 3 + variant;
+    for (let k = 0; k < n; k++) {
+      const a = k / n * 6.2832 + rnd() * 0.7, r = 1.4 + rnd() * 2.6;
+      const c2 = SEA_CORAL_COLS[((variant + k) * 3) % SEA_CORAL_COLS.length];
+      seaCoralBranch(m, [Math.cos(a) * r, 2.2, Math.sin(a) * r],
+                     fnorm([Math.cos(a) * 0.45, 1, Math.sin(a) * 0.45]), 5.5 + rnd() * 3, 0.85, 2, c2, rnd, 18);
+    }
+    seaAnemone(m, [3.5, 0.6, -2.4], 1.5, [0.66, 0.34, 0.40], [0.94, 0.62, 0.58], rnd, 18);
+  } else if (kind === SEA_KIND_FAN) {
+    // sea fans standing on edge, with anemones around the base
+    const n = 2 + variant;
+    for (let k = 0; k < n; k++) {
+      const a = rnd() * 6.2832, r = rnd() * 3.4;
+      seaFan(m, [Math.cos(a) * r, 0.4, Math.sin(a) * r], rnd() * 3.14,
+             9 + rnd() * 7 + variant * 3, SEA_FAN_COLS[(k + variant) % SEA_FAN_COLS.length], rnd, 22);
+    }
+    for (let k = 0; k < 3; k++) {
+      const a = rnd() * 6.2832;
+      seaAnemone(m, [Math.cos(a) * 4.5, 0.3, Math.sin(a) * 4.5], 1.1 + rnd() * 0.9,
+                 [0.60, 0.40, 0.46], [0.92, 0.70, 0.52], rnd, 12);
+    }
+  } else {
+    // rubble: shells, urchins and small stones on the sand
+    for (let k = 0; k < 5 + variant * 3; k++) {
+      const a = rnd() * 6.2832, r = rnd() * 6;
+      folRock(m, [Math.cos(a) * r, 0, Math.sin(a) * r], 0.35 + rnd() * rnd() * 1.1, 0.5 + rnd() * 0.3,
+              [0.50, 0.48, 0.42], 860 + k * 3 + variant * 40, 0, 0);
+    }
+    for (let k = 0; k < 3 + variant; k++) {
+      const a = rnd() * 6.2832, r = 1 + rnd() * 5;
+      seaShell(m, [Math.cos(a) * r, 0.1, Math.sin(a) * r], 0.9 + rnd() * 0.9, rnd() * 6.2832,
+               [0.82, 0.76, 0.66], rnd);
+    }
+    // urchins: a dark ball of spines
+    for (let k = 0; k < 1 + variant; k++) {
+      const a = rnd() * 6.2832, r = 2 + rnd() * 4;
+      const c = [Math.cos(a) * r, 0.5, Math.sin(a) * r];
+      folRock(m, c, 0.85, 0.85, [0.14, 0.10, 0.16], 890 + k, 0, 0);
+      for (let s = 0; s < 14; s++) {
+        const sa = rnd() * 6.2832, su = rnd() * 0.9;
+        const d = fnorm([Math.cos(sa) * Math.sqrt(1 - su * su), su, Math.sin(sa) * Math.sqrt(1 - su * su)]);
+        folTube(m, [fadd(c, fmul(d, 0.5)), fadd(c, fmul(d, 1.9 + rnd() * 0.8))], [0.10, 0.02], 3,
+                [0.20, 0.13, 0.22], 4, 0, 0.8);
+      }
+    }
+  }
+  return m;
+}
+
+// ---- placement ------------------------------------------------------------
+// Warmth at a point, matching the terrain generator's north-cold/south-warm
+// gradient (the generator keeps its own tempAt() private, so this is the same
+// formula without the altitude lapse, which does not apply under water).
+function seaWarmth(x, z) { return clamp(0.16 + (z / WORLD_H) * 0.78, 0, 1); }
+const SEA_COVER_SHORE = [[SEA_KIND_WEED, 0.50], [SEA_KIND_RUBBLE, 0.34], [SEA_KIND_FAN, 0.04]];
+const SEA_COVER_REEF  = [[SEA_KIND_CORAL, 0.38], [SEA_KIND_FAN, 0.24], [SEA_KIND_WEED, 0.16], [SEA_KIND_RUBBLE, 0.14]];
+const SEA_COVER_KELP  = [[SEA_KIND_KELP, 0.34], [SEA_KIND_WEED, 0.30], [SEA_KIND_RUBBLE, 0.18], [SEA_KIND_FAN, 0.06]];
+const SEA_COVER_DEEP  = [[SEA_KIND_RUBBLE, 0.14], [SEA_KIND_WEED, 0.05], [SEA_KIND_FAN, 0.03]];
+// depth is world units of water over the sea floor at this point
+function seaCoverAt(x, z, depth) {
+  if (depth < 0.8 || depth > 320) return null;     // nothing on the tideline, nothing on the abyssal plain
+  if (depth < 5) return SEA_COVER_SHORE;
+  const warm = seaWarmth(x, z);
+  if (depth < 48 && warm > 0.58) return SEA_COVER_REEF;    // coral wants warm, sunlit water
+  if (depth < 110) return SEA_COVER_KELP;                  // kelp runs down the shelf
+  return SEA_COVER_DEEP;
+}
+
+// =====================================================================
+// SEA LIFE: shoals of small fish, and the bubbles a diver trails.
+//
+// Both are decoration. They carry no simulation state, take no part in the
+// ecology, and cannot be eaten or hurt, so they cost the world nothing. They
+// are drawn through the same instanced-ellipsoid path as the plants, which
+// means a full reef of them is a few hundred instances a frame.
+//
+// A shoal is one object: a centre, a heading and a count. The individual fish
+// are positions derived from a hash plus the swim phase, so nothing per fish
+// is stored or stepped.
+// =====================================================================
+const SHOAL_MAX = 18;          // shoals kept alive around the camera
+const SHOAL_R = 1100;          // they live inside this radius; outside it they are recycled
+const SHOAL_FISH = 44;         // fish in the biggest shoal
+const SEA_TINTS = [
+  [0.62, 0.68, 0.74], [0.55, 0.64, 0.72], [0.78, 0.72, 0.48],
+  [0.40, 0.58, 0.66], [0.82, 0.58, 0.30], [0.50, 0.66, 0.58],
+];
+const SEA = { shoals: [], t: -1, bub: [], bubAcc: 0, seed: 1 };
+const SEA_BUB_MAX = 220;
+
+function seaRnd() {
+  SEA.seed = (Math.imul(SEA.seed ^ (SEA.seed >>> 15), 2246822519) + 0x9E3779B9) >>> 0;
+  return ((SEA.seed ^ (SEA.seed >>> 16)) >>> 0) / 4294967296;
+}
+function seaSurfaceY() { return (terrain && terrain.LV ? terrain.LV.water : 0.3) * HEIGHT_SCALE; }
+
+// Find somewhere in an annulus around the camera with enough water in it.
+// Returns null rather than looping forever when the camera is inland.
+function seaFindSpot(camX, camZ) {
+  const sy = seaSurfaceY();
+  for (let k = 0; k < 24; k++) {
+    const a = seaRnd() * 6.2832, r = SHOAL_R * (0.25 + 0.7 * Math.sqrt(seaRnd()));
+    const x = camX + Math.cos(a) * r, z = camZ + Math.sin(a) * r;
+    if (x < 40 || z < 40 || x > WORLD_W - 40 || z > WORLD_H - 40) continue;
+    const gy = groundAt(x, z);
+    const room = sy - gy;
+    if (room < 22) continue;
+    return { x, z, gy, room, sy };
+  }
+  return null;
+}
+function seaSpawnShoal(camX, camZ) {
+  const p = seaFindSpot(camX, camZ);
+  if (!p) return null;
+  const big = seaRnd();
+  return {
+    x: p.x, z: p.z,
+    y: p.gy + 6 + seaRnd() * Math.max(2, p.room - 12),
+    hd: seaRnd() * 6.2832,
+    spd: 8 + seaRnd() * 16,
+    turn: 0,
+    n: 8 + ((big * big * (SHOAL_FISH - 8)) | 0),
+    len: 0.8 + seaRnd() * (big > 0.75 ? 3.2 : 1.1),   // body length in world units
+    rad: 7 + seaRnd() * 16 + big * 22,                // how loosely the shoal packs
+    col: SEA_TINTS[(seaRnd() * SEA_TINTS.length) | 0],
+    ph: seaRnd() * 100,
+    id: (seaRnd() * 1e6) | 0,
+  };
+}
+function seaShoalStep(s, dt, sy) {
+  // a slow random walk on the heading, plus a nudge away from the map edge
+  s.turn += (seaRnd() - 0.5) * dt * 2.2;
+  s.turn *= Math.pow(0.35, dt);
+  s.hd += s.turn * dt;
+  const edge = 260;
+  if (s.x < edge) s.hd += (0 - Math.cos(s.hd)) * dt * 1.6;
+  if (s.x > WORLD_W - edge) s.hd -= (0 + Math.cos(s.hd)) * dt * 1.6;
+  if (s.z < edge) s.hd += (0 - Math.sin(s.hd)) * dt * 1.6;
+  if (s.z > WORLD_H - edge) s.hd -= (0 + Math.sin(s.hd)) * dt * 1.6;
+  s.x += Math.cos(s.hd) * s.spd * dt;
+  s.z += Math.sin(s.hd) * s.spd * dt;
+  // stay in the water column: above the floor, below the surface
+  const gy = groundAt(s.x, s.z);
+  const lo = gy + 4 + s.rad * 0.5, hi = sy - 4 - s.rad * 0.5;
+  if (hi <= lo) { s.dead = true; return; }
+  s.y += (Math.sin(s.ph + performance.now() * 0.00021) * 6) * dt;
+  s.y = clamp(s.y, lo, hi);
+}
+function seaTick(camX, camZ, dt) {
+  const sy = seaSurfaceY();
+  for (const s of SEA.shoals) {
+    seaShoalStep(s, dt, sy);
+    const dx = s.x - camX, dz = s.z - camZ;
+    if (s.dead || dx * dx + dz * dz > SHOAL_R * SHOAL_R * 1.44) s.dead = true;
+  }
+  for (let i = SEA.shoals.length - 1; i >= 0; i--) if (SEA.shoals[i].dead) SEA.shoals.splice(i, 1);
+  // refill a couple per frame at most, so a fresh world fills in over a second
+  for (let k = 0; k < 2 && SEA.shoals.length < SHOAL_MAX; k++) {
+    const s = seaSpawnShoal(camX, camZ);
+    if (!s) break;
+    SEA.shoals.push(s);
+  }
+}
+
+// ---- bubbles ---------------------------------------------------------------
+// Rising from the player's head whenever it is under water, faster when the
+// animal is working. Air breathers make far more of them than gill breathers.
+function seaBubbleSpawn(x, y, z, n, spread, rise) {
+  for (let k = 0; k < n; k++) {
+    if (SEA.bub.length >= SEA_BUB_MAX) break;
+    SEA.bub.push({
+      x: x + (seaRnd() - 0.5) * spread, y: y + (seaRnd() - 0.5) * spread * 0.4, z: z + (seaRnd() - 0.5) * spread,
+      r: 0.18 + seaRnd() * 0.5, vy: rise * (0.7 + seaRnd() * 0.7),
+      ph: seaRnd() * 6.2832, wob: 0.5 + seaRnd() * 1.6,
+    });
+  }
+}
+function seaBubbleTick(dt, sy) {
+  for (let i = SEA.bub.length - 1; i >= 0; i--) {
+    const b = SEA.bub[i];
+    b.y += b.vy * dt;
+    b.vy = Math.min(b.vy + 14 * dt, 46);        // a bubble accelerates as it expands
+    b.r += dt * 0.09;
+    b.ph += dt * 3.2;
+    if (b.y > sy - 0.4) { SEA.bub.splice(i, 1); }
+  }
+}
+function seaPlayerBubbles(dt, sy) {
+  const c = player && player.c;
+  if (!c || !c.alive || !c._sub) return;
+  const p = c.ph;
+  const hx = c.x, hz = c.y;                     // creatures live on the x/y ground plane; height is the camera's
+  const hy = clamp(player.camY, groundAt(hx, hz) + 1, sy - 1);
+  const moving = Math.min(1, Math.hypot(c.vx || 0, c.vy || 0) / Math.max(1, p.speedWater || 40));
+  const rate = (p.waterBreath ? 1.2 : 5.5) * (0.5 + moving);
+  SEA.bubAcc += rate * dt;
+  while (SEA.bubAcc >= 1) {
+    SEA.bubAcc -= 1;
+    seaBubbleSpawn(hx, hy, hz, 1, Math.max(1.2, p.radius * BODY_SCALE * 0.8), 16 + p.radius * 0.4);
+  }
+}
+
+// ---- drawing ---------------------------------------------------------------
+// One ellipsoid for the body and one flattened one for the tail. Both go into
+// the plant instance buffer, which is drawn with the shared sphere mesh.
+function seaDrawShoal(s, camX, camY, camZ, t, sy, fx, fz) {
+  const dx = s.x - camX, dz = s.z - camZ;
+  const d2 = dx * dx + dz * dz;
+  if (d2 > 620 * 620) return 0;
+  const d = Math.sqrt(d2);
+  if (d > 90 && (dx * fx + dz * fz) / d < -0.35) return 0;      // behind the camera
+  // a shoal only shows if there is water between it and the eye
+  if (camY > sy && s.y > sy - 2) return 0;
+  const detail = d < 260 ? 1 : 0;                                // far shoals lose their tails
+  const hd = s.hd, ch = Math.cos(hd), sh = Math.sin(hd);
+  const px = -sh, pz = ch;                                       // sideways
+  const L = s.len, W = L * 0.34, Hh = L * 0.62;
+  const back = [s.col[0] * 0.45, s.col[1] * 0.5, s.col[2] * 0.55];
+  let n = 0;
+  for (let k = 0; k < s.n; k++) {
+    // a fixed, well-spread offset per fish inside a stretched ellipsoid
+    const h1 = ((k * 2654435761) ^ (s.id * 40503)) >>> 0;
+    const u = ((h1 & 1023) / 1024) * 2 - 1;
+    const v = (((h1 >>> 10) & 1023) / 1024) * 2 - 1;
+    const wgt = (((h1 >>> 20) & 1023) / 1024) * 2 - 1;
+    const ph = s.ph + k * 0.7;
+    const sw = Math.sin(t * 2.4 + ph) * s.rad * 0.12;            // the whole shoal breathes
+    const along = u * s.rad * 1.7 + sw;
+    const side = v * s.rad + Math.sin(t * 1.7 + ph * 1.3) * s.rad * 0.1;
+    const up = wgt * s.rad * 0.55 + Math.sin(t * 1.1 + ph * 2.1) * s.rad * 0.08;
+    const fxp = s.x + ch * along + px * side;
+    const fzp = s.z + sh * along + pz * side;
+    const fyp = clamp(s.y + up, groundAt(fxp, fzp) + L * 0.8, sy - L * 0.8);
+    // body wiggle: the nose leads, the tail whips
+    const wig = Math.sin(t * 9 + ph * 3) * 0.20;
+    const bdx = ch - px * wig, bdz = sh - pz * wig;
+    pushP(fxp, fyp, fzp, bdx, 0, bdz, W, Hh, L, s.col);
+    n++;
+    if (detail) {
+      const twig = Math.sin(t * 9 + ph * 3 - 0.9) * 0.55;
+      pushP(fxp - ch * L * 1.05, fyp, fzp - sh * L * 1.05,
+            ch - px * twig, 0, sh - pz * twig, W * 0.22, Hh * 1.15, L * 0.55, back);
+      n++;
+    }
+  }
+  return n;
+}
+// Called once a frame from the plant instance pass, after the plants are in.
+function seaLifeInstances(camX, camY, camZ, t) {
+  if (!world || !terrain || !terrain.LV) return;
+  const dt = SEA.t < 0 ? 0 : clamp(t - SEA.t, 0, 0.25);
+  SEA.t = t;
+  const sy = seaSurfaceY();
+  if (dt > 0) { seaTick(camX, camZ, dt); seaBubbleTick(dt, sy); seaPlayerBubbles(dt, sy); }
+  // leave room for the bubbles and a safety margin on the plant buffer
+  const budget = MAX_PLANT_INST - plantCount - SEA_BUB_MAX - 64;
+  if (budget > 40) {
+    const yaw = player.yaw, fx = Math.cos(yaw), fz = Math.sin(yaw);
+    let used = 0;
+    for (const s of SEA.shoals) {
+      if (used > budget) break;
+      used += seaDrawShoal(s, camX, camY, camZ, t, sy, fx, fz);
+    }
+  }
+  const bcol = [0.80, 0.90, 0.95];
+  for (const b of SEA.bub) {
+    if (plantCount >= MAX_PLANT_INST - 8) break;
+    const wob = Math.sin(b.ph) * b.r * 1.6;
+    pushP(b.x + wob, b.y, b.z + Math.cos(b.ph * 0.8) * b.r * 1.6, 0, 1, 0, b.r, b.r * 1.15, b.r, bcol);
+  }
+}
+function seaLifeReset() { SEA.shoals.length = 0; SEA.bub.length = 0; SEA.t = -1; SEA.bubAcc = 0; }
+
+// =====================================================================
+// THE CAGES
+// One steel box per bay on the ring: a plate floor, four walls of vertical
+// bars on a heavy frame, a barred roof, and a gate on the inward face that
+// slides up when the match starts. Above the gate is a lit bay number, built
+// out of seven-segment bars so it reads from a long way off.
+// Built as ordinary foliage meshes, so they go through the same instanced
+// draw as the trees.
+// =====================================================================
+const MAT_STEEL = -2;          // dark grey plate, pitted, rusting
+const MAT_GLOW = -3;           // lamp glass and the bay numerals: lit, not weathered
+const BR_STEEL = [0.355, 0.340, 0.320];   // dark grey steel, warmed against a cool ambient
+const BR_STEEL_D = [0.260, 0.248, 0.234]; // the heavy frame, darker still
+const BR_RUST = [0.360, 0.215, 0.125];    // the parts that have gone over to rust
+const BR_PLATE = [0.285, 0.275, 0.262];   // floor plate
+const BR_LAMP = [0.95, 0.72, 0.22];
+
+// An axis-aligned box as 12 triangles, flat-shaded, with a tint per face so
+// the edges read without any lighting help.
+function brBox(m, cx, cy, cz, hx, hy, hz, col, mat) {
+  const lf = mat == null ? MAT_STEEL : mat;
+  const P = [
+    [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
+    [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1],
+  ].map(p => [cx + p[0] * hx, cy + p[1] * hy, cz + p[2] * hz]);
+  const F = [
+    [[0, 3, 2, 1], [0, 0, -1], 0.88], [[4, 5, 6, 7], [0, 0, 1], 0.96],
+    [[0, 1, 5, 4], [0, -1, 0], 0.76], [[3, 7, 6, 2], [0, 1, 0], 1.08],
+    [[0, 4, 7, 3], [-1, 0, 0], 0.92], [[1, 2, 6, 5], [1, 0, 0], 1.00],
+  ];
+  for (const [q, n, k] of F) {
+    const c = fcol(col, k);
+    const i0 = folV(m, P[q[0]], n, c, 0, lf), i1 = folV(m, P[q[1]], n, c, 0, lf);
+    const i2 = folV(m, P[q[2]], n, c, 0, lf), i3 = folV(m, P[q[3]], n, c, 0, lf);
+    m.i.push(i0, i1, i2, i0, i2, i3);
+  }
+}
+// Seven-segment digit, drawn in the XY plane, 1 unit wide by 2 tall, centred.
+const BR_SEG = [
+  [1, 1, 1, 0, 1, 1, 1], [0, 0, 1, 0, 0, 1, 0], [1, 0, 1, 1, 1, 0, 1], [1, 0, 1, 1, 0, 1, 1],
+  [0, 1, 1, 1, 0, 1, 0], [1, 1, 0, 1, 0, 1, 1], [1, 1, 0, 1, 1, 1, 1], [1, 0, 1, 0, 0, 1, 0],
+  [1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 0, 1, 1],
+];
+function brDigit(m, d, cx, cy, cz, h, col, mat) {
+  const s = BR_SEG[clamp(d | 0, 0, 9)];
+  const w = h * 0.55, t = h * 0.10;
+  //      top(0)
+  // ul(1)      ur(2)
+  //      mid(3)
+  // ll(4)      lr(5)
+  //      bot(6)
+  const put = (x, y, hx, hy) => brBox(m, cx + x, cy + y, cz, hx, hy, t * 0.5, col, mat == null ? MAT_GLOW : mat);
+  if (s[0]) put(0, h * 0.5, w * 0.5, t * 0.5);
+  if (s[1]) put(-w * 0.5, h * 0.25, t * 0.5, h * 0.25);
+  if (s[2]) put(w * 0.5, h * 0.25, t * 0.5, h * 0.25);
+  if (s[3]) put(0, 0, w * 0.5, t * 0.5);
+  if (s[4]) put(-w * 0.5, -h * 0.25, t * 0.5, h * 0.25);
+  if (s[5]) put(w * 0.5, -h * 0.25, t * 0.5, h * 0.25);
+  if (s[6]) put(0, -h * 0.5, w * 0.5, t * 0.5);
+}
+// The cage body: everything except the gate, which moves and so is its own
+// mesh. The open face is +X, which is the face the bay is turned to face the
+// island with.
+function buildCageMesh() {
+  const m = folMB();
+  const R = BR_CAGE_R, H = BR_CAGE_H, bar = 0.65, frame = 1.6;
+  // floor plate, sunk so uneven ground does not show through
+  brBox(m, 0, -1.6, 0, R, 1.6, R, BR_PLATE, MAT_STEEL);
+  // corner posts
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    brBox(m, sx * (R - frame), H * 0.5, sz * (R - frame), frame, H * 0.5, frame, BR_STEEL_D, MAT_STEEL);
+  }
+  // three walls of bars (back -X, sides +-Z), a gap on +X for the gate
+  const nb = 13;
+  for (let i = 0; i < nb; i++) {
+    const u = (i / (nb - 1)) * 2 - 1;
+    brBox(m, -R + frame, H * 0.5, u * (R - frame), bar, H * 0.5, bar, BR_STEEL, MAT_STEEL);
+    brBox(m, u * (R - frame), H * 0.5, -R + frame, bar, H * 0.5, bar, BR_STEEL, MAT_STEEL);
+    brBox(m, u * (R - frame), H * 0.5, R - frame, bar, H * 0.5, bar, BR_STEEL, MAT_STEEL);
+  }
+  // rails: top and waist, all four sides
+  for (const y of [H - frame, H * 0.5]) {
+    brBox(m, 0, y, -R + frame, R, frame * 0.5, frame * 0.5, BR_STEEL_D, MAT_STEEL);
+    brBox(m, 0, y, R - frame, R, frame * 0.5, frame * 0.5, BR_STEEL_D, MAT_STEEL);
+    brBox(m, -R + frame, y, 0, frame * 0.5, frame * 0.5, R, BR_STEEL_D, MAT_STEEL);
+  }
+  // barred roof
+  for (let i = 0; i < nb; i++) {
+    const u = (i / (nb - 1)) * 2 - 1;
+    brBox(m, u * (R - frame), H, 0, bar, bar, R, BR_STEEL_D, MAT_STEEL);
+  }
+  // gate frame and lintel on the open face
+  brBox(m, R - frame, H + frame, 0, frame, frame, R, BR_RUST, MAT_STEEL);
+  // a dim lamp in each back corner, so the inside of the cage is lit
+  for (const sz of [-1, 1]) brBox(m, -R + frame * 2.2, H - frame * 2, sz * (R * 0.55), 1.4, 1.0, 1.4, BR_LAMP, MAT_GLOW);
+  return m;
+}
+// The gate: a slab of bars filling the +X face. Drawn separately so it can
+// slide up out of the frame.
+function buildGateMesh() {
+  const m = folMB();
+  const R = BR_CAGE_R, H = BR_CAGE_H, frame = 1.6;
+  brBox(m, 0, H - frame, 0, frame * 0.6, frame, R - frame, BR_RUST, MAT_STEEL);
+  brBox(m, 0, 0, 0, frame * 0.6, frame * 0.8, R - frame, BR_RUST, MAT_STEEL);
+  const nb = 11;
+  for (let i = 0; i < nb; i++) {
+    const u = (i / (nb - 1)) * 2 - 1;
+    brBox(m, 0, H * 0.5, u * (R - frame * 1.6), frame * 0.5, H * 0.5, 0.8, BR_STEEL, MAT_STEEL);
+  }
+  for (const y of [H * 0.25, H * 0.5, H * 0.75]) {
+    brBox(m, 0, y * 2 * 0.5, 0, frame * 0.4, 0.7, R - frame, BR_STEEL_D, MAT_STEEL);
+  }
+  return m;
+}
+// One mesh per digit 0-9, to hang over the gate.
+function buildDigitMesh(d) {
+  const m = folMB();
+  // Backing plate in the middle with a lit numeral on each face, so the bay
+  // number reads whichever side of the cage you come at it from.
+  brBox(m, 0, 0, 0, 7, 6.5, 0.9, BR_STEEL_D, MAT_STEEL);
+  brDigit(m, d, 0, 0, 1.4, 9, BR_LAMP, MAT_GLOW);
+  brDigit(m, d, 0, 0, -1.4, 9, BR_LAMP, MAT_GLOW);
+  return m;
+}
+const BRMESH = { cage: null, gate: null, digits: [], ready: false };
+function brMeshInit() {
+  if (BRMESH.ready) return;
+  BRMESH.cage = folUpload(buildCageMesh());
+  BRMESH.gate = folUpload(buildGateMesh());
+  for (let d = 0; d < 10; d++) BRMESH.digits[d] = folUpload(buildDigitMesh(d));
+  BRMESH.ready = true;
+}
+// Queue the ring into the foliage instance buckets. Called from folUpdate,
+// which is where the buckets live.
+function brPutCages(put, camX, camZ) {
+  if (!BR.on || !BRMESH.ready) return;
+  const lift = BR.gateY * (BR_CAGE_H + 6);
+  for (const bay of BR.bays) {
+    const dx = bay.x - camX, dz = bay.z - camZ;
+    if (dx * dx + dz * dz > 3400 * 3400) continue;
+    put(BRMESH.cage, bay.x, bay.y, bay.z, bay.yaw, 1, [1, 1, 1]);
+    if (BR.gateY < 0.999) {
+      const gx = bay.x + Math.cos(bay.yaw) * BR_CAGE_R;
+      const gz = bay.z + Math.sin(bay.yaw) * BR_CAGE_R;
+      put(BRMESH.gate, gx, bay.y + lift, gz, bay.yaw, 1, [1, 1, 1]);
+    }
+    // the bay number over the gate, facing out along the cage's own axis
+    const s = String(bay.n);
+    const nx = Math.cos(bay.yaw), nz = Math.sin(bay.yaw);
+    for (let k = 0; k < s.length; k++) {
+      const off = (k - (s.length - 1) / 2) * 7.5;
+      // digits run across the face, which is perpendicular to the cage axis
+      const px = bay.x + nx * (BR_CAGE_R + 1) - nz * off;
+      const pz = bay.z + nz * (BR_CAGE_R + 1) + nx * off;
+      put(BRMESH.digits[+s[k]], px, bay.y + BR_CAGE_H + 12, pz, bay.yaw + Math.PI / 2, 1, [1, 1, 1]);
+    }
+  }
+}
+
 function folInit() {
   if (FOL.ready) return;
   const t0 = performance.now();
@@ -5719,8 +6441,9 @@ function folInit() {
       for (let l = 0; l < 3; l++) { const { m, H } = k === 9 ? buildBoulderMesh(v, l) : buildTreeMesh(k, v, l); const g = folUpload(m); g.H = H; FOL.tree[k][v][l] = g; tris += l === 0 ? g.tris : 0; }
     }
   }
-  for (let k = 0; k < COVER_KINDS; k++) { FOL.cover[k] = []; for (let v = 0; v < COVER_VARIANTS; v++) FOL.cover[k][v] = folUpload(k >= 6 ? buildRockCover(k, v) : buildCoverMesh(k, v)); }
+  for (let k = 0; k < COVER_KINDS; k++) { FOL.cover[k] = []; for (let v = 0; v < COVER_VARIANTS; v++) FOL.cover[k][v] = folUpload(k >= 9 ? buildSeaCover(k, v) : k >= 6 ? buildRockCover(k, v) : buildCoverMesh(k, v)); }
   FOL.instBuf = dev.createBuffer({ size: FOL.inst.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+  brMeshInit();
   FOL.ready = true;
   FOL.buildMs = performance.now() - t0; FOL.lod0Tris = tris;
 }
@@ -5747,6 +6470,7 @@ function folUpdate(camX, camY, camZ, yaw) {
   };
   const fx = Math.cos(yaw), fz = Math.sin(yaw);
   const T = terrain;
+  brPutCages(put, camX, camZ);
   for (const tr of world.forest.trees) {
     const dx = tr.x - camX, dz = tr.y - camZ, d = Math.hypot(dx, dz);
     if (d > FAR * 0.95) continue;
@@ -5769,8 +6493,14 @@ function folUpdate(camX, camY, camZ, yaw) {
     const d = Math.hypot(dx, dz);
     if (d > 60 && !r2InCone(dx, dz, d, 20, fx, fz)) continue;
     const e = T.height(x, z);
-    if (e < T.LV.water - 0.004 && T.biomeAt(x, z) !== 'shallow' && T.biomeAt(x, z) !== 'marsh') continue;
-    const opts = COVER_BY_BIOME[T.biomeAt(x, z)];
+    const gy = groundAt(x, z);
+    let opts;
+    if (e < T.LV.water) {
+      // under water the sea floor has its own flora, by depth and by warmth
+      opts = seaCoverAt(x, z, T.LV.water * HEIGHT_SCALE - gy);
+    } else {
+      opts = COVER_BY_BIOME[T.biomeAt(x, z)];
+    }
     if (!opts) continue;
     let r = ((h >>> 16) & 1023) / 1024, kind = -1;
     // thin out toward the edge of the radius so it does not end in a hard ring
@@ -5778,8 +6508,14 @@ function folUpdate(camX, camY, camZ, yaw) {
     for (const [k, wgt] of opts) { if (r < wgt * fade) { kind = k; break; } r -= wgt * fade; }
     if (kind < 0) continue;
     const g = FOL.cover[kind][(h >>> 26) & 1];
-    const s = 0.7 + ((h >>> 20) & 63) / 70;
-    put(g, x, groundAt(x, z) - 0.3, z, ((h >>> 3) & 255) / 40, s, [1, 1, 1]);
+    let s = 0.7 + ((h >>> 20) & 63) / 70;
+    if (kind === SEA_KIND_KELP) {
+      // a kelp bed should not poke out of the sea: shrink it to the water column
+      const room = T.LV.water * HEIGHT_SCALE - gy;
+      s = Math.min(s, room / 105);
+      if (s < 0.28) continue;
+    }
+    put(g, x, gy - 0.3, z, ((h >>> 3) & 255) / 40, s, [1, 1, 1]);
   }
   // pack
   let off = 0;
@@ -5882,6 +6618,29 @@ fn wnoise(p: vec2<f32>) -> f32 {
     var lit = ice * (mix(vec3<f32>(0.2, 0.24, 0.32), vec3<f32>(0.62, 0.70, 0.80), day) + vec3<f32>(0.9, 0.88, 0.82) * max(dot(Ni, L), 0.0) * 0.55 * sh * day);
     lit += vec3<f32>(1.0) * pow(max(dot(reflect(-L, Ni), V), 0.0), 60.0) * 0.5 * day * sh;
     return vec4<f32>(mix(lit, g.fogCol.rgb, fogf), 0.97);
+  }
+  // Seen from below the surface is a mirror everywhere except a bright disc
+  // straight overhead: past about 48 degrees light coming from the sky is
+  // totally internally reflected. That disc is Snell's window, and the ripples
+  // make its edge crawl.
+  if (g.camPos.y < sea) {
+    let up = clamp(-V.y, 0.0, 1.0);
+    let rip = (wnoise(i.wpos.xz * 0.07 + vec2<f32>(t * 0.45, t * -0.30)) - 0.5)
+            + (wnoise(i.wpos.xz * 0.19 - vec2<f32>(t * 0.30, t * 0.50)) - 0.5) * 0.5;
+    let win = smoothstep(0.46, 0.86, up + rip * 0.24);
+    let sky = mix(vec3<f32>(0.05, 0.08, 0.12), vec3<f32>(0.66, 0.78, 0.90), day);
+    let below = mix(vec3<f32>(0.020, 0.060, 0.070), vec3<f32>(0.090, 0.215, 0.235), day);
+    var uwl = mix(below, sky, win);
+    // the sun burning through, smeared along the ripples
+    let sunUp = clamp(dot(normalize(vec3<f32>(L.x, abs(L.y), L.z)),
+                          normalize(vec3<f32>(-V.x, abs(V.y), -V.z))), 0.0, 1.0);
+    uwl += vec3<f32>(1.0, 0.95, 0.84) * pow(sunUp, 22.0) * day * win * 1.5;
+    uwl += vec3<f32>(0.8, 0.9, 1.0) * smoothstep(0.55, 0.95, abs(rip) * 2.0) * win * day * 0.18;
+    // the water between the eye and the ceiling absorbs like anything else
+    let tr = exp(-dist * vec3<f32>(0.0168, 0.0058, 0.0040));
+    let far = mix(vec3<f32>(0.016, 0.052, 0.062), vec3<f32>(0.052, 0.150, 0.165), day);
+    uwl = uwl * tr + far * (vec3<f32>(1.0) - tr);
+    return vec4<f32>(uwl, 0.97);
   }
   // waves: several travelling ripples, calmer in the shallows
   let calm = clamp(depth / 25.0, 0.25, 1.0);
@@ -7043,6 +7802,7 @@ function buildPlantInstances(camX, camZ, t) {
       pushP(topX, y + hgt * 0.94, topZ, 0, 1, 0, cr * 0.62, cr * 0.50, cr * 0.62, leaf(0.11, 0.36, 0.14));
     }
   }
+  try { seaLifeInstances(camX, player.camY, camZ, t); } catch (e) { console.warn(e); }
   if (plantCount) dev.queue.writeBuffer(plantVB, 0, plantData, 0, plantCount * INST_FLOATS);
   if (spikeCount) dev.queue.writeBuffer(spikeVB, 0, spikeData, 0, spikeCount * INST_FLOATS);
   return plantCount;
@@ -10323,6 +11083,17 @@ function takeNewbornBody(src) {
 function respawn() {
   const dead = player.c;
   if (dead && dead !== player._shownDeath) { player._shownDeath = dead; showDeath(dead); }
+  // In a match your line does not continue into the wildlife. Who killed you
+  // decides what happens next, and brChoose() puts you back or not.
+  if (BR.on && BR.phase !== 'over') {
+    const me = BR.players[BR.slot];
+    if (me && me.alive) {
+      const killer = dead && dead._brKiller != null ? dead._brKiller : null;
+      brOnPlayerKilled(BR.slot, killer, dead && dead.deathCause ? dead.deathCause : 'the island');
+    }
+    player.spectator = true;
+    return;
+  }
   let best = null, bestD = Infinity;
   if (dead) {
     // geneticDistance() compares SIGNATURES, not genomes. Creatures cache one
@@ -11013,6 +11784,8 @@ function fightUpdateBlood(dt) {
 // defer the hit (core then skips the exchange entirely).
 function fightHitFilter(victim, att, dmg) {
   const c = player.c;
+  // In a match, who may hit whom is a match rule, not a combat rule.
+  if (BR.on && !brHitAllowed(victim, att)) return null;
   // the body you steer only attacks when you press the button
   if (c && att === c && !player.spectator) return null;
   if (victim !== c || !c || !c.alive || player.spectator) return dmg;
@@ -11021,6 +11794,7 @@ function fightHitFilter(victim, att, dmg) {
   if (c._spawnT != null && simT - c._spawnT < 45 && att.speciesId === c.speciesId) return null;
   if (att._stagT > simT) return null;                           // a staggered animal cannot strike
   for (const s of FIGHT.pending) if (s.att === att) return null;  // already winding up
+  if (BR.on && brSlotOf(att) != null) c._brKiller = brSlotOf(att);
   const windup = clamp(0.40 + 0.09 * Math.sqrt(Math.max(0.1, att.ph.mass)), 0.40, 0.85);
   FIGHT.pending.push({ att, dmg, t: windup, dur: windup });
   // the strike animation peaks (strikeCurve k ~ 0.5) exactly at impact
@@ -12082,6 +12856,7 @@ function ssShow() { const st = document.getElementById('start'); if (st) { st.st
 // ---------------------------------------------------------------- reset world
 let resetArm = 0;
 function resetWorldClick() {
+  if (brLocked()) { brSay('You cannot rebuild the world in the middle of a match.', 2600); return; }
   const b = document.getElementById('resetbtn');
   const now = performance.now();
   if (now > resetArm) {                       // first click arms it: no browser dialogs
@@ -12891,6 +13666,7 @@ function menuItems() {
   if (PROG.last) out.push({ id: 'continue', label: 'CONTINUE', desc: 'Play ' + (PROG.last.name || 'your last creature') + ' again on a fresh island.' });
   out.push({ id: 'new', label: 'NEW GAME', desc: 'Build a creature from scratch and hatch it into a new island.' });
   out.push({ id: 'load', label: 'LOAD CREATURE', desc: 'Pick one of the creatures you have saved and play it.' });
+  out.push({ id: 'online', label: 'BATTLE ROYALE', desc: 'A fifteen-minute match. Twenty-four cages, one island, a closing fog. Last one standing wins.' });
   out.push({ id: 'controls', label: 'CONTROLS', desc: 'Every key and what it does: moving, fighting, flying and surviving.' });
   out.push({ id: 'options', label: 'OPTIONS', desc: 'Graphics quality, render scale, sound and the world settings.' });
   out.push({ id: 'credits', label: 'ABOUT', desc: 'What this game is and how its animals are made.' });
@@ -12934,6 +13710,25 @@ function menuPage(id) {
         'Nothing is hand-placed. The island, the weather, the animals and their behaviour all come out of the simulation, so no two worlds are alike.</p>' +
         '<p>You are one of those animals. Eat, grow, fight, take parts from what you kill, breed, and keep your line going.</p>' +
         '<p class="mmnote">Built with WebGPU. Made by Finn Berg.</p>';
+  } else if (id === 'online') {
+    const wins = PROG.brWins | 0, best = PROG.brBest | 0;
+    h = '<h2>BATTLE ROYALE</h2>' +
+      '<p>Twenty-four creatures, one island, fifteen minutes. You start locked in a numbered cage on the ring. ' +
+      'The gates go up together. For the first five minutes no player can touch another: hunt the island\'s own ' +
+      'animals and take their parts. Then it is open. A fog closes in from the edge and kills whatever it catches. ' +
+      'Kill a player and you eat them, grow, take a part off their body and earn ' + BONES_PER_KILL + ' bones; they choose to watch you ' +
+      'or come back as your young, and a pack that wins, wins together.</p>' +
+      '<p>Nothing about the island is yours to set. The seed, the ecosystem, the weather, the clock and the ' +
+      'terrain are fixed by the match and identical for everyone in it, and the world panel is dead for as long ' +
+      'as the match runs. Climate drift is off: it re-classifies biomes as the match goes, and a player whose ' +
+      'ground shifted under them would gain or lose cover through no choice of their own.</p>' +
+      '<p class="mmnote"><b>This build has no game server.</b> The match, the zone, the grace period, the looting, the ' +
+      'packs and the win are all real and run to the end, but the other twenty-three are bots on this machine. Every ' +
+      'rule is settled through one transport interface, so pointing it at a real server is a swap rather than a rewrite. ' +
+      'Nothing here talks to the network.</p>' +
+      (wins ? '<p class="mmnote">You have won ' + wins + ' match' + (wins === 1 ? '' : 'es') + '. Best: ' + best + ' kills.</p>' : '') +
+      '<div class="mmopt"><button class="mmb wide" data-brgo="1">enter a match with your last creature</button>' +
+      '<button class="mmb wide" data-brgo="2">build a creature first</button></div>';
   } else if (id === 'load') {
     const list = (PROG.saved || []);   // { name, design }
     h = '<h2>LOAD CREATURE</h2>' + (list.length
@@ -12948,27 +13743,13 @@ function menuChoose() {
   if (!it) return;
   if (it.id === 'continue') { menuFresh(() => { becomeDesigned(C.cloneDesign(PROG.last)); menuStart(); }); return; }
   if (it.id === 'new') { menuFresh(() => { stopMenuMusic(true); const st = document.getElementById('start'); if (st) st.style.display = 'none'; openEditor('start'); }); return; }
+  if (it.id === 'online') { menuPage('online'); return; }
   menuPage(it.id);
-}
-// Build a brand new island before starting: a new game is a new world, not the
-// one that was generated while the menu was up. Runs at most once per menu.
-let menuBusy = false;
-function menuFresh(then) {
-  if (menuBusy) return;
-  menuBusy = true;
-  const big = document.getElementById('mmBig');
-  const was = big ? big.textContent : '';
-  if (big) big.textContent = 'BUILDING A WORLD';
-  REMAINS.length = 0; FIGHT.blood.length = 0; FIGHT.splatN = 0; FIGHT.splats.fill(undefined);
-  const lock = document.getElementById('seedLock'); if (lock) lock.checked = false;
-  Promise.resolve(rebuildWorld()).catch((e) => { console.warn(e); }).then(() => {
-    menuBusy = false;
-    if (big) big.textContent = was;
-    then();
-  });
 }
 let menuFadeTimer = null;
 
+// Stop the menu track. fade=true rides the volume down over 2 s so leaving the
+// menu does not cut the music dead; fade=false kills it immediately.
 function stopMenuMusic(fade = true) {
   const mus = document.getElementById('mmMusic');
   if (!mus) return;
@@ -13008,6 +13789,23 @@ function stopMenuMusic(fade = true) {
   }, stepMs);
 }
 
+// Build a brand new island before starting: a new game is a new world, not the
+// one that was generated while the menu was up. Runs at most once per menu.
+let menuBusy = false;
+function menuFresh(then) {
+  if (menuBusy) return;
+  menuBusy = true;
+  const big = document.getElementById('mmBig');
+  const was = big ? big.textContent : '';
+  if (big) big.textContent = 'BUILDING A WORLD';
+  REMAINS.length = 0; FIGHT.blood.length = 0; FIGHT.splatN = 0; FIGHT.splats.fill(undefined);
+  const lock = document.getElementById('seedLock'); if (lock) lock.checked = false;
+  Promise.resolve(rebuildWorld()).catch((e) => { console.warn(e); }).then(() => {
+    menuBusy = false;
+    if (big) big.textContent = was;
+    then();
+  });
+}
 function menuStart() {
   started = true;
   stopMenuMusic(true);
@@ -13040,6 +13838,13 @@ function menuBind() {
     if (t.dataset.auto) { R2.auto = !R2.auto; toast('auto resolution ' + (R2.auto ? 'on' : 'off'), 1200); return; }
     if (t.dataset.snd) { sndToggle(); return; }
     if (t.dataset.wipe) { try { localStorage.removeItem(PROG_KEY); } catch (err) { /* nothing saved */ } location.reload(); return; }
+    if (t.dataset.brgo != null) {
+      const mode = t.dataset.brgo;
+      if (mode === '2') { stopMenuMusic(true); BR.pending = true; const st = document.getElementById('start'); if (st) st.style.display = 'none'; openEditor('start'); return; }
+      if (!PROG.last) { menuPage('online'); brSay('You have no creature yet. Build one first.', 4000); return; }
+      stopMenuMusic(true); menuStart();
+      brEnterMatch(C.cloneDesign(PROG.last)); return;
+    }
     if (t.dataset.load != null) { const s = (PROG.saved || [])[+t.dataset.load]; if (s && s.design) menuFresh(() => { becomeDesigned(C.cloneDesign(s.design)); menuStart(); }); return; }
   });
   addEventListener('keydown', (e) => {
@@ -13198,6 +14003,19 @@ function renderFrame(t) {
   gArr[24] = fog[0]; gArr[25] = fog[1]; gArr[26] = fog[2]; gArr[27] = 1;
   r2FrameGlobals();
   gArr[28] = t; gArr[29] = FOG_DENSITY * GFX.fog * (1 + 2.4 * can) * (1 + 3.2 * (1 - lt2)); gArr[30] = (0.1 + 0.9 * lt2) * (1 - 0.22 * can); gArr[31] = terrain.LV.water * HEIGHT_SCALE;
+  // the match fog: thick enough at the centre of the band that you cannot see
+  // your own tail, and it washes the world grey-green as it takes you
+  if (BR.on) {
+    const bf = brFogAt(player.camX, player.camZ);
+    if (bf > 0) {
+      gArr[29] = gArr[29] + bf * bf * 0.055;
+      const fogMix = clamp(bf * 1.1, 0, 1);
+      gArr[24] = gArr[24] * (1 - fogMix) + 0.30 * fogMix;
+      gArr[25] = gArr[25] * (1 - fogMix) + 0.34 * fogMix;
+      gArr[26] = gArr[26] * (1 - fogMix) + 0.30 * fogMix;
+      gArr[30] = gArr[30] * (1 - 0.5 * fogMix);
+    }
+  }
   dev.queue.writeBuffer(gBuf, 0, gArr);
 
   const nInst = buildCreatureInstances(player.camX, player.camZ, t);
@@ -13325,25 +14143,29 @@ function updateHUD() {
 // except founder diversity and the world-shape fields is live, because the core
 // reads those out of world.params every tick.
 function panelFlags() {
+  if (brLocked()) return Object.assign({}, BR_RULES.flags);
   const b = (id) => { const el = $(id); return el ? el.checked : true; };
   return { brains: b('f_brains'), sexual: b('f_sex'), dayNight: b('f_day'),
            seasons: b('f_season'), toxins: b('f_tox'), climate: b('f_climate') };
 }
 function panelWarmup() {
+  if (brLocked()) return BR_RULES.prerun;
   const el = $('prerun');
   const v = el ? parseFloat(el.value) : 0;
   return isFinite(v) ? clamp(v, 0, 400) : 0;
 }
 function panelOpts() {
+  // In a match the controls are not the source of truth; the match is.
+  if (brLocked()) return brRuleOpts();
   const num = (id, d) => { const el = $(id); const v = el ? parseFloat(el.value) : NaN; return isFinite(v) ? v : d; };
   return {
     startPop: clamp(num('startPop', 50) | 0, 2, 2000),
     startPlants: clamp(num('startPlants', 500) | 0, 0, 40000),
-    mutationRate: num('mut', 0.6), plantRate: num('plant', 20),
+    mutationRate: num('mut', 0.8), plantRate: num('plant', 20),
     timeScale: num('tscale', 0.01), plantEnergy: num('pe', 10),
-    dayLen: num('dayl', 10), yearLen: num('yearl', 10),
+    dayLen: num('dayl', 10), yearLen: num('yearl', 5),
     carrionLife: num('clife', 50), carrionYield: num('cy', 0.5),
-    founderDiversity: num('fd', 0.6), foodPatchiness: num('fp', 0.5), flags: panelFlags(),
+    founderDiversity: num('fd', 0.8), foodPatchiness: num('fp', 0.5), flags: panelFlags(),
     terrainRelief: num('trelief', 1), waterDepthMul: num('twater', 1),
     regionDensity: num('tregion', 1), treeDensity: num('ttree', 1),
   };
@@ -13365,9 +14187,13 @@ function updateStats() {
 
 async function rebuildWorld() {
   running = false;
-  const lockEl = $('seedLock');
-  if (!lockEl || !lockEl.checked) { const sd = $('seed'); if (sd) sd.value = (Math.random() * 1e9) | 0; }
-  let seed = parseInt(($('seed') || {}).value, 10) >>> 0;
+  // A match names its own island. The seed box and its lock have no say.
+  if (brLocked()) { const sd = $('seed'); if (sd) sd.value = String(BR.seed >>> 0); }
+  else {
+    const lockEl = $('seedLock');
+    if (!lockEl || !lockEl.checked) { const sd = $('seed'); if (sd) sd.value = (Math.random() * 1e9) | 0; }
+  }
+  let seed = brLocked() ? (BR.seed >>> 0) : (parseInt(($('seed') || {}).value, 10) >>> 0);
   if (!seed) seed = 2024;
   // release every GPU buffer tied to the old world before replacing it
   for (const v of meshCache.values()) if (v && v.vb) { v.vb.destroy(); v.ib.destroy(); }
@@ -13376,7 +14202,7 @@ async function rebuildWorld() {
   if (terrIB) { terrIB.destroy(); terrIB = null; }
   if (waterVB) { waterVB.destroy(); waterVB = null; }
   terrH = null;
-  world = C.makeWorld(Object.assign({ w: WORLD_W, h: WORLD_H, tileSize: TILE, seed, featureScale: 2, heightScale: HEIGHT_SCALE, maxSlope: 1, baseRelief: 0.35, plantArea: 0.5 }, panelOpts()));
+  world = C.makeWorld(Object.assign({ w: WORLD_W, h: WORLD_H, tileSize: TILE, seed, rarityCap: boneApplyWorldRarity(seed), featureScale: 2, heightScale: HEIGHT_SCALE, maxSlope: 1, baseRelief: 0.35, plantArea: 0.5 }, panelOpts()));
   terrain = world.terrain;
   buildCanopyMap(); FOL.key = '';
   buildTerrain(); buildWater(); waterHeightUpload(); buildMinimap();
@@ -13398,13 +14224,18 @@ async function rebuildWorld() {
   updateHUD(); updateStats();
   lastT = 0; running = true; requestAnimationFrame(loop);
   objReset();
-  toast('New world, seed ' + seed + '. You are a newborn again.', 3600);
+  seaLifeReset();
+  if (BR.on && !BR.arming) brStop();
+  brSyncPanel();
+  if (BR.arming) toast('Match island built. Seed ' + seed + '. Settings are locked for everyone.', 3600);
+  else toast('New world, seed ' + seed + '. You are a newborn again.', 3600);
 }
 
 function bindPanel() {
   const live = (id, out, key, fmt) => {
     const el = $(id); if (!el) return;
     const apply = () => {
+      if (brLocked()) { brSyncPanel(); brSay('Match settings are locked. Everyone plays the same island.', 2200); return; }
       const v = +el.value;
       const o = $(out); if (o) o.textContent = fmt ? fmt(v) : v;
       if (world && key) world.params[key] = v;
@@ -13427,7 +14258,10 @@ function bindPanel() {
   live('tregion', 'trgv', null, v => v.toFixed(2));
   live('ttree', 'ttv', 'treeDensity', v => v.toFixed(2));
   for (const id of ['f_brains', 'f_sex', 'f_day', 'f_season', 'f_tox', 'f_climate']) {
-    const el = $(id); if (el) el.addEventListener('change', () => { if (world) world.flags = panelFlags(); });
+    const el = $(id); if (el) el.addEventListener('change', () => {
+      if (brLocked()) { brSyncPanel(); brSay('Match settings are locked. Everyone plays the same island.', 2200); return; }
+      if (world) world.flags = panelFlags();
+    });
   }
   // hand focus straight back to the game after using a control
   const pan0 = $('panel');
@@ -13437,7 +14271,10 @@ function bindPanel() {
     if (a && a.tagName === 'INPUT' && !/^(range|checkbox|radio|button|submit)$/i.test(a.type || 'text')) return;
     if (a && a !== document.body && a.blur) a.blur();
   });
-  const rst = $('reset'); if (rst) rst.addEventListener('click', () => { rebuildWorld(); });
+  const rst = $('reset'); if (rst) rst.addEventListener('click', () => {
+    if (brLocked()) { brSay('You cannot rebuild the world in the middle of a match.', 2600); return; }
+    rebuildWorld();
+  });
   const tab = $('ptab'), pan = $('panel');
   const setOpen = (open) => {
     if (!pan || !tab) return;
@@ -13635,12 +14472,21 @@ function bindInput() {
     m.volume = 0.45;
     m.loop = true;
     m.autoplay = true;
+    // Autoplay is blocked without a gesture in every current browser, so try
+    // straight away, again on load, and once more on the first input event.
     const startMenuMusic = () => {
       if (started) return;
       m.play().catch(() => {});
     };
+    const startOnGesture = () => {
+      removeEventListener('pointerdown', startOnGesture);
+      removeEventListener('keydown', startOnGesture);
+      startMenuMusic();
+    };
     startMenuMusic();
     addEventListener('load', startMenuMusic, { once: true });
+    addEventListener('pointerdown', startOnGesture);
+    addEventListener('keydown', startOnGesture);
   } }
   const rb = $('resetbtn');
   if (rb) rb.addEventListener('click', (e) => { e.stopPropagation(); resetWorldClick(); });
@@ -13984,7 +14830,7 @@ const PROG_KEY = 'genesis3d.progress.v2';
 const PROG_KEY_OLD = 'genesis3d.progress.v1';
 // parts that used to be free at the start; they are not carried over as earned
 const OLD_STARTERS = new Set(['m_beak', 'm_grazer', 'm_jaws', 'e_round', 'e_slit', 'h_straight', 's_spike', 's_knob', 'l_leg', 'l_thin', 't_paw', 'f_fin', 'd_crest']);
-const PROG = { kills: 0, unlocked: new Set(STARTER_ITEMS), saved: [], last: null };
+const PROG = { kills: 0, bones: 0, bought: [], unlocked: new Set(STARTER_ITEMS), saved: [], last: null };
 const SANDBOX = /[?&]sandbox=1/.test(location.search);
 function loadProgress() {
   try {
@@ -13995,6 +14841,8 @@ function loadProgress() {
     if (migrating && Array.isArray(o.unlocked)) o.unlocked = o.unlocked.filter(id => !OLD_STARTERS.has(id));
     if (o && typeof o === 'object') {
       PROG.kills = Math.max(0, (o.kills | 0));
+      PROG.bones = Math.max(0, (o.bones | 0));
+      if (Array.isArray(o.bought)) PROG.bought = o.bought.filter(id => typeof id === 'string');
       if (Array.isArray(o.unlocked)) for (const id of o.unlocked) if (VIS[id]) PROG.unlocked.add(id);
       if (Array.isArray(o.saved)) PROG.saved = o.saved.filter(s => s && s.design && s.design.parts).slice(0, 24);
       if (o.last && o.last.parts) PROG.last = o.last;
@@ -14004,11 +14852,220 @@ function loadProgress() {
 function saveProgress() {
   try {
     localStorage.setItem(PROG_KEY, JSON.stringify({
-      kills: PROG.kills, unlocked: [...PROG.unlocked], saved: PROG.saved, last: PROG.last,
+      kills: PROG.kills, bones: PROG.bones | 0, bought: PROG.bought || [], unlocked: [...PROG.unlocked], saved: PROG.saved, last: PROG.last,
     }));
   } catch (e) { /* storage full or blocked: progress simply is not remembered */ }
 }
 loadProgress();
+// =====================================================================
+// BONES: the parts economy.
+//
+// Bones are the currency. You earn them by killing, and you spend them in the
+// shop to unlock a part outright instead of waiting for an animal that happens
+// to carry one to walk past. Every part sits in one of five tiers, and that
+// same tier decides three things at once: what it costs, what it sells back
+// for, and how often a wild animal is born carrying it. So the ladder you pay
+// is the ladder you hunt.
+//
+// Balances live in localStorage with the rest of the progress. They are NOT
+// authoritative -- anyone can edit their own browser storage -- which is fine
+// for single player and is exactly why the online mode has to settle bones on
+// a server. BONES.remote is the seam for that.
+// =====================================================================
+const BONE_TIERS = ['weak', 'solid', 'super', 'ultra', 'alpha'];
+const BONE_PRICE = { weak: 50, solid: 100, super: 200, ultra: 500, alpha: 2000 };
+const BONE_SELL_PCT = 0.25;          // what you get back for a part you do not want
+const BONES_PER_KILL = 5;
+const BONE_TIER_LABEL = {
+  weak: 'weak', solid: 'solid', super: 'super', ultra: 'ultra', alpha: 'alpha',
+};
+const BONE_TIER_COL = {
+  weak: '#8fa39c', solid: '#6fb8a6', super: '#6aa6e8', ultra: '#c07be0', alpha: '#e8a13a',
+};
+// How likely a wild animal is to be born carrying a part of each tier,
+// relative to a weak one. An alpha part on a wild body is a once-a-run event.
+const BONE_TIER_WILD = { weak: 1, solid: 0.55, super: 0.18, ultra: 0.035, alpha: 0.004 };
+
+// Every part, by tier. Deliberately hand-set rather than derived from genome
+// cost: genome cost is how much room a part takes on a body, which is a
+// different question from how badly you want one.
+const ITEM_TIER = {
+  // ---- weak: the starting kit. Cheap, common, on half the animals you meet.
+  m_beak: 'weak', m_grazer: 'weak', e_round: 'weak', e_slit: 'weak',
+  s_spike: 'weak', s_knob: 'weak', l_thin: 'weak', t_paw: 'weak', t_hoof: 'weak',
+  t_pad: 'weak', t_flipper: 'weak', d_crest: 'weak', d_frill: 'weak', d_antenna: 'weak',
+  // ---- solid: a working body. Real jaws, real legs, real fins.
+  m_jaws: 'solid', m_hook: 'solid', m_duck: 'solid', e_big: 'solid', e_bug: 'solid',
+  h_straight: 'solid', h_curved: 'solid', h_tusk: 'solid', s_quills: 'solid', s_plate: 'solid',
+  l_leg: 'solid', t_talon: 'solid', t_claw: 'solid', f_fin: 'solid', f_dorsal: 'solid',
+  d_gills: 'solid', d_lungs: 'solid',
+  // ---- super: specialist kit that changes how you hunt or move.
+  m_maw: 'super', m_trunk: 'super', m_short: 'super', e_stalk: 'super', e_cluster: 'super',
+  h_ram: 'super', h_rhino: 'super', s_club: 'super', l_thick: 'super', l_spring: 'super',
+  t_hand: 'super', t_pincer: 'super', f_fluke: 'super', w_insect: 'super', d_gland: 'super',
+  // ---- ultra: flight, armour and the long killing jaws.
+  m_spino: 'ultra', h_antler: 'ultra', s_shell: 'ultra', w_bat: 'ultra', w_feather: 'ultra',
+  // ---- alpha: the apex bite. Almost never born wild.
+  m_rex: 'alpha',
+};
+function boneTier(id) { return ITEM_TIER[id] || 'solid'; }
+function bonePrice(id) { return BONE_PRICE[boneTier(id)]; }
+function boneRefund(id) { return Math.floor(bonePrice(id) * BONE_SELL_PCT); }
+function boneTierIdx(t) { return BONE_TIERS.indexOf(t); }
+
+// A missing entry would silently price a part at the 'solid' default, so the
+// table is checked against the simulation's own item list once at start-up.
+function boneAuditTiers() {
+  const sim = (typeof C !== 'undefined' && C.ITEM_SIM) ? C.ITEM_SIM : null;
+  if (!sim) return null;
+  const missing = Object.keys(sim).filter(id => !ITEM_TIER[id]);
+  const extra = Object.keys(ITEM_TIER).filter(id => !sim[id]);
+  if (missing.length) console.warn('bones: no tier for', missing.join(', '), '-- priced as solid');
+  if (extra.length) console.warn('bones: tier for unknown part', extra.join(', '));
+  return { missing, extra };
+}
+
+// ---- balance ---------------------------------------------------------------
+// BONES.remote is null in single player. An online match sets it to an object
+// with credit/debit that talk to the server, and then nothing here touches the
+// local balance: the server's number is the only one that counts.
+const BONES = { remote: null, spentAt: 0 };
+function boneBalance() {
+  if (BONES.remote) return BONES.remote.balance | 0;
+  return PROG.bones | 0;
+}
+function boneEarn(n, why) {
+  n = Math.max(0, n | 0);
+  if (!n) return 0;
+  if (BONES.remote) { BONES.remote.credit(n, why); return n; }
+  PROG.bones = (PROG.bones | 0) + n;
+  saveProgress();
+  boneHudFlash('+' + n);
+  return n;
+}
+// Returns true only if the whole amount was taken. Never goes negative.
+function boneSpend(n, why) {
+  n = Math.max(0, n | 0);
+  if (BONES.remote) return !!BONES.remote.debit(n, why);
+  if ((PROG.bones | 0) < n) return false;
+  PROG.bones = (PROG.bones | 0) - n;
+  saveProgress();
+  boneHudFlash('-' + n);
+  return true;
+}
+// Buying a part unlocks it for good, exactly as a kill would.
+function boneBuy(id) {
+  if (!VIS[id]) return { ok: false, msg: 'No such part.' };
+  if (isUnlocked(id)) return { ok: false, msg: 'You already own the ' + VIS[id].name + '.' };
+  const price = bonePrice(id);
+  if (boneBalance() < price) return { ok: false, msg: 'Not enough bones: the ' + VIS[id].name + ' costs ' + price + '.' };
+  if (!boneSpend(price, 'buy:' + id)) return { ok: false, msg: 'Purchase failed.' };
+  PROG.unlocked.add(id);
+  PROG.bought = PROG.bought || [];
+  if (!PROG.bought.includes(id)) PROG.bought.push(id);
+  saveProgress();
+  return { ok: true, msg: 'Bought the ' + VIS[id].name + ' for ' + price + ' bones.', price };
+}
+// Selling gives back a quarter, rounded down, and takes the part off you. A
+// part the body you are editing is actually wearing cannot be sold out from
+// under it.
+function boneSell(id) {
+  if (!VIS[id]) return { ok: false, msg: 'No such part.' };
+  if (!PROG.unlocked.has(id)) return { ok: false, msg: 'You do not own the ' + VIS[id].name + '.' };
+  if (ED.des && countItem(ED.des, id) > 0) {
+    return { ok: false, msg: 'Your creature is wearing the ' + VIS[id].name + '. Take it off first.' };
+  }
+  const back = boneRefund(id);
+  PROG.unlocked.delete(id);
+  if (PROG.bought) PROG.bought = PROG.bought.filter(q => q !== id);
+  boneEarn(back, 'sell:' + id);
+  saveProgress();
+  return { ok: true, msg: 'Sold the ' + VIS[id].name + ' for ' + back + ' bones.', back };
+}
+
+// ---- per-world rarity ------------------------------------------------------
+// Every island (and every match) rolls a ceiling on what the wild can carry.
+// Most worlds top out below alpha, and a fair few below ultra too, so finding
+// an alpha part in the wild is a thing that happens to a run, not a thing you
+// farm. The roll is a pure function of the seed, so the same seed is the same
+// world.
+function worldRarityCap(seed) {
+  let h = (seed | 0) >>> 0;
+  h = Math.imul(h ^ (h >>> 16), 2246822519) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 3266489917) >>> 0;
+  const r = ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  if (r < 0.18) return 'super';        // 18%: no ultra parts anywhere in this world
+  if (r < 0.82) return 'ultra';        // 64%: no alpha parts
+  return 'alpha';                      // 18%: everything can appear
+}
+function rarityCapLabel(cap) {
+  if (cap === 'alpha') return 'rich: every part can be born here, alpha included';
+  if (cap === 'ultra') return 'normal: no alpha parts are born on this island';
+  return 'poor: no ultra or alpha parts are born on this island';
+}
+// Weight for a part appearing on a wild body: its tier's rarity, or zero if
+// the world rolled a ceiling below it.
+function boneWildWeight(id, cap) {
+  const t = boneTier(id);
+  if (boneTierIdx(t) > boneTierIdx(cap || 'ultra')) return 0;
+  return BONE_TIER_WILD[t] || 0;
+}
+// Pick from [[id, weight], ...] with the tier rarity folded in. Falls back to
+// the plain weights if the cap removed everything, so a caller can never be
+// handed nothing.
+function boneWeighted(rng, opts, cap) {
+  let tot = 0;
+  const w = [];
+  for (const [id, base] of opts) { const k = base * boneWildWeight(id, cap); w.push(k); tot += k; }
+  if (tot <= 0) {
+    let t2 = 0; for (const [, base] of opts) t2 += base;
+    let r2 = rng() * t2;
+    for (const [id, base] of opts) { r2 -= base; if (r2 <= 0) return id; }
+    return opts[0][0];
+  }
+  let r = rng() * tot;
+  for (let i = 0; i < opts.length; i++) { r -= w[i]; if (r <= 0) return opts[i][0]; }
+  return opts[opts.length - 1][0];
+}
+
+// ---- real-money bundles ----------------------------------------------------
+// Listed because the prices are decided, disabled because taking money needs a
+// payment processor and a server-side account to credit. Nothing here mints
+// bones: a button that handed them out for free would wreck the economy the
+// rest of this file exists to keep honest.
+const BONE_BUNDLES = [
+  { bones: 100, usd: 2, label: 'handful' },
+  { bones: 500, usd: 5, label: 'sack' },
+  { bones: 10000, usd: 30, label: 'ossuary' },
+];
+const BONE_BUNDLES_LIVE = false;
+
+// ---- HUD -------------------------------------------------------------------
+const BONE_HUD = { flash: '', t: 0 };
+function boneHudFlash(s) { BONE_HUD.flash = s; BONE_HUD.t = performance.now(); }
+function boneHudHtml() {
+  const f = BONE_HUD.flash && performance.now() - BONE_HUD.t < 1600 ? BONE_HUD.flash : '';
+  return '<span class="boneN">' + boneBalance() + '</span> bones' +
+         (f ? ' <span class="boneF">' + f + '</span>' : '');
+}
+
+// The simulation core is DOM-free and has no idea what a bone is, so the
+// rarity ladder is handed to it rather than imported by it.
+if (!C.DESIGN_API) {
+  console.error('bones: the core did not export DESIGN_API -- wild rarity is OFF');
+} else {
+  C.DESIGN_API.boneWeighted = boneWeighted;
+  C.DESIGN_API.boneWildWeight = boneWildWeight;
+}
+boneAuditTiers();
+// Returns the cap; the caller sets it on the world it is building. (Setting
+// `world` from in here would hit the page-level binding, which during
+// makeWorld() is still the PREVIOUS world.)
+function boneApplyWorldRarity(seed) {
+  const cap = worldRarityCap(seed | 0);
+  if (C.DESIGN_API) C.DESIGN_API.rarityCap = cap;
+  return cap;
+}
 // Parts you have not unlocked are still yours up to the number your body
 // already carries (so a default body can be rearranged), but no more copies.
 function countItem(des, id) {
@@ -14737,6 +15794,7 @@ function edBuildUI() {
     <button id="edRandom" title="roll a random creature from the parts you have unlocked">random</button>
     <button id="edView" title="reset the view (double-click the scene)">reset view</button>
     <button id="edSaved">my creatures</button>
+    <span id="edBones" title="5 bones for every kill. Bundles (100 for $2, 500 for $5, 10000 for $30) need an account server, which this build does not have."><b id="edBoneN">0</b> bones</span>
     <span class="edname"><input id="edName" maxlength="22" spellcheck="false" placeholder="name your species" title="what your species is called"><button id="edRollName" title="roll a name">roll</button></span>
     <span class="edsp"></span>
     <button id="edCancel">cancel</button><button id="edDone" class="go">done</button>
@@ -14768,6 +15826,28 @@ function edBuildUI() {
   $('edDone').onclick = () => closeEditor(true);
   $('edSaved').onclick = () => { ED.savedOpen = !ED.savedOpen; edRenderSaved(); };
   const step = (d) => { const i = VIS_CATS.findIndex(c => c.id === ED.tab); ED.tab = VIS_CATS[(i + d + VIS_CATS.length) % VIS_CATS.length].id; edRefreshUI(); };
+  $('edGrid').addEventListener('click', (e) => {
+    const buy = e.target.closest ? e.target.closest('[data-buy]') : null;
+    if (buy) {
+      e.stopPropagation(); e.preventDefault();
+      ED.sellArm = null;
+      const r = boneBuy(buy.getAttribute('data-buy'));
+      edFlash(r.msg);
+      edRefreshUI();
+      return;
+    }
+    const sell = e.target.closest ? e.target.closest('[data-sell]') : null;
+    if (sell) {
+      e.stopPropagation(); e.preventDefault();
+      const id = sell.getAttribute('data-sell');
+      // first click arms, second click sells: a part is too dear to lose to a slip
+      if (ED.sellArm !== id) { ED.sellArm = id; edRefreshUI(); return; }
+      ED.sellArm = null;
+      const r = boneSell(id);
+      edFlash(r.msg);
+      edRefreshUI();
+    }
+  }, true);
   $('edPrev').onclick = () => step(-1);
   $('edNext').onclick = () => step(1);
   edBindCanvas();
@@ -14829,10 +15909,21 @@ function edRefreshUI() {
     for (const id of ids) {
       const av = itemAvailable(id);
       const v = VIS[id];
+      const owned = isUnlocked(id);
+      const tier = boneTier(id), price = bonePrice(id), col = BONE_TIER_COL[tier];
+      const bal = boneBalance();
+      const buyable = !owned && !SANDBOX;
+      const selling = ED.sellArm === id;
       html += `<div class="edcard${av ? '' : ' locked'}" data-item="${id}">` +
         `<div class="edtile item${av ? '' : ' locked'}" data-item="${id}">${tileHTML(id, av, `<span class="edcost">${itemCost(id)}</span>`)}</div>` +
         `<div class="edcname">${v.name}</div><div class="edcuse">${v.use || effectText(id) || ''}</div>` +
-        `<div class="edccost">${itemCost(id)} genome space${av ? '' : ' · locked'}</div></div>`;
+        `<div class="edccost">${itemCost(id)} genome space · <span class="edtierb" style="color:${col}">${BONE_TIER_LABEL[tier]}</span></div>` +
+        (buyable
+          ? `<button class="edbuy${bal >= price ? '' : ' poor'}" data-buy="${id}" style="border-color:${col}"><span>buy</span><b style="color:${col}">${price}</b></button>`
+          : owned && !SANDBOX
+            ? `<button class="edsell${selling ? ' arm' : ''}" data-sell="${id}">${selling ? 'sell for ' + boneRefund(id) + '?' : 'owned &middot; sell ' + boneRefund(id)}</button>`
+            : '<div class="edowned">yours</div>') +
+        `</div>`;
     }
     html += '</div>';
     if (ED.tab === 'limbs') html += '<div class="edhint">drag a limb onto the body, then drag its joints to shape it. drop feet, hands and claws onto the end of a limb</div>';
@@ -14843,6 +15934,7 @@ function edRefreshUI() {
   edRenderInspector();
   edUpdateStats();
   edRenderSaved();
+  { const b = $('edBoneN'); if (b) b.textContent = boneBalance(); }
 }
 function edSkinAllowed(i) {
   const id = SKIN_ITEMS[i];
@@ -14928,7 +16020,7 @@ function edShowTip(id, el) {
   const sp = spareOf(id), own = (ED.grantCount && ED.grantCount[id]) || 0;
   tip.innerHTML = `<b>${v.name}</b><span class="c">genome space ${itemCost(id)}</span><div>${effectText(id)}</div>` +
     (sp === Infinity ? '' : own ? `<div class="lk">not unlocked: your body has ${own}, ${sp} left to place. kill an animal that has one to unlock it</div>`
-                                : '<div class="lk">locked: kill an animal that has one, then pick it</div>');
+                                : '<div class="lk">locked: kill an animal that has one, or buy it on this card for ' + bonePrice(id) + ' bones (' + BONE_TIER_LABEL[boneTier(id)] + ')</div>');
   const r = el.getBoundingClientRect(), pr = ED.ui.pal.getBoundingClientRect();
   tip.style.display = 'block';
   const z = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ui')) || 1;
@@ -15308,8 +16400,10 @@ function closeEditor(apply) {
   if (ED.ui) ED.ui.dragImg.style.display = 'none';
   lastT = 0;
   if (mode === 'start') {
-    if (apply) { becomeDesigned(des); started = true; }
-    else if (!started) ssShow();
+    if (apply) {
+      if (BR.pending) { BR.pending = false; started = true; brEnterMatch(des); }
+      else { becomeDesigned(des); started = true; }
+    } else { BR.pending = false; if (!started) ssShow(); }
   } else if (apply) applyDesignToPlayer(des);
   updateHUD(); updateStats();
 }
@@ -15326,6 +16420,693 @@ function nearestSwimmable(x, y) {
   }
   return null;
 }
+// =====================================================================
+// BATTLE ROYALE
+//
+// A match is fifteen minutes. Everyone starts locked in a numbered cage on a
+// ring around the island. The gates open together, nobody can touch another
+// player for the first five minutes (the island's own animals are fair game,
+// and looting them is how you build your beast), and then it is open. A fog
+// closes in from the edge, killing anything that stays in it, until one player
+// or one pack is left.
+//
+// WHAT IS REAL HERE AND WHAT IS NOT
+// Every rule below -- the grace period, the zone, damage, looting, packs, the
+// win -- is real and runs to completion. The opponents are bots, because this
+// build has no game server: it is a single static HTML file. Everything that
+// would have to be decided by a server goes through BR_NET instead of being
+// done inline, so swapping BR_NET_LOCAL for a socket implementation is the
+// whole job rather than a rewrite. BR_NET_LOCAL is also what a practice match
+// against bots would use even after a server exists.
+//
+// The transport contract, in one place:
+//   join(profile)      -> { matchId, slot, bays, seed, players: [...] }
+//   ready()            -> the server starts the match when everyone is in
+//   send(ev)           -> an intent from this client (move/attack/loot/choose)
+//   poll()             -> [events] the server has decided since the last poll
+//   leave()
+// Events are plain JSON. Nothing in this file touches the DOM except the HUD,
+// and nothing outside it decides a match rule.
+// =====================================================================
+const BR_MATCH_SECS = 15 * 60;
+const BR_GRACE_SECS = 5 * 60;
+const BR_CAGE_SECS = 30;             // you walk around your cage before the gates go up
+const BR_BOTS = 23;                  // plus you: 24 bays on the ring
+const BR_CAGE_R = 34;                // half-width of a cage, world units
+const BR_CAGE_H = 46;
+const BR_ZONE_GRACE = 90;            // the fog does not start moving for this long
+const BR_ZONE_DPS = 7;               // health a second, deep in the fog
+const BR_ZONE_EDGE = 90;             // how far into the fog before it starts hurting
+const BR_PACK_NONE = -1;
+
+
+// ---- the match ruleset -----------------------------------------------------
+// A match is a fair fight or it is nothing, so none of it is the player's to
+// set. The island, its weather, its clock, its animals and its seed are all
+// fixed, identical for everyone in the match, and handed down by join() --
+// which today is brNetLocal() and tomorrow is a server. While a match is live
+// the world panel is inert: its sliders do not reach world.params, the reset
+// button will not fire, and panelOpts() ignores the DOM entirely and answers
+// with these numbers however the controls have been dragged.
+//
+// Climate drift is off on purpose. It re-classifies biomes as the match runs,
+// so a player who happened to start in a band that shifted would gain or lose
+// cover through no choice of their own.
+const BR_RULES = Object.freeze({
+  startPop: 200,            // a living island worth hunting
+  startPlants: 0,
+  prerun: 30,               // biological seconds run before the gates, so the island is not empty
+  mutationRate: 0.8,
+  plantRate: 20,
+  plantEnergy: 10,
+  timeScale: 0.01,          // one match is about one in-game day
+  dayLen: 10,
+  yearLen: 5,
+  carrionLife: 50,
+  carrionYield: 0.5,
+  founderDiversity: 0.8,
+  foodPatchiness: 0.5,
+  terrainRelief: 1,
+  waterDepthMul: 1,
+  regionDensity: 1,
+  treeDensity: 1,
+  flags: Object.freeze({ brains: true, sexual: true, dayNight: true, seasons: true, toxins: true, climate: false }),
+});
+// Everything the panel can touch, and what a match pins it to. Used both to
+// answer panelOpts() and to snap a dragged control back to where it belongs.
+const BR_LOCKED_CONTROLS = [
+  ['startPop', 'startPop'], ['startPopR', 'startPop'], ['startPlants', 'startPlants'], ['prerun', 'prerun'],
+  ['mut', 'mutationRate'], ['plant', 'plantRate'], ['pe', 'plantEnergy'], ['tscale', 'timeScale'],
+  ['dayl', 'dayLen'], ['yearl', 'yearLen'], ['clife', 'carrionLife'], ['cy', 'carrionYield'],
+  ['fd', 'founderDiversity'], ['fp', 'foodPatchiness'], ['trelief', 'terrainRelief'],
+  ['twater', 'waterDepthMul'], ['tregion', 'regionDensity'], ['ttree', 'treeDensity'],
+];
+const BR_LOCKED_FLAGS = [['f_brains', 'brains'], ['f_sex', 'sexual'], ['f_day', 'dayNight'],
+                         ['f_season', 'seasons'], ['f_tox', 'toxins'], ['f_climate', 'climate']];
+// True from the moment a match is being armed until the match is over. Every
+// guard in the page asks this one question.
+function brLocked() { return !!BR.arming || (BR.on && BR.phase !== 'over'); }
+// The parameters a locked world is built and run with. Returned in place of
+// whatever the panel says.
+function brRuleOpts() {
+  const o = Object.assign({}, BR_RULES);
+  o.flags = Object.assign({}, BR_RULES.flags);
+  delete o.prerun;
+  return o;
+}
+// Put every control back where the match says it is and grey the panel out, so
+// the player can see what the match has taken over rather than wondering why
+// dragging a slider does nothing.
+function brSyncPanel() {
+  const pan = document.getElementById('panel');
+  if (pan) pan.classList.toggle('brlocked', brLocked());
+  // the free-roam goal box and the reset button are not part of a match
+  document.body.classList.toggle('brmatch', brLocked());
+  if (!brLocked()) {
+    for (const [id] of BR_LOCKED_CONTROLS) { const el = document.getElementById(id); if (el) el.disabled = false; }
+    for (const [id] of BR_LOCKED_FLAGS) { const el = document.getElementById(id); if (el) el.disabled = false; }
+    const sd = document.getElementById('seed'); if (sd) sd.disabled = false;
+    const lk = document.getElementById('seedLock'); if (lk) lk.disabled = false;
+    const rb = document.getElementById('resetbtn'); if (rb) rb.disabled = false;
+    return;
+  }
+  for (const [id, key] of BR_LOCKED_CONTROLS) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const v = key === 'prerun' ? BR_RULES.prerun : BR_RULES[key];
+    if (v != null) el.value = String(v);
+    el.disabled = true;
+    const out = document.getElementById(id + 'v');
+    if (out && v != null) out.textContent = String(v);
+  }
+  for (const [id, key] of BR_LOCKED_FLAGS) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.checked = !!BR_RULES.flags[key];
+    el.disabled = true;
+  }
+  const sd = document.getElementById('seed');
+  if (sd) { sd.value = String(BR.seed >>> 0); sd.disabled = true; }
+  const lk = document.getElementById('seedLock'); if (lk) lk.disabled = true;
+  const rb = document.getElementById('resetbtn'); if (rb) rb.disabled = true;
+}
+
+const BR = {
+  on: false, phase: 'off',           // off | cage | grace | open | over
+  t: 0, matchId: null, slot: 0, seed: 0,
+  bays: [],                          // { n, x, z, y, yaw } one per player
+  players: [],                       // { slot, name, bot, alive, pack, kills, x, z, c }
+  zone: { cx: 0, cz: 0, r: 0, r0: 0, r1: 0 },
+  net: null, log: [], msg: '', msgT: 0, arming: false, pending: false,
+  gateY: 0, deadChoice: null, result: null, bones: 0,
+};
+
+// ---- transport -------------------------------------------------------------
+// The local implementation. It is authoritative in exactly the way a server
+// would be: the rest of the file asks it for decisions rather than making them.
+function brNetLocal() {
+  const S = {
+    matchId: 'local-' + Date.now().toString(36),
+    slot: 0, seed: 0, players: [], queue: [], started: false, t: 0,
+  };
+  return {
+    kind: 'local',
+    join(profile) {
+      S.seed = (Math.random() * 1e9) | 0;
+      S.players = [{ slot: 0, name: profile.name || 'you', bot: false, alive: true, pack: BR_PACK_NONE, kills: 0 }];
+      const taken = new Set(['you']);
+      for (let i = 1; i <= BR_BOTS; i++) {
+        let nm = brBotName(S.seed + i);
+        for (let k = 1; taken.has(nm); k++) nm = brBotName(S.seed + i + k * 7919);
+        taken.add(nm);
+        S.players.push({ slot: i, name: nm, bot: true, alive: true, pack: BR_PACK_NONE, kills: 0 });
+      }
+      return { matchId: S.matchId, slot: 0, bays: S.players.length, seed: S.seed, players: S.players.map(p => Object.assign({}, p)) };
+    },
+    ready() { S.started = true; S.queue.push({ type: 'start', t: 0 }); },
+    // An intent from this client. A server would validate it; locally the only
+    // thing that can be refused is a hit inside the grace period, which is
+    // enforced in brHitAllowed() so the client and a server agree on the rule.
+    send(ev) { S.queue.push(Object.assign({ from: 0 }, ev)); },
+    poll() { const q = S.queue; S.queue = []; return q; },
+    leave() { S.started = false; S.queue.length = 0; },
+    // local-only: the match loop drives the bots through here
+    _state: S,
+  };
+}
+const BR_BOT_A = ['grim', 'ash', 'bone', 'rift', 'mire', 'gore', 'hush', 'vex', 'dun', 'coil', 'slag', 'wren'];
+const BR_BOT_B = ['maw', 'fang', 'spine', 'talon', 'husk', 'crest', 'gale', 'shard', 'clutch', 'thorn'];
+function brBotName(seed) {
+  let h = seed >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 2246822519) >>> 0;
+  const a = BR_BOT_A[h % BR_BOT_A.length], b = BR_BOT_B[(h >>> 8) % BR_BOT_B.length];
+  return a + b;
+}
+
+// ---- the cage ring ---------------------------------------------------------
+// One bay per player, evenly spaced on a circle that encloses the whole island,
+// each turned to face the middle. Bays are numbered from 1 at due north,
+// clockwise, so "bay 7" means something you can find.
+function brBuildBays(n) {
+  const cx = WORLD_W / 2, cz = WORLD_H / 2;
+  const R0 = Math.min(WORLD_W, WORLD_H) * 0.47;
+  const sea = terrain && terrain.LV ? terrain.LV.water : 0.3;
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const a = -Math.PI / 2 + (i / n) * Math.PI * 2;
+    const ca = Math.cos(a), sa = Math.sin(a);
+    // The ring starts out at the edge of the map, which is open ocean. Walk it
+    // inward until it finds dry land, so the cages land on the coast facing the
+    // island instead of standing in the sea, where a land animal would drown
+    // before the gate ever opened.
+    let x = cx + ca * R0, z = cz + sa * R0, found = false;
+    for (let r = R0; r > 200; r -= 40) {
+      const px = clamp(cx + ca * r, 140, WORLD_W - 140), pz = clamp(cz + sa * r, 140, WORLD_H - 140);
+      if (terrain.height(px, pz) > sea + 0.012) { x = px; z = pz; found = true; break; }
+    }
+    if (!found) { x = clamp(cx + ca * 260, 140, WORLD_W - 140); z = clamp(cz + sa * 260, 140, WORLD_H - 140); }
+    out.push({ n: i + 1, x, z, y: groundAt(x, z), yaw: Math.atan2(cz - z, cx - x) });
+  }
+  return out;
+}
+
+// ---- match -----------------------------------------------------------------
+// Entering a match is two halves with a world build between them. join()
+// hands down the seed and the ruleset, the island is rebuilt from exactly
+// those, and only then does the match itself begin. That order is what makes
+// every player's island the same island.
+function brArm(net) {
+  BR.net = net || brNetLocal();
+  const j = BR.net.join({ name: (ED.des && ED.des.stem) || 'you' });
+  BR.join = j;
+  BR.arming = true;
+  BR.matchId = j.matchId;
+  BR.slot = j.slot;
+  BR.seed = j.seed >>> 0;
+  BR.players = j.players;
+  brSyncPanel();
+  return j;
+}
+// Called once the world has been rebuilt from BR.seed under BR_RULES.
+function brBegin() {
+  if (!BR.net) return false;
+  BR.on = true;
+  BR.arming = false;
+  BR.phase = 'cage';
+  BR.t = 0;
+  BR.bays = brBuildBays(BR.players.length);
+  BR.gateY = 0;
+  BR.result = null;
+  BR.deadChoice = null;
+  BR.bones = 0;
+  BR.log.length = 0;
+  const bay = BR.bays[BR.slot];
+  BR.zone = { cx: WORLD_W / 2, cz: WORLD_H / 2, r0: Math.min(WORLD_W, WORLD_H) * 0.52, r1: 90, r: Math.min(WORLD_W, WORLD_H) * 0.52 };
+  if (player.c) { player.c.x = bay.x; player.c.y = bay.z; player.c._spawnT = simT; }
+  player.camX = bay.x; player.camZ = bay.z;
+  player.spectator = false;
+  brSpawnBots();
+  BR.net.ready();
+  brSyncPanel();
+  brSay('BAY ' + bay.n + '. The gate opens in ' + BR_CAGE_SECS + ' seconds.', 5000);
+  return true;
+}
+// The whole entry: arm, rebuild the island from the match seed, take the
+// design in, then begin. Returns a promise so the caller can wait for it.
+function brEnterMatch(design, net) {
+  brArm(net);
+  return Promise.resolve(rebuildWorld()).then(() => {
+    if (design) { try { becomeDesigned(design); } catch (e) { console.warn('br: could not take that creature in', e); } }
+    brBegin();
+  }).catch((e) => {
+    console.warn('br: match could not start', e);
+    BR.arming = false; BR.on = false; BR.phase = 'off';
+    if (BR.net) { BR.net.leave(); BR.net = null; }
+    brSyncPanel();
+    toast('The match could not start. You are in free roam.', 4000);
+  });
+}
+// Kept for the test harness and for starting a match in a world that is
+// already the match world.
+function brStart(net) {
+  brArm(net);
+  return brBegin();
+}
+function brStop() {
+  if (BR.net) BR.net.leave();
+  BR.on = false; BR.arming = false; BR.phase = 'off'; BR.net = null;
+  BR.players.length = 0; BR.bays.length = 0;
+  brSyncPanel();
+}
+// Bots are ordinary world creatures, born in their bay from a random design,
+// and flagged so the match can tell them from the island's wildlife.
+function brSpawnBots() {
+  if (!world) return;
+  const rng = world.rng || Math.random;
+  for (const pl of BR.players) {
+    if (!pl.bot) { pl.c = player.c; pl.alive = true; continue; }
+    const bay = BR.bays[pl.slot];
+    let c = null;
+    try {
+      const g = C.seedHerbivore(world, rng);
+      g.design = C.randomDesign(rng, { diversity: 0.85, diet: rng() < 0.55 ? 'carn' : 'herb', rarityCap: world.rarityCap });
+      C.compileDesign(g);
+      c = C.makeCreature(g, bay.x, bay.z, 400);
+      // start full: a player would not spawn one bite from starving
+      c.energy = c.ph && c.ph.storage ? c.ph.storage : 400;
+      c._br = pl.slot;
+      c._brName = pl.name;
+      c._spawnT = simT;
+      world.creatures.push(c);
+    } catch (e) { console.warn('br: could not spawn bot', pl.slot, e); }
+    pl.c = c;
+    pl.alive = !!c;
+    pl.x = bay.x; pl.z = bay.z;
+  }
+}
+function brSay(msg, ms) { BR.msg = msg; BR.msgT = performance.now() + (ms || 3000); }
+
+// ---- rules -----------------------------------------------------------------
+// The one rule every hit in the match goes through. Both the client and a
+// server would call this, so they cannot disagree about who may hit whom.
+function brHitAllowed(victim, att) {
+  if (!BR.on) return true;
+  const vs = brSlotOf(victim), as = brSlotOf(att);
+  if (vs === as && vs != null) return false;
+  // A caged animal cannot be got at, by anything. Once the gates are up the
+  // island's own wildlife is fair game in both directions.
+  if (BR.phase === 'cage') return vs == null;
+  if (vs == null || as == null) return true;                 // wildlife: always fair game
+  if (BR.phase === 'grace') return false;                    // no player may touch another yet
+  const vp = BR.players[vs], ap = BR.players[as];
+  if (!vp || !ap) return true;
+  if (vp.pack !== BR_PACK_NONE && vp.pack === ap.pack) return false;  // packmates cannot hurt each other
+  if (vp.pack !== BR_PACK_NONE && vp.pack === as) return false;       // nor can a pack member hurt its leader
+  if (ap.pack !== BR_PACK_NONE && ap.pack === vs) return false;
+  return true;
+}
+function brSlotOf(c) {
+  if (!c) return null;
+  if (c === player.c) return BR.on ? BR.slot : null;
+  return c._br != null ? c._br : null;
+}
+function brAliveCount() {
+  let n = 0;
+  const packs = new Set();
+  for (const p of BR.players) {
+    if (!p.alive) continue;
+    n++;
+    packs.add(p.pack === BR_PACK_NONE ? 'solo' + p.slot : 'pack' + p.pack);
+  }
+  return { n, sides: packs.size };
+}
+
+// ---- the fog ---------------------------------------------------------------
+// Radius shrinks from enclosing the island to a small circle over the match.
+// Standing outside it costs health, and the further out the worse it is.
+function brZoneRadiusAt(t) {
+  const z = BR.zone;
+  if (t <= BR_ZONE_GRACE) return z.r0;
+  const u = clamp((t - BR_ZONE_GRACE) / Math.max(1, BR_MATCH_SECS - BR_ZONE_GRACE - 40), 0, 1);
+  // ease so the last minutes close fast
+  return z.r0 + (z.r1 - z.r0) * (u * u * (3 - 2 * u));
+}
+// How deep into the fog a point is, 0 at the edge and 1 well inside it.
+function brFogAt(x, z) {
+  if (!BR.on) return 0;
+  const d = Math.hypot(x - BR.zone.cx, z - BR.zone.cz);
+  return clamp((d - BR.zone.r) / BR_ZONE_EDGE, 0, 1);
+}
+
+// ---- death, loot and packs -------------------------------------------------
+// Killing a player takes their parts, grows you, and offers them a choice.
+function brOnPlayerKilled(victimSlot, killerSlot, cause) {
+  const v = BR.players[victimSlot], k = BR.players[killerSlot];
+  if (!v || !v.alive) return;
+  v.alive = false;
+  v.deadAt = BR.t;
+  if (k) {
+    k.kills++;
+    // the parts they were carrying become yours to equip
+    const design = v.c && v.c.genome && v.c.genome.design;
+    if (killerSlot === BR.slot && design) brLootDesign(design, v.name);
+    if (killerSlot === BR.slot) {
+      BR.bones += BONES_PER_KILL;
+      boneEarn(BONES_PER_KILL, 'br:kill');
+      // eating a player grows you, through the same path a normal feed uses
+      try { if (player.c && v.c && v.c.ph) feedGrowth(player.c, v.c.ph.mass, 'Ate a rival'); } catch (e) { console.warn(e); }
+    }
+  }
+  const by = k ? k.name : (cause || 'the island');
+  BR.log.push({ t: BR.t, msg: v.name + ' killed by ' + by });
+  if (victimSlot === BR.slot) {
+    BR.deadChoice = { killer: killerSlot, t: BR.t };
+  } else {
+    brSay(v.name + ' killed by ' + by + ' · ' + brAliveCount().n + ' left', 2600);
+  }
+  // a dead leader frees its pack
+  for (const p of BR.players) if (p.pack === victimSlot) p.pack = BR_PACK_NONE;
+  brCheckOver();
+}
+// Every part on the design you killed, offered as an unlock.
+function brLootDesign(design, from) {
+  const ids = new Set();
+  for (const pt of design.parts || []) if (VIS[pt.id]) ids.add(pt.id);
+  for (const lb of design.limbs || []) {
+    if (VIS[lb.id]) ids.add(lb.id);
+    if (lb.tip && VIS[lb.tip.id]) ids.add(lb.tip.id);
+  }
+  const opts = [...ids].filter(id => !PROG.unlocked.has(id));
+  if (!opts.length) { brSay('You ate ' + from + '. Nothing on it you did not already have.', 2600); return; }
+  player.picker = { opts: opts.slice(0, 6), label: 'You killed ' + from + '. Take one of their parts', t0: performance.now(), items: true };
+  renderPicker();
+}
+// The loser's choice: watch, or come back as a baby in the winner's pack.
+function brChoose(join) {
+  const dc = BR.deadChoice;
+  if (!dc) return;
+  BR.deadChoice = null;
+  if (!join || dc.killer == null) {
+    player.spectator = true;
+    brSay('Spectating. The match runs to the end.', 4000);
+    return;
+  }
+  const me = BR.players[BR.slot], k = BR.players[dc.killer];
+  if (!k || !k.alive) { player.spectator = true; brSay('Your killer is already dead. Spectating.', 4000); return; }
+  me.pack = dc.killer;
+  me.alive = true;
+  // reborn small, beside the leader, on the leader's design
+  const bx = (k.c ? k.c.x : BR.zone.cx) + (Math.random() - 0.5) * 60;
+  const bz = (k.c ? k.c.y : BR.zone.cz) + (Math.random() - 0.5) * 60;
+  try {
+    const d = k.c && k.c.genome && k.c.genome.design ? C.cloneDesign(k.c.genome.design) : (PROG.last && C.cloneDesign(PROG.last));
+    if (d) becomeDesigned(d);
+  } catch (e) { console.warn('br: rebirth failed', e); }
+  if (player.c) {
+    player.c.x = bx; player.c.y = bz;
+    player.c._spawnT = simT;
+    me.c = player.c;
+  }
+  player.spectator = false;
+  brSay('You are ' + k.name + "'s. Fight together or you both lose.", 5000);
+}
+// Time ran out with more than one side standing. The match is decided on
+// kills, then on how much fight is left, so it always ends with a winner
+// rather than a draw.
+function brTimeUp() {
+  if (BR.phase === 'over') return;
+  let best = null;
+  for (const q of BR.players) {
+    if (!q.alive) continue;
+    const hp = q.c && q.c.alive ? q.c.energy : 0;
+    if (!best || q.kills > best.kills || (q.kills === best.kills && hp > best.hp)) best = { q, hp, kills: q.kills };
+  }
+  const winSide = best ? (best.q.pack !== BR_PACK_NONE ? best.q.pack : best.q.slot) : null;
+  for (const q of BR.players) {
+    if (!q.alive) continue;
+    const side = q.pack !== BR_PACK_NONE ? q.pack : q.slot;
+    if (side !== winSide) q.alive = false;
+  }
+  brSay('TIME. Decided on kills.', 6000);
+  brFinish();
+}
+function brCheckOver() {
+  if (BR.phase === 'over') return;
+  const a = brAliveCount();
+  if (a.sides > 1) return;
+  brFinish();
+}
+function brFinish() {
+  if (BR.phase === 'over') return;
+  BR.phase = 'over';
+  brSyncPanel();
+  const me = BR.players[BR.slot];
+  const won = !!(me && me.alive);
+  BR.result = {
+    won, kills: me ? me.kills : 0, bones: BR.bones, t: BR.t,
+    survivors: BR.players.filter(p => p.alive).map(p => p.name),
+  };
+  if (won) {
+    // a win pays out, and is recorded. A server would be the one recording it
+    // for a public account; locally it goes in with the rest of progress.
+    const purse = 25 + BR.bones;
+    boneEarn(25, 'br:win');
+    PROG.brWins = (PROG.brWins | 0) + 1;
+    PROG.brBest = Math.max(PROG.brBest | 0, me ? me.kills : 0);
+    saveProgress();
+    brSay('YOU WON. ' + (me ? me.kills : 0) + ' kills, ' + purse + ' bones.', 9000);
+  } else {
+    brSay('Match over. ' + (BR.result.survivors[0] || 'nobody') + ' won it.', 9000);
+  }
+}
+
+// ---- tick ------------------------------------------------------------------
+function brTick(dt) {
+  if (!BR.on) return;
+  for (const ev of BR.net.poll()) BR.log.push(ev);
+  // The HUD is drawn from here rather than from the frame loop, so it can
+  // never fall behind the match state it is reporting -- including the death
+  // offer, which has to appear the instant you are killed.
+  try { brRenderHud(); } catch (e) { console.warn('br hud', e); }
+  if (BR.phase === 'over') { BR.t += dt; return; }
+  BR.t += dt;
+  // phase
+  if (BR.phase === 'cage' && BR.t >= BR_CAGE_SECS) {
+    BR.phase = 'grace';
+    brSay('GATES OPEN. No player can hurt another for ' + Math.round(BR_GRACE_SECS / 60) + ' minutes. Hunt the island and take its parts.', 7000);
+  } else if (BR.phase === 'grace' && BR.t >= BR_CAGE_SECS + BR_GRACE_SECS) {
+    BR.phase = 'open';
+    brSay('OPEN SEASON. Everyone can kill everyone.', 7000);
+  }
+  // the gate slides up over two seconds once the cage phase ends
+  const want = BR.phase === 'cage' ? 0 : 1;
+  BR.gateY += clamp(want - BR.gateY, -dt * 0.5, dt * 0.5);
+  // keep a caged player in their cage
+  if (BR.phase === 'cage' && player.c) { brConfineToCage(player.c, BR.bays[BR.slot]); brHoldCaged(player.c); }
+  // the fog
+  BR.zone.r = brZoneRadiusAt(BR.t);
+  brZoneDamage(dt);
+  brBotTick(dt);
+  // The end condition is checked every tick, not only when a kill reports one,
+  // so a side that quietly stops existing still ends the match.
+  brCheckOver();
+  // And the panel is re-asserted once a second, so nothing that reaches in and
+  // edits a control can leave the display disagreeing with the match.
+  BR._panelAcc = (BR._panelAcc || 0) + dt;
+  if (BR._panelAcc > 1) { BR._panelAcc = 0; brSyncPanel(); }
+  if (BR.t >= BR_MATCH_SECS && BR.phase !== 'over') brTimeUp();
+}
+// Bots run for the middle of the ring, hard when the fog is on them and at a
+// stroll otherwise, and the core's own wander handles the rest.
+function brBotMove(c, dt) {
+  const dx = BR.zone.cx - c.x, dz = BR.zone.cz - c.y;
+  const d = Math.hypot(dx, dz);
+  if (d < 40) return;
+  const fog = brFogAt(c.x, c.y);
+  // Keep well inside the ring rather than hugging its edge, and sprint when
+  // the fog is already on them. A player who waits at the line dies to it.
+  if (fog <= 0 && d < BR.zone.r * 0.72) return;
+  const land = Math.max(24, c.ph && c.ph.speedLand ? c.ph.speedLand : 30);
+  const sp = land * (fog > 0 ? 1.15 : 0.7);
+  const step = Math.min(d, sp * dt);
+  let nx = c.x + dx / d * step, nz = c.y + dz / d * step;
+  // A bot that cannot swim will not walk into the sea: it slides along the
+  // water's edge instead, which is what the shoreline does to a real animal.
+  const canSwim = !!(c.ph && c.ph.canSwim);
+  if (!canSwim && terrain.isWater(nx, nz)) {
+    const px = -dz / d, pz = dx / d;
+    const side = ((c.id | 0) & 1) ? 1 : -1;
+    nx = c.x + px * side * step; nz = c.y + pz * side * step;
+    if (terrain.isWater(nx, nz)) { nx = c.x - px * side * step; nz = c.y - pz * side * step; }
+    if (terrain.isWater(nx, nz)) return;
+  }
+  c.x = clamp(nx, 2, WORLD_W - 2);
+  c.y = clamp(nz, 2, WORLD_H - 2);
+}
+// In the cage nothing can touch you and nothing can wear you down: the match
+// has not started. Holding energy at full is what makes that true for hunger,
+// and clearing the drowning flags is what makes it true for a bay that ended
+// up with its feet in the surf.
+function brHoldCaged(c) {
+  if (!c || !c.alive) return;
+  if (c.ph && c.ph.storage) c.energy = c.ph.storage;
+  c._drown = 0; c._sub = false; c._suffoc = 0;
+}
+// Close on a rival, and stop just inside reach so the two of them trade blows
+// instead of orbiting each other.
+function brBotChase(c, foe, dt) {
+  const dx = foe.x - c.x, dz = foe.y - c.y;
+  const d = Math.hypot(dx, dz);
+  const reach = ((c.ph ? c.ph.radius : 4) + (foe.ph ? foe.ph.radius : 4)) * 1.2 + 10;
+  if (d < reach || d < 1e-3) return;
+  const land = Math.max(24, c.ph && c.ph.speedLand ? c.ph.speedLand : 30);
+  const step = Math.min(d - reach * 0.8, land * dt);
+  if (step <= 0) return;
+  const nx = c.x + dx / d * step, nz = c.y + dz / d * step;
+  if (!(c.ph && c.ph.canSwim) && terrain.isWater(nx, nz)) return;
+  c.x = clamp(nx, 2, WORLD_W - 2);
+  c.y = clamp(nz, 2, WORLD_H - 2);
+}
+function brConfineToCage(c, bay) {
+  if (!bay) return;
+  const r = BR_CAGE_R - (c.ph ? c.ph.radius * BODY_SCALE : 4) - 1;
+  c.x = clamp(c.x, bay.x - r, bay.x + r);
+  c.y = clamp(c.y, bay.z - r, bay.z + r);
+}
+function brZoneDamage(dt) {
+  for (const p of BR.players) {
+    if (!p.alive || !p.c || !p.c.alive) continue;
+    const f = brFogAt(p.c.x, p.c.y);
+    if (f <= 0) continue;
+    p.c.energy -= BR_ZONE_DPS * f * dt;
+    if (p.c.energy <= 0) {
+      p.c.alive = false;
+      brOnPlayerKilled(p.slot, null, 'the fog');
+    } else if (p.slot === BR.slot && f > 0.05) {
+      if (!BR._fogWarn || performance.now() - BR._fogWarn > 3000) {
+        BR._fogWarn = performance.now();
+        brSay('THE FOG IS KILLING YOU. Get back inside.', 2500);
+      }
+    }
+  }
+}
+// Bots: run for the middle of the zone, fight what is in reach once the grace
+// period is over, and take the fog's damage like everyone else. Deliberately
+// simple -- they stand in for players, they are not the point.
+function brBotTick(dt) {
+  for (const p of BR.players) {
+    if (p.bot === false || !p.alive) continue;
+    const c = p.c;
+    if (!c || !c.alive) { if (p.alive) { p.alive = false; brOnPlayerKilled(p.slot, null, 'the island'); } continue; }
+    p.x = c.x; p.z = c.y;
+    if (BR.phase === 'cage') { brConfineToCage(c, BR.bays[p.slot]); brHoldCaged(c); continue; }
+    // A bot stands in for a player, and a player spends the match hunting, so
+    // a bot feeds itself rather than quietly starving to death off-screen.
+    // This is the one thing about them that is not a real animal's life.
+    if (c.ph && c.ph.storage) c.energy = Math.min(c.ph.storage, c.energy + c.ph.upkeep * 1.15 * dt + c.ph.storage * 0.004 * dt);
+    // pick a fight with the nearest other player
+    let best = null, bd = 1e9;
+    if (BR.phase === 'open') {
+      for (const q of BR.players) {
+        if (q === p || !q.alive || !q.c || !q.c.alive) continue;
+        if (!brHitAllowed(q.c, c)) continue;
+        const d = Math.hypot(q.c.x - c.x, q.c.y - c.y);
+        if (d < bd) { bd = d; best = q; }
+      }
+    }
+    // A player who has run out of room stops running and starts hunting, so
+    // the last minutes are a fight rather than everyone quietly gassing.
+    const hunting = best && (BR.zone.r < 1400 || bd < 260) && brFogAt(c.x, c.y) <= 0;
+    if (hunting) brBotChase(c, best.c, dt);
+    else brBotMove(c, dt);
+    if (!best) continue;
+    const reach = ((c.ph ? c.ph.radius : 4) + (best.c.ph ? best.c.ph.radius : 4)) * 1.4 + 16;
+    if (bd > reach) continue;
+    c._brAcc = (c._brAcc || 0) + dt;
+    const rate = 1.1 + 0.6 * Math.random();
+    if (c._brAcc < rate) continue;
+    c._brAcc = 0;
+    const dmg = (c.ph && c.ph.attack ? c.ph.attack : 4) * (0.8 + Math.random() * 0.5);
+    best.c.energy -= dmg;
+    if (best.c.energy <= 0) {
+      best.c.alive = false;
+      brOnPlayerKilled(best.slot, p.slot);
+    }
+  }
+}
+
+// ---- HUD -------------------------------------------------------------------
+function brRenderHud() {
+  const el = document.getElementById('brPanel');
+  if (el) { el.innerHTML = brHudHtml(); el.style.display = BR.on ? 'block' : 'none'; }
+  const m = document.getElementById('brMsg');
+  if (m) {
+    const show = BR.msg && performance.now() < BR.msgT;
+    m.textContent = show ? BR.msg : '';
+    m.style.display = show ? 'block' : 'none';
+  }
+  brRenderChoice();
+}
+// The loser's choice. Shown once, when you die in a match with a killer.
+function brRenderChoice() {
+  const el = document.getElementById('brChoice');
+  if (!el) return;
+  const dc = BR.deadChoice;
+  if (!dc) { if (el.style.display !== 'none') { el.style.display = 'none'; el.innerHTML = ''; } return; }
+  if (el.dataset.t === String(dc.t)) return;
+  el.dataset.t = String(dc.t);
+  const k = dc.killer != null ? BR.players[dc.killer] : null;
+  el.innerHTML = '<h3>' + (k ? k.name.toUpperCase() + ' KILLED YOU' : 'THE FOG KILLED YOU') + '</h3>' +
+    '<p>' + (k ? 'Join their pack and come back as their young: you fight for them, they cannot hurt you, and if they win, you win. Or watch the rest of the match.'
+               : 'Nothing to join. The fog takes no packs.') + '</p>' +
+    (k ? '<button data-brjoin="1">join the pack</button>' : '') +
+    '<button data-brjoin="0">spectate</button>';
+  el.style.display = 'block';
+  for (const b of el.querySelectorAll('[data-brjoin]')) {
+    b.onclick = () => { el.style.display = 'none'; el.innerHTML = ''; el.dataset.t = ''; brChoose(b.getAttribute('data-brjoin') === '1'); };
+  }
+}
+function brHudHtml() {
+  if (!BR.on) return '';
+  const a = brAliveCount();
+  const left = Math.max(0, BR_MATCH_SECS - BR.t);
+  const mm = Math.floor(left / 60), ss = Math.floor(left % 60);
+  const me = BR.players[BR.slot];
+  let phase = '';
+  if (BR.phase === 'cage') phase = 'IN THE CAGE · gate in ' + Math.ceil(BR_CAGE_SECS - BR.t) + 's';
+  else if (BR.phase === 'grace') phase = 'GRACE · players safe for ' + Math.ceil(BR_CAGE_SECS + BR_GRACE_SECS - BR.t) + 's';
+  else if (BR.phase === 'open') phase = 'OPEN SEASON';
+  else phase = 'MATCH OVER';
+  const d = player.c ? Math.hypot(player.c.x - BR.zone.cx, player.c.y - BR.zone.cz) : 0;
+  const out = Math.max(0, d - BR.zone.r);
+  return '<div class="brhud">' +
+    '<div class="brtop"><b>' + mm + ':' + String(ss).padStart(2, '0') + '</b> · ' + a.n + ' alive · bay ' + (BR.bays[BR.slot] ? BR.bays[BR.slot].n : '?') + '</div>' +
+    '<div class="brphase">' + phase + '</div>' +
+    '<div class="brzone">' + (out > 0 ? '<span class="bad">IN THE FOG · ' + Math.round(out) + ' from safety</span>' : 'inside the ring · ' + Math.round(BR.zone.r - d) + ' to the edge') + '</div>' +
+    '<div class="brk">' + (me ? me.kills : 0) + ' kills · ' + BR.bones + ' bones' + (me && me.pack !== BR_PACK_NONE ? ' · in ' + BR.players[me.pack].name + "'s pack" : '') + '</div>' +
+    '</div>';
+}
+
 function becomeDesigned(des) {
   if (!world) return;
   const rng = world.rng;
@@ -15477,13 +17258,20 @@ function preyItems(prey) {
   return ids.slice(0, 9);
 }
 function edOnKill(prey) {
+  // A rival in a match pays out through the match, which handles the loot, the
+  // growth, the bones and the pack offer, so the ordinary kill path is skipped.
+  if (BR.on && prey && prey._br != null) {
+    if (prey.alive === false || prey.energy <= 0) brOnPlayerKilled(prey._br, BR.slot);
+    return;
+  }
   PROG.kills++;
+  boneEarn(BONES_PER_KILL, 'kill');
   objOnKill(prey);
   if (player.c) setTimeout(() => voxCall(player.c, 'win'), 400);
   saveProgress();
   const opts = preyItems(prey);
-  if (!opts.length) { toast('Killed it. +' + KILL_SPACE + ' genome space.', 2600); return; }
-  player.picker = { opts, label: 'You killed it: +' + KILL_SPACE + ' genome space. Take one of its parts', t0: performance.now(), items: true };
+  if (!opts.length) { toast('Killed it. +' + KILL_SPACE + ' genome space, +' + BONES_PER_KILL + ' bones.', 2600); return; }
+  player.picker = { opts, label: 'You killed it: +' + KILL_SPACE + ' genome space, +' + BONES_PER_KILL + ' bones. Take one of its parts', t0: performance.now(), items: true };
   renderPicker();
 }
 function renderPicker() {
@@ -15545,6 +17333,9 @@ function tick(dt, skipRender) {
   dt = Math.min(0.05, Math.max(0.001, dt));
   frameDt = dt;
   simT += dt;
+  // The match clock advances with the simulation, not with the frame loop: a
+  // dropped frame must not be a dropped second of the match.
+  try { if (BR.on) brTick(dt); } catch (e) { console.warn('br tick', e); }
   stepSim(dt);
   trackBirths();
   updateCamera(dt);
@@ -15568,6 +17359,7 @@ function loop(now) {
   }
   try { tick(dt); } catch (e) { running = false; fatal('Render loop failed: ' + e.message); throw e; }
   try { objTick(dt); sndTick(dt); spatTick(dt); } catch (e) { console.warn(e); }
+  try { if (BR.on) brRenderHud(); } catch (e) { console.warn('br hud', e); }
   requestAnimationFrame(loop);
 }
 
@@ -15616,7 +17408,7 @@ async function init() {
   // The first world is built from the SAME panel values a reset uses. Previously
   // init() had its own hardcoded numbers, so the controls did nothing until you
   // pressed reset.
-  world = C.makeWorld(Object.assign({ w: WORLD_W, h: WORLD_H, tileSize: TILE, seed, featureScale: 2, heightScale: HEIGHT_SCALE, maxSlope: 1, baseRelief: 0.35, plantArea: 0.5 }, panelOpts()));
+  world = C.makeWorld(Object.assign({ w: WORLD_W, h: WORLD_H, tileSize: TILE, seed, rarityCap: boneApplyWorldRarity(seed), featureScale: 2, heightScale: HEIGHT_SCALE, maxSlope: 1, baseRelief: 0.35, plantArea: 0.5 }, panelOpts()));
   terrain = world.terrain;
 
   buildPipelines();
@@ -15670,6 +17462,59 @@ window.__G3D = {
   look(yaw, pitch) { player.yaw = yaw; if (pitch != null) player.pitch = pitch; },
   press(k, on) { keys[String(k).toLowerCase()] = !!on; },
   rebuild: () => rebuildWorld(),
+  br: {
+    get on() { return BR.on; }, get phase() { return BR.phase; }, get t() { return BR.t; },
+    get zone() { return BR.zone; }, get players() { return BR.players; }, get bays() { return BR.bays; },
+    get alive() { return brAliveCount(); }, get result() { return BR.result; }, get log() { return BR.log; },
+    start: (net) => brStart(net), stop: () => brStop(), tick: (dt) => brTick(dt),
+    skip: (secs) => { BR.t += secs; },
+    hitAllowed: (v, a) => brHitAllowed(v, a),
+    fogAt: (x, z) => brFogAt(x, z),
+    choose: (join) => brChoose(join),
+    kill: (slot, by) => brOnPlayerKilled(slot, by),
+    netKind: () => (BR.net ? BR.net.kind : null),
+    get locked() { return brLocked(); },
+    rules: () => BR_RULES,
+    ruleOpts: () => brRuleOpts(),
+    enter: (d) => brEnterMatch(d || (PROG.last ? C.cloneDesign(PROG.last) : null)),
+    get seed() { return BR.seed; },
+    syncPanel: () => brSyncPanel(),
+    panelOpts: () => panelOpts(),
+    panelFlags: () => panelFlags(),
+    panelWarmup: () => panelWarmup(),
+    resetClick: () => resetWorldClick(),
+    menuPage: (id) => menuPage(id),
+    get deadChoice() { return BR.deadChoice; },
+    renderHud: () => brRenderHud(),
+  },
+  bones: {
+    get balance() { return boneBalance(); },
+    get rarityCap() { return world && world.rarityCap; },
+    earn: (n) => boneEarn(n, 'test'), spend: (n) => boneSpend(n, 'test'),
+    buy: (id) => boneBuy(id), sell: (id) => boneSell(id),
+    price: (id) => bonePrice(id), tier: (id) => boneTier(id), refund: (id) => boneRefund(id),
+    audit: () => boneAuditTiers(), perKill: BONES_PER_KILL,
+    reset: () => { PROG.bones = 0; PROG.unlocked = new Set(); PROG.bought = []; ED.sellArm = null; saveProgress(); },
+    grant: (id) => { PROG.unlocked.add(id); saveProgress(); },
+    // the palette IS the shop now
+    tab: (t) => { ED.tab = t; edRefreshUI(); },
+    buyButtons: () => [...document.querySelectorAll('#edGrid [data-buy]')].map(b => b.getAttribute('data-buy')),
+    sellButtons: () => [...document.querySelectorAll('#edGrid [data-sell]')].map(b => b.getAttribute('data-sell')),
+    clickBuy: (id) => { const b = document.querySelector('#edGrid [data-buy="' + id + '"]'); if (b) b.click(); return !!b; },
+    clickSell: (id) => { const b = document.querySelector('#edGrid [data-sell="' + id + '"]'); if (b) b.click(); return !!b; },
+    hudBones: () => { const e = document.getElementById('edBoneN'); return e && e.textContent; },
+    worn: () => { const out = []; if (!ED.des) return out;
+      for (const q of ED.des.parts || []) out.push(q.id);
+      for (const l of ED.des.limbs || []) { out.push(l.id); if (l.tip) out.push(l.tip.id); }
+      return [...new Set(out)]; },
+    refresh: () => edRefreshUI(),
+  },
+  openEditor: (m) => openEditor(m || 'game'),
+  beginPlay: () => menuStart(),
+  get sea() { return SEA; },
+  get seaShoals() { return SEA.shoals.length; },
+  get seaBubbles() { return SEA.bub.length; },
+  get folCount() { return FOL.count; },
   get instData() { return instData; },
   get instCount() { return instCount; },
   attack: () => tryAttack(),
