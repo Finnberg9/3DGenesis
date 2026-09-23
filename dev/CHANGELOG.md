@@ -2,6 +2,39 @@
 
 Build: `dev/3dgenesis-dev-src.tgz` unpacks to the patch pipeline. `bash build.sh` (it cds to its own folder now, so it runs wherever you unpack it) turns `g3.v3` + `src/patch_*.py` into `g3.html` (= `index.html`) and extracts `core.js` for node tests.
 
+## 2026-09-23 (fixes): Spawned in the sky, a sand floor, and a hole in the fog
+
+Three things Finn hit playing the build, all reported in one go.
+
+### CRITICAL: entering a match dropped you out of the sky and killed you
+The fall tracker remembers the ground height under your last position (`player._gWas`) and reads a drop in it as the ground falling away beneath you. That is what makes walking off a ledge a fall rather than a teleport, and it was added last night.
+
+Entering a match **rebuilds the island** and then puts you in a cage on the ring. The remembered height therefore belonged to a world that no longer existed, and the difference between the two islands was read as a fall from that height: you were lifted into the air by it, and the landing killed you. On a run from high ground the drop was nearly two thousand feet.
+
+Fixed in two layers, because one of them can be forgotten and the other cannot:
+- `fallResetGround()` is called wherever the player is put down somewhere new: the match spawn, `teleport()`, `becomeDesigned()`, and the start of `rebuildWorld()`.
+- The tracker also notices **by itself**. It records where it took its reading, and a move further than anything could have walked in that frame is a teleport, not a step, so the ground it left behind means nothing. A relocation added later cannot bring this back.
+
+### The death screen was lying about what killed you
+Every death with no killer was headlined **THE FOG KILLED YOU**, including this one, which is why the bug read as a fog death inside a cage thirty seconds into a match. The cause was already being passed to `brOnPlayerKilled`; it just was not carried into `BR.deadChoice`. It is now, and the screen says THE FALL KILLED YOU, YOU DROWNED, YOU STARVED or THE FOG KILLED YOU as appropriate.
+
+### The cage floor was a plate on a beach
+The floor plate was exactly the cage's half-width, so it stopped at the inside of the bars and every bay had a ring of sand showing inside it and under the gate. It runs out to 1.24 times the cage now, past the bars, on a raised kerb and a shade proud of the pad so the two surfaces cannot fight over the same depth. A bay is a steel box on the ground, not a rug.
+
+### The fog wall had a hole in it exactly where you were walking
+`cloudBuild` collected the arc of the wall near enough to see, sorted it **back to front** for the alpha blend, and then kept the first `CLOUD_MAX` of that list. Sorted back to front, the first entries are the FURTHEST ones. The budget was being spent on the far side of the ring and every puff near the camera was thrown away, so you saw banks away to the left and right, clear ground straight ahead, and then you were simply inside the fog with nothing having arrived.
+
+Nearest first, cut to the budget, and only then sorted back to front for the blend. Measured after the fix: 256 puffs at 400 units from the edge, 900 (the cap) from 2000 out, where before the near view was empty.
+
+With the wall actually drawn where you are standing, the rest could be made to read as weather:
+- **Five rows instead of three, and the first two are INSIDE the ring line** (-260 and -60). The leading edge of the bank rolls over you before the air starts hurting, so it arrives rather than being a pane you step through.
+- **Four height layers** over a taller wall (520), thin at the leading edge, solid through the body, thinning again at the back and the top, so the bank has a front to watch coming.
+- **Bigger puffs** (185 to 395 rather than 150 to 320) and a ring spacing that tightens from 260 to 110 units as the wall gets close to you, so it is solid where you are and cheap where you are not.
+- **The cut-off follows the camera's height.** It was a flat 5200 units, which meant the wall vanished completely from the spectator camera after you died, and from anything flying. It now adds four units of sight for every unit the eye is above the ground.
+
+### Tested
+`test_spawn_steps.js`: stand on the highest ground in a free-roam world, enter a match, and check you are on the ground with no fall on the frame the match starts, still on the ground and unhurt twelve seconds later, standing in your own bay, and that a fall is reported as a fall. Plus the existing suites, all green: inventory, palette shop, and a full fifteen-minute battle royale.
+
 ## 2026-09-23 (latest): No grace period, and everyone is named
 
 Both of these came in from Finn mid-run.

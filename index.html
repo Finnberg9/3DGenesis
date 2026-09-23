@@ -6501,7 +6501,14 @@ function buildCageMesh() {
   // Floor plate on a deep plinth. The cage is anchored to the LOWEST ground
   // under its footprint, so the plinth has to reach down far enough to bury
   // itself on the uphill side instead of leaving a gap you can see under.
-  brBox(m, 0, -11, 0, R, 11, R, BR_PLATE, MAT_STEEL);
+  const FLOOR = R * 1.24;
+  brBox(m, 0, -10.7, 0, FLOOR, 11, FLOOR, BR_PLATE, MAT_STEEL);
+  // a raised kerb around the plate, so the floor reads as a built thing
+  // sitting on the ground rather than a texture painted onto it
+  for (const sx of [-1, 1]) {
+    brBox(m, sx * FLOOR, 0.25, 0, 0.55, 0.55, FLOOR, BR_STEEL_D, MAT_STEEL);
+    brBox(m, 0, 0.25, sx * FLOOR, FLOOR, 0.55, 0.55, BR_STEEL_D, MAT_STEEL);
+  }
   // corner posts
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
     brBox(m, sx * (R - frame), H * 0.5, sz * (R - frame), frame, H * 0.5, frame, BR_STEEL_D, MAT_STEEL);
@@ -11830,6 +11837,17 @@ function updateJump(dt) {
   if (player.c.ph.canFly && player.fly > 0.05) { player.jumpY = 0; player.jumpV = 0; player.grounded = true; player._gWas = null; player._fallTop = null; return; }
   const c = player.c;
   const gNow = groundAt(c.x, c.y);
+  // A move no animal could have made in this frame is a teleport, not a step,
+  // and nothing about the ground it left behind means anything here. This
+  // catches every way the player can be relocated, including ones added
+  // later, so the tracker cannot be left holding another world's height.
+  if (player._gAt) {
+    const maxStep = Math.max(24, (c.ph.speedLand || 40) * 2.5 * dt + 8);
+    if (Math.hypot(c.x - player._gAt[0], c.y - player._gAt[1]) > maxStep) {
+      player._gWas = null; player._fallTop = null;
+      player.jumpY = 0; player.jumpV = 0; player.grounded = true;
+    }
+  }
   // The ground dropping away under you is a fall, not a teleport. Whatever it
   // dropped becomes height you are now standing on nothing above.
   if (player._gWas != null && player.grounded) {
@@ -11838,9 +11856,10 @@ function updateJump(dt) {
     // produced in the time available.
     const walkDrop = Math.max(2, (c.ph.speedLand || 40) * PAGE_SLOPE_TAN * dt * 1.6);
     const drop = player._gWas - gNow;
-    if (drop > walkDrop) { player.jumpY += drop; player.grounded = false; }
+    if (isFinite(drop) && drop > walkDrop) { player.jumpY += drop; player.grounded = false; }
   }
   player._gWas = gNow;
+  player._gAt = [c.x, c.y];
   if (player.jumpY > 0 || player.jumpV > 0) {
     player.jumpV -= GRAV * dt;
     player.jumpY += player.jumpV * dt;
@@ -11856,6 +11875,15 @@ function updateJump(dt) {
       applyFallDamage(c, fell);
     } else player.grounded = false;
   } else { player.grounded = true; player._fallTop = null; }
+}
+// Forget where the ground was. Every discontinuous move of the player -- a
+// match spawn, a respawn, a teleport, an island rebuilt under their feet --
+// has to call this, or the height remembered from the old position is read as
+// the ground dropping away by that much and the player is dropped from it.
+function fallResetGround() {
+  player.jumpY = 0; player.jumpV = 0; player.grounded = true;
+  player._gWas = null; player._gAt = null; player._fallTop = null;
+  if (player.c) player.c.jumpLv = 0;
 }
 // Water you fall into takes the impact, as long as it is deep enough to take
 // the animal rather than just wet its feet.
@@ -14544,6 +14572,8 @@ function updateStats() {
 
 async function rebuildWorld() {
   running = false;
+  // The ground under the player is about to become a different island.
+  try { fallResetGround(); } catch (e) { /* before the player exists */ }
   // A match names its own island. The seed box and its lock have no say.
   if (brLocked()) { const sd = $('seed'); if (sd) sd.value = String(BR.seed >>> 0); }
   else {
@@ -17177,6 +17207,8 @@ function brBegin() {
   const r0 = Math.max(1200, far + 900);
   BR.zone = { cx: cx0, cz: cz0, r0, r1: Math.min(BR_ZONE_FINAL, r0 * 0.25), r: r0 };
   if (player.c) { player.c.x = bay.x; player.c.y = bay.z; player.c._spawnT = simT; }
+  // You are put down in your cage, not dropped into it.
+  fallResetGround();
   player.camX = bay.x; player.camZ = bay.z;
   player.spectator = false;
   brSpawnBots();
@@ -17329,7 +17361,7 @@ function brOnPlayerKilled(victimSlot, killerSlot, cause) {
   const by = k ? k.name : (cause || 'the island');
   BR.log.push({ t: BR.t, msg: v.name + ' killed by ' + by });
   if (victimSlot === BR.slot) {
-    BR.deadChoice = { killer: killerSlot, t: BR.t };
+    BR.deadChoice = { killer: killerSlot, t: BR.t, cause: k ? null : (cause || 'the island') };
   } else {
     brSay(v.name + ' killed by ' + by + ' · ' + brAliveCount().n + ' left', 2600);
   }
@@ -17696,14 +17728,22 @@ function quitToMenu() {
 // Drawn with its own alpha-blended pipeline over the shared sphere mesh, sorted
 // back to front, so the puffs read as volume rather than as balls.
 // =====================================================================
-const CLOUD_MAX = 620;
+const CLOUD_MAX = 900;
 const CLOUD_FLOATS = 8;                 // pos3, radius, tint3, density
 const cloudData = new Float32Array(CLOUD_MAX * CLOUD_FLOATS);
 let cloudVB = null, cloudPipe = null, cloudBind = null, cloudCount = 0;
-const CLOUD_ROWS = [0, 210, 470];       // how far out from the ring each row stands
-const CLOUD_LAYERS = [0.30, 0.72, 1.18];// height, as a fraction of the wall height
-const CLOUD_WALL_H = 460;
-const CLOUD_SEE = 7200;                 // puffs are only built this close to the eye
+// How far out from the ring each row of the bank stands. The first row is
+// INSIDE the line: the leading edge of the weather rolls over you before the
+// air starts hurting, which is what makes it read as cloud coming for you
+// rather than a pane you walk through.
+const CLOUD_ROWS = [-260, -60, 150, 380, 640];
+const CLOUD_LAYERS = [0.10, 0.42, 0.80, 1.20];// height, as a fraction of the wall height
+const CLOUD_WALL_H = 520;
+const CLOUD_SEE = 5200;                 // puffs are only built this close to the eye
+// Ring spacing. The bank has to be solid where you are standing and may be
+// sparse away down the arc, so the step is set from how far along the ring the
+// nearest point is rather than being one number for the whole circle.
+const CLOUD_STEP_NEAR = 110, CLOUD_STEP_FAR = 260;
 
 const WGSL_CLOUD_SRC = `
 struct VO { @builtin(position) pos: vec4<f32>, @location(0) nrm: vec3<f32>,
@@ -17804,15 +17844,27 @@ function cloudBuild(t) {
   const dcx = camX - Z.cx, dcz = camZ - Z.cz;
   const dCentre = Math.hypot(dcx, dcz);
   const aCam = Math.atan2(dcz, dcx);
+  // How far the wall is worth building. From ground level that is the plain
+  // number; from up high -- a flier, or the spectator camera after you die --
+  // you can see most of the island, and a fixed cut-off made the wall vanish
+  // entirely from up there.
+  const eyeUp = Math.max(0, player.camY - groundAt(clamp(camX, 1, WORLD_W - 1), clamp(camZ, 1, WORLD_H - 1)));
+  const SEE = Math.min(26000, CLOUD_SEE + eyeUp * 4);
   // half-angle of the visible arc: everything whose ring point is within CLOUD_SEE
   let halfArc = Math.PI;
   if (dCentre > 1 && R > 1) {
-    const cosNeed = (dCentre * dCentre + R * R - CLOUD_SEE * CLOUD_SEE) / (2 * dCentre * R);
+    const cosNeed = (dCentre * dCentre + R * R - SEE * SEE) / (2 * dCentre * R);
     if (cosNeed > 1) return 0;                 // the whole wall is too far to see
     if (cosNeed > -1) halfArc = Math.acos(cosNeed);
   }
-  const stepA = Math.max(0.006, 165 / Math.max(200, R));   // puffs about 165 units apart
-  const n = Math.min(240, Math.ceil((halfArc * 2) / stepA));
+  // How close the nearest point of the ring is. Standing on top of the wall
+  // needs tight spacing; watching it from the middle of the island does not.
+  const nearest = Math.abs(R - dCentre);
+  const stepW = nearest < 900 ? CLOUD_STEP_NEAR
+              : nearest > 3200 ? CLOUD_STEP_FAR
+              : CLOUD_STEP_NEAR + (CLOUD_STEP_FAR - CLOUD_STEP_NEAR) * ((nearest - 900) / 2300);
+  const stepA = Math.max(0.004, stepW / Math.max(200, R));
+  const n = Math.min(320, Math.ceil((halfArc * 2) / stepA));
   const list = [];
   for (let k = -Math.floor(n / 2); k <= Math.floor(n / 2); k++) {
     const a = aCam + k * stepA;
@@ -17823,28 +17875,41 @@ function cloudBuild(t) {
       if (bx < -2000 || bz < -2000 || bx > WORLD_W + 2000 || bz > WORLD_H + 2000) continue;
       const dx = bx - camX, dz = bz - camZ;
       const d2 = dx * dx + dz * dz;
-      if (d2 > CLOUD_SEE * CLOUD_SEE) continue;
+      if (d2 > SEE * SEE) continue;
       const gy = groundAt(clamp(bx, 1, WORLD_W - 1), clamp(bz, 1, WORLD_H - 1));
       for (let li = 0; li < CLOUD_LAYERS.length; li++) {
         const key = (k * 97 + ri * 31 + li) | 0;
         const h1 = cloudHash(key, 1), h2 = cloudHash(key, 2), h3 = cloudHash(key, 3);
         // slow boil: each puff breathes and drifts on its own phase
         const ph = h1 * 6.2832;
-        const rad = (150 + h2 * 170) * (1 + 0.10 * Math.sin(t * 0.25 + ph));
+        const rad = (185 + h2 * 210) * (1 + 0.10 * Math.sin(t * 0.25 + ph));
         const y = gy + CLOUD_WALL_H * CLOUD_LAYERS[li] + Math.sin(t * 0.18 + ph) * 26 + h3 * 60;
         const px = bx + Math.sin(t * 0.11 + ph) * 34;
         const pz = bz + Math.cos(t * 0.09 + ph * 1.3) * 34;
-        // the outer rows and the top layer are thinner, so the wall has an edge
-        const dens = (ri === 0 ? 0.92 : ri === 1 ? 0.72 : 0.48) * (li === 2 ? 0.62 : 1);
+        // Thin at the leading edge, solid through the body, thinning again at
+        // the back and at the top, so the bank has a front to watch arrive
+        // rather than being a uniform slab.
+        const CLOUD_ROW_DENS = [0.34, 0.66, 0.95, 0.80, 0.52];
+        const dens = CLOUD_ROW_DENS[ri] * (li === CLOUD_LAYERS.length - 1 ? 0.58 : li === 0 ? 0.88 : 1);
         const g1 = 0.88 + h1 * 0.16;
         list.push({ x: px, y, z: pz, r: rad, tint: [g1 * 0.93, g1, g1 * 0.90], dens,
                     d2: (px - camX) * (px - camX) + (pz - camZ) * (pz - camZ) });
       }
     }
   }
-  // back to front, so the blend stacks correctly
-  list.sort((a, b) => b.d2 - a.d2);
+  // THE BUDGET GOES TO THE NEAREST PUFFS.
+  //
+  // This used to sort the whole arc back to front and then keep the first
+  // CLOUD_MAX of it, which kept the FURTHEST puffs and threw away every one
+  // near the camera. The wall was therefore missing exactly where you were
+  // walking into it: you saw banks away to the left and right, clear ground
+  // straight ahead, and then you were simply inside the fog with nothing
+  // having arrived. Nearest first, cut to the budget, and only then sorted
+  // back to front for the blend.
+  list.sort((a, b) => a.d2 - b.d2);
   const n2 = Math.min(list.length, CLOUD_MAX);
+  list.length = n2;
+  list.sort((a, b) => b.d2 - a.d2);
   for (let i = 0; i < n2; i++) {
     const c = list[i], o = i * CLOUD_FLOATS;
     cloudData[o] = c.x; cloudData[o + 1] = c.y; cloudData[o + 2] = c.z;
@@ -18188,9 +18253,20 @@ function brRenderChoice() {
   if (el.dataset.t === String(dc.t)) return;
   el.dataset.t = String(dc.t);
   const k = dc.killer != null ? BR.players[dc.killer] : null;
-  el.innerHTML = '<h3>' + (k ? k.name.toUpperCase() + ' KILLED YOU' : 'THE FOG KILLED YOU') + '</h3>' +
+  // Name what actually killed you. Everything with no killer used to be
+  // reported as the fog, which meant a fall, a drowning or starvation all lied
+  // about themselves.
+  const CAUSE_HEAD = { fall: 'THE FALL KILLED YOU', drowned: 'YOU DROWNED', starved: 'YOU STARVED',
+                       'the fog': 'THE FOG KILLED YOU', 'the island': 'THE ISLAND KILLED YOU' };
+  const CAUSE_BODY = { fall: 'Nothing to join. The ground takes no packs.',
+                       drowned: 'Nothing to join. The water takes no packs.',
+                       starved: 'Nothing to join. Hunger takes no packs.',
+                       'the fog': 'Nothing to join. The fog takes no packs.',
+                       'the island': 'Nothing to join. The island takes no packs.' };
+  const cz = dc.cause || 'the island';
+  el.innerHTML = '<h3>' + (k ? k.name.toUpperCase() + ' KILLED YOU' : (CAUSE_HEAD[cz] || 'THE ISLAND KILLED YOU')) + '</h3>' +
     '<p>' + (k ? 'Join their pack and come back as their young: you fight for them, they cannot hurt you, and if they win, you win. Or watch the rest of the match.'
-               : 'Nothing to join. The fog takes no packs.') + '</p>' +
+               : (CAUSE_BODY[cz] || 'Nothing to join. The island takes no packs.')) + '</p>' +
     (k ? '<button data-brjoin="1">join the pack</button>' : '') +
     '<button data-brjoin="0">spectate</button>';
   el.style.display = 'block';
@@ -18314,6 +18390,9 @@ function brHudHtml() {
 }
 
 function becomeDesigned(des, opts) {
+  // A new body, usually somewhere else: nothing the old one knew about the
+  // ground applies to it.
+  try { fallResetGround(); } catch (e) { /* not yet playing */ }
   if (!world) return;
   const rng = world.rng;
   const g = C.seedHerbivore(world, rng);
@@ -18676,7 +18755,7 @@ window.__G3D = {
   get core() { return C; },
   tick, step: (dt) => tick(dt, true), renderFrame: (t) => renderFrame(t), toast,
   stop() { running = false; },
-  teleport(x, z) { if (player.c) { player.c.x = clamp(x, 1, WORLD_W - 1); player.c.y = clamp(z, 1, WORLD_H - 1); } player.camX = x; player.camZ = z; },
+  teleport(x, z) { if (player.c) { player.c.x = clamp(x, 1, WORLD_W - 1); player.c.y = clamp(z, 1, WORLD_H - 1); } player.camX = x; player.camZ = z; fallResetGround(); },
   look(yaw, pitch) { player.yaw = yaw; if (pitch != null) player.pitch = pitch; },
   press(k, on) { keys[String(k).toLowerCase()] = !!on; },
   rebuild: () => rebuildWorld(),
@@ -18710,7 +18789,9 @@ window.__G3D = {
     hitAllowed: (v, a) => brHitAllowed(v, a),
     fogAt: (x, z) => brFogAt(x, z),
     choose: (join) => brChoose(join),
-    kill: (slot, by) => brOnPlayerKilled(slot, by),
+    kill: (slot, by, cause) => brOnPlayerKilled(slot, by, cause),
+    get slot() { return BR.slot; },
+    resetFall: () => fallResetGround(),
     netKind: () => (BR.net ? BR.net.kind : null),
     get locked() { return brLocked(); },
     rules: () => BR_RULES,
