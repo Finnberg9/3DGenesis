@@ -5,6 +5,8 @@ Recorded so every daily run knows where the game is headed and keeps the code co
 ## STATUS (2026-09-23)
 - **Battle royale: built, single-machine.** The match runs end to end against bots: cages with bay numbers, gates, the five-minute grace, open combat, looting a kill's parts, the pack-or-spectate choice, the closing fog with its kill band, and a recorded win. Every world parameter is locked for the duration and the island is built from the match seed, so the fight is the same fight for everyone in it. See `src/br.js` and `src/brmesh.js`.
 - **Bones: built.** Tiers, prices, sell-back, the shop in the builder, and tier-matched rarity in the wild with a per-world ceiling. See `src/bones.js`.
+- **Map: doubled to 51200 x 32000** (2026-09-23), which needed the terrain chunked and culled first. Drawing four times the world now costs a quarter less per frame than the old one did.
+- **Rivers: built** (2026-09-23). Routed by steepest descent, carved into the heightmap before the render mesh, with steep banks that the terrain shader renders as rock cliffs for free, and a flowing ribbon surface. Still to do: the simulation does not know about them yet (`riverSurfaceAt()` is the hook), so you cannot swim or drown in one; waterfalls where the bed drops sharply; and the surface is a little washed out where the foam term piles up.
 - **Water world: mostly built.** No trees in water, underwater absorption and caustics, Snell's window, kelp/coral/sea-fan/rubble beds, fish shoals and diver bubbles. Still missing: underwater caves (needs real geometry beyond the heightmap), and sand ripples.
 
 ### What the online mode still needs (the only part that cannot be built here)

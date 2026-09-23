@@ -2,6 +2,42 @@
 
 Build: `dev/3dgenesis-dev-src.tgz` unpacks to the patch pipeline. `bash build.sh` (edit its `cd` to your folder) turns `g3.v3` + `src/patch_*.py` into `g3.html` (= `index.html`) and extracts `core.js` for node tests.
 
+## 2026-09-23 (night): The map doubles, and rivers
+
+### The terrain is chunked and culled
+The terrain was one static mesh covering the whole world, drawn in full every frame, with nothing culled including the half of the world behind you. That was 1.4M triangles at the old size and would have been 5.7M at the new one.
+
+The vertex buffer is unchanged and still shared. Only the **index buffer** is reorganised: laid out chunk by chunk in row-major order, each chunk owning a contiguous range, so drawing a chunk is an offset into the same buffer. Nothing is duplicated, no LOD is needed, and because chunks are emitted row-major, runs of visible neighbours merge into single draw calls.
+
+Culling is distance plus a horizontal frustum test that accounts for each chunk's own angular size, so a chunk is only dropped when the whole of it is off the side of the screen. The shadow cascade asks for a much smaller set than the camera does.
+
+### The map is four times the area
+**51200 x 32000**, doubled on each axis. Two supporting changes made it cheaper than the old map rather than more expensive:
+- terrain draw distance capped at 12000 units, where the fog is already 96% opaque, so ground past it was costing triangles to render something very nearly fog-coloured
+- `GRID_STEP` 24 to 28: a 17% coarser silhouette for a 27% cut in triangles, and the terrain shader adds its own fine detail on top of the mesh anyway
+
+| | old map | doubled map |
+|---|---|---|
+| area | 25600 x 16000 | 51200 x 32000 |
+| terrain triangles, total | 1.42M | 4.18M |
+| **drawn per frame** | **1.42M (all of it)** | **1.05M (25%)** |
+| draw calls | 1 | 9 to 18 |
+
+Four times the world, a quarter less terrain drawn per frame than before.
+
+### Rivers
+Water that runs downhill in one direction, from high ground to the sea, in a channel it cut for itself with rock banks standing over it. Three stages, and the order matters:
+
+1. **Route.** Steepest descent from a spring, looking around a ring at each step for the lowest neighbour, with a straightening bias so it meanders rather than zig-zagging and never doubles back. It stops when it reaches the sea, when it finds a bowl, or when it has stopped descending: a river that has stopped dropping has become a marsh, and without that check one wandered 41,000 units across a plain for 52 units of fall.
+2. **Carve**, into the heightmap, **before the render mesh is built** (the same seam the cage pads use). A flat bed, then banks that rise **steeply** over a short run. Steep is the whole point: the terrain shader already draws anything past about 22 degrees as layered rock, so a bank cut like this **is** a rock cliff with no extra geometry and no extra draw call. Depth and width both wander along the route, so a river is a gorge in one reach and a shallow braid in the next, which is where the varying cliff heights come from. The bed is only ever cut down, never built up, so a channel cannot dam a valley.
+3. **Ribbon.** A strip of quads following the route at the water's surface, each vertex carrying how far along it is, so the shader scrolls the flow **one way** and breaks it into whitewater where the bed steepens or the water drags along the banks. Three ripple layers at different rates, sky in the surface, sun glint down its length, green at the shallows and blue-green down the middle.
+
+Seven rivers per world, 800 to 3000 units long, dropping 50 to 820 units from spring to mouth. Measured channels: bed cut 15 to 66 units below the running surface, banks standing 55 to 107 units over it.
+
+### Fixed
+- **Fall distance was wildly overstated.** The drop in the ground was being folded into your height on *every* frame, including while already airborne, so moving horizontally during a fall kept topping it up from the ground sliding by underneath. A short drop off a ledge reported as an enormous one. Only the moment you leave the ground counts now, and a drop that a walk down a slope could have produced is not a fall at all: running down a 56 degree slope now costs 0%.
+- **Falls are measured in the animal's own height**, which is the only scale that means anything in a game whose bodies run from a lizard to a sauropod. Free under about two and a half times your standing height; five times that is fatal. No message either way: you felt the ground, you saw the screen flash, and your health bar moved.
+
 ## 2026-09-23 (evening): Ground rules, and a long list of things that were wrong
 
 ### The ground

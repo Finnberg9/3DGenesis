@@ -1860,6 +1860,38 @@
     const terrain = {
       w, h, LV, island: isle, mountain: mt, lakes, islandMask,
       hg, HX, HY, CELL,
+      // Cut a river channel: a flat bed of half-width halfW, then banks that
+      // rise STEEPLY over bankW to bankH above the water. Steep is the point:
+      // the terrain shader draws anything past about 22 degrees as layered
+      // rock, so a bank cut like this is a rock cliff with no extra geometry
+      // and no extra draw call. Ground already lower than the bed is left
+      // alone, so a channel never builds a dam across a valley.
+      carveChannel(x, y, halfW, bankW, bedE, bankH, waterE) {
+        const R = Math.max(2, halfW), A = Math.max(2, bankW);
+        const ci = Math.round(x / CELL), cj = Math.round(y / CELL);
+        const span = Math.ceil((R + A) / CELL) + 1;
+        for (let j = -span; j <= span; j++) for (let i = -span; i <= span; i++) {
+          const gi = ci + i, gj = cj + j;
+          if (gi < 0 || gj < 0 || gi > HX - 1 || gj > HY - 1) continue;
+          const d = Math.hypot(i * CELL, j * CELL);
+          if (d > R + A) continue;
+          const o = gj * HX + gi;
+          const cur = hg[o];
+          if (d <= R) {
+            // the bed itself, but never raised: a river does not dam a valley
+            if (cur > bedE) hg[o] = bedE;
+            continue;
+          }
+          // the bank. k runs 0 at the water's edge to 1 at the top.
+          const k = (d - R) / A;
+          // pow < 1 puts most of the rise in the first stretch, which is what
+          // makes it read as a wall rather than a ramp
+          const rise = Math.pow(k, 0.42);
+          const want = bedE + (waterE + bankH - bedE) * rise;
+          // only ever cut down to the bank profile, never build ground up
+          if (cur > want) hg[o] = Math.max(want, Math.min(cur, want + (cur - want) * 0.15));
+        }
+      },
       // Level a disc of ground to one height, blending out over an apron so it
       // does not leave a step around the edge. Returns the height it settled
       // on. Anything built on the ground calls this BEFORE the render mesh is
@@ -3056,10 +3088,11 @@
       if (!p.canFly && !terrain.isWater(nx, ny)) {
         const HS2 = terrain.heightScale || 420;
         const fell = (terrain.height(c.x, c.y) - terrain.height(nx, ny)) * HS2;
-        if (fell > FALL_SAFE_SIM) {
-          const over = fell - FALL_SAFE_SIM;
+        const safe = Math.max(6, (p.standH || p.radius || 6) * FALL_SAFE_H_SIM);
+        if (fell > safe) {
+          const over = fell - safe;
           const sizeK = clamp(0.8 + (p.mass || 1) / 40, 0.8, 1.7);
-          c.energy -= Math.pow(over / FALL_FATAL_SIM, 1.6) * sizeK * Math.max(1, p.storage);
+          c.energy -= Math.pow(over / Math.max(14, (p.standH || p.radius || 6) * FALL_FATAL_H_SIM), 1.6) * sizeK * Math.max(1, p.storage);
           if (c.energy <= 0) { c.alive = false; c.deathCause = 'fall'; }
         }
       }
@@ -3345,8 +3378,8 @@
   }
   // ---- being attacked ---------------------------------------------------
   const HURT_TIME = 5;
-// The same numbers the player falls by. One world unit is one foot.
-const FALL_SAFE_SIM = 20, FALL_FATAL_SIM = 70;
+// The same numbers the player falls by, in body heights.
+const FALL_SAFE_H_SIM = 2.5, FALL_FATAL_H_SIM = 7;
 // 60 degrees is the limit for anything that walks. A body built to scramble
 // earns its way to 80. Measured over this baseline, in world units.
 const SLOPE_TAN_WALK = 1.7321;    // tan 60
@@ -4361,11 +4394,11 @@ function fatal(why) { $('err').style.display = 'flex'; $('err-why').textContent 
 if (!C) { fatal('GenesisCore did not load.'); return; }
 
 // ------------------------------------------------------------- config
-const WORLD_W = 25600, WORLD_H = 16000, TILE = 48;
+const WORLD_W = 51200, WORLD_H = 32000, TILE = 48;
 const HEIGHT_SCALE = 2000;    // sim elevation (0..1, unitless) -> world Y units
                              // chosen so one climbable elevation level is ~1/3 of eye
                              // height; taller relief makes ground level unreadable
-const GRID_STEP = 24;        // terrain mesh sample spacing, world units.
+const GRID_STEP = 28;        // terrain mesh sample spacing, world units.
                              // At 20 the facets were larger than the animals
                              // standing on them and read as smooth blobs.
 const FAR = 26000;           // far plane, also the fog horizon
@@ -4707,6 +4740,11 @@ const MAX_BODY_INST = 1200;
 const bodyInstData = new Float32Array(MAX_BODY_INST * BINST_FLOATS);
 let bodyBatches = [];
 let terrVB, terrIB, terrCount;
+// { x0,z0,x1,z1: world bounds | cx,cz: centre | cr: bounding radius in xz
+//   yLo,yHi: height range | first,count: the chunk's slice of terrIB }
+let terrChunks = [];
+const TCHUNK = 64;                    // grid cells per chunk edge
+const TERR_STATS = { drawn: 0, calls: 0, total: 0 };
 let terrH = null, terrNX = 0, terrNZ = 0;   // the exact heights the mesh was built from
 let sphVB, sphIB, sphCount, instVB, plantVB;
 let coneVB, coneIB, coneCount, spikeVB;
@@ -6842,14 +6880,40 @@ function buildTerrain() {
     verts[v++] = gx / gl; verts[v++] = gy / gl; verts[v++] = gz / gl;
     verts[v++] = r * jit * shd; verts[v++] = g2 * jit * shd; verts[v++] = b * jit * shd;
   }
+  // ---- indices, laid out one chunk at a time -------------------------------
   const idx = new Uint32Array((nx - 1) * (nz - 1) * 6);
+  const ncx = Math.ceil((nx - 1) / TCHUNK), ncz = Math.ceil((nz - 1) / TCHUNK);
+  terrChunks = [];
   let q = 0;
-  for (let j = 0; j < nz - 1; j++) for (let i = 0; i < nx - 1; i++) {
-    const a = j * nx + i, b = a + nx;
-    idx[q++] = a; idx[q++] = b; idx[q++] = a + 1;
-    idx[q++] = a + 1; idx[q++] = b; idx[q++] = b + 1;
+  for (let cj = 0; cj < ncz; cj++) for (let ci = 0; ci < ncx; ci++) {
+    const i0 = ci * TCHUNK, j0 = cj * TCHUNK;
+    const i1 = Math.min(nx - 1, i0 + TCHUNK), j1 = Math.min(nz - 1, j0 + TCHUNK);
+    if (i1 <= i0 || j1 <= j0) continue;
+    const first = q;
+    let yLo = Infinity, yHi = -Infinity;
+    for (let j = j0; j < j1; j++) for (let i = i0; i < i1; i++) {
+      const a = j * nx + i, b = a + nx;
+      idx[q++] = a; idx[q++] = b; idx[q++] = a + 1;
+      idx[q++] = a + 1; idx[q++] = b; idx[q++] = b + 1;
+    }
+    // the chunk's own height range, so a valley floor is not culled by a peak
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const hh = hs[Math.min(nz - 1, j) * nx + Math.min(nx - 1, i)];
+      if (hh < yLo) yLo = hh;
+      if (hh > yHi) yHi = hh;
+    }
+    const x0 = i0 * GRID_STEP, z0 = j0 * GRID_STEP;
+    const x1 = i1 * GRID_STEP, z1 = j1 * GRID_STEP;
+    terrChunks.push({
+      x0, z0, x1, z1,
+      cx: (x0 + x1) * 0.5, cz: (z0 + z1) * 0.5,
+      cr: Math.hypot(x1 - x0, z1 - z0) * 0.5,
+      yLo: yLo * HEIGHT_SCALE, yHi: yHi * HEIGHT_SCALE,
+      first, count: q - first,
+    });
   }
   terrCount = idx.length;
+  TERR_STATS.total = terrChunks.length;
   terrVB = dev.createBuffer({ size: verts.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
   dev.queue.writeBuffer(terrVB, 0, verts);
   terrIB = dev.createBuffer({ size: idx.byteLength, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST });
@@ -6857,6 +6921,52 @@ function buildTerrain() {
   return { verts: nx * nz, tris: terrCount / 3 };
 }
 
+// Which chunks are worth drawing. Distance first, then a horizontal frustum
+// test that accounts for the chunk's own angular size, so a chunk is only
+// dropped when the whole of it is off the side of the screen.
+// maxD lets the shadow pass ask for a much smaller set than the camera does.
+// How far the terrain itself is worth drawing. The fog reaches 96% opacity at
+// about 12000 units, so ground beyond that is very nearly fog-coloured already
+// and costs triangles for nothing. Ultra reaches further because it can.
+function terrDrawDist() {
+  const q = (typeof GFX === 'object' && GFX && GFX.crit) ? GFX.crit : 1;
+  return Math.min(FAR, 12000 * clamp(q, 0.55, 1.6));
+}
+function terrVisibleRuns(maxD, aspect) {
+  const fx = Math.cos(player.yaw), fz = Math.sin(player.yaw);
+  // horizontal half-angle of the view, with a margin so nothing pops at the edge
+  const halfV = 1.15 * 0.5;
+  const halfH = Math.atan(Math.tan(halfV) * Math.max(0.5, aspect || 1.7)) + 0.12;
+  const camX = player.camX, camZ = player.camZ;
+  const runs = [];
+  let run = null, drawn = 0;
+  for (let k = 0; k < terrChunks.length; k++) {
+    const ch = terrChunks[k];
+    const dx = ch.cx - camX, dz = ch.cz - camZ;
+    const d = Math.hypot(dx, dz);
+    let keep = d - ch.cr <= maxD;
+    if (keep && d > ch.cr) {
+      const cosA = (dx * fx + dz * fz) / d;
+      const ang = Math.min(Math.PI, halfH + Math.asin(Math.min(1, ch.cr / d)));
+      if (cosA < Math.cos(ang)) keep = false;
+    }
+    // chunks are emitted row-major, so neighbours are contiguous in the index
+    // buffer and a run of them is one draw call
+    if (keep) {
+      drawn += ch.count;
+      if (run && run.first + run.count === ch.first) run.count += ch.count;
+      else { run = { first: ch.first, count: ch.count }; runs.push(run); }
+    } else run = null;
+  }
+  TERR_STATS.drawn = drawn; TERR_STATS.calls = runs.length;
+  return runs;
+}
+function terrDraw(pass, maxD, aspect) {
+  if (!terrVB || !terrChunks.length) return;
+  pass.setVertexBuffer(0, terrVB); pass.setIndexBuffer(terrIB, 'uint32');
+  const runs = terrVisibleRuns(maxD, aspect);
+  for (let i = 0; i < runs.length; i++) pass.drawIndexed(runs[i].count, 1, runs[i].first);
+}
 // Exact height of the drawn terrain surface, evaluated on the same triangle
 // the rasteriser uses (quads split a,a+1,b / a+1,b+1,b).
 function groundAt(x, z) {
@@ -10994,10 +11104,17 @@ const player = {
   dist: 0,          // 0 = first person; >0 = third-person orbit distance
   jumpY: 0, jumpV: 0, grounded: true, atkCD: 0, absorbed: 0, fly: 0,
 };
-// One world unit is one foot. You can drop this far for free; past it the
-// damage goes as the height, so about ninety feet kills most bodies outright.
-const FALL_SAFE = 20;
-const FALL_FATAL = 70;        // feet of drop BEYOND the safe distance that costs a full body
+// Falls are measured in the animal's own height, which is the only scale that
+// means anything here: bodies run from a lizard to a sauropod and a drop that
+// is nothing to one is fatal to the other. A fall under about two and a half
+// times your standing height costs nothing; seven heights past that is a full
+// body. (The square-cube term in applyFallDamage tilts it further against
+// heavy animals, which is how it works in life.)
+const PAGE_SLOPE_TAN = 1.7321;   // tan 60, the walking limit, page-side copy
+const FALL_SAFE_H = 2.5;
+const FALL_FATAL_H = 7;
+function fallSafeFor(p) { return Math.max(6, (p && (p.standH || p.radius) || 6) * FALL_SAFE_H); }
+function fallFatalFor(p) { return Math.max(14, (p && (p.standH || p.radius) || 6) * FALL_FATAL_H); }
 // Damage needs the nose on the target: 10 degrees, widened by however much of
 // the sky the target itself covers at this range.
 const AIM_DEG = 10;
@@ -11695,9 +11812,13 @@ function updateJump(dt) {
   const gNow = groundAt(c.x, c.y);
   // The ground dropping away under you is a fall, not a teleport. Whatever it
   // dropped becomes height you are now standing on nothing above.
-  if (player._gWas != null) {
+  if (player._gWas != null && player.grounded) {
+    // A walk down a slope drops the ground under you too, and with a 60 degree
+    // limit that is a lot per frame. Only count a drop that no walk could have
+    // produced in the time available.
+    const walkDrop = Math.max(2, (c.ph.speedLand || 40) * PAGE_SLOPE_TAN * dt * 1.6);
     const drop = player._gWas - gNow;
-    if (drop > 1.2) { player.jumpY += drop; player.grounded = false; }
+    if (drop > walkDrop) { player.jumpY += drop; player.grounded = false; }
   }
   player._gWas = gNow;
   if (player.jumpY > 0 || player.jumpV > 0) {
@@ -11723,27 +11844,21 @@ function fallBrokenByWater(c) {
   const deep = waterDepth(terrain, c.x, c.y);
   return deep > Math.max(4, (c.ph.radius || 4) * BODY_SCALE * 1.1);
 }
+// No message. You felt the ground, you saw the screen flash, and your health
+// bar moved: a toast telling you what just happened to you is noise.
 function applyFallDamage(c, fell) {
   if (!c || !c.alive || !isFinite(fell)) return 0;
-  const over = fell - FALL_SAFE;
+  const over = fell - fallSafeFor(c.ph);
   if (over <= 0) return 0;
-  if (fallBrokenByWater(c)) {
-    if (fell > FALL_SAFE * 1.6) toast('You hit the water hard. The water took it.', 2000);
-    return 0;
-  }
+  if (fallBrokenByWater(c)) return 0;
   // energy of a fall goes as its height, and a bigger body fares worse for it
   const sizeK = clamp(0.8 + (c.ph.mass || 1) / 40, 0.8, 1.7);
-  const frac = Math.pow(over / FALL_FATAL, 1.6) * sizeK;
+  const frac = Math.pow(over / fallFatalFor(c.ph), 1.6) * sizeK;
   const dmg = frac * Math.max(1, c.ph.storage);
   c.energy -= dmg;
   FIGHT.hurtFx = Math.min(1, (FIGHT.hurtFx || 0) + Math.min(0.9, frac * 1.2));
   if (SND.ctx && SND.on) sndThump(Math.min(0.9, 0.25 + frac));
-  if (c.energy <= 0) {
-    c.alive = false; c.deathCause = 'fall';
-    toast('You fell ' + Math.round(fell) + ' feet. It killed you.', 4200);
-  } else {
-    toast('You fell ' + Math.round(fell) + ' feet. ' + Math.round(frac * 100) + '% of you is gone.', 2600);
-  }
+  if (c.energy <= 0) { c.alive = false; c.deathCause = 'fall'; }
   return dmg;
 }
 // How high this body can jump, in world units. The base hop clears about one
@@ -13459,7 +13574,9 @@ function r2ShadowPass(enc, nInst, nPlant) {
     const pass = enc.beginRenderPass({ colorAttachments: [], depthStencilAttachment: { view: R2.shadowViews[c], depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'store' } });
     if (R2.p.terrain && terrVB && c === 1) {
       pass.setPipeline(R2.p.terrain); pass.setBindGroup(0, b.terrain);
-      pass.setVertexBuffer(0, terrVB); pass.setIndexBuffer(terrIB, 'uint32'); pass.drawIndexed(terrCount);
+      // the far cascade covers a couple of thousand units around the camera;
+      // there is no reason to feed it the whole world
+      terrDraw(pass, 3000, 2.4);
     }
     if (R2.p.fol && FOL.ready && FOL.batches.length) {
       pass.setPipeline(R2.p.fol); pass.setBindGroup(0, b.fol);
@@ -14251,8 +14368,7 @@ function renderFrame(t) {
   });
   if (R2on) r2DrawSky(pass, fog, aspect);
   pass.setPipeline(terrainPipe); pass.setBindGroup(0, bindG.terrain);
-  pass.setVertexBuffer(0, terrVB); pass.setIndexBuffer(terrIB, 'uint32');
-  pass.drawIndexed(terrCount);
+  terrDraw(pass, terrDrawDist(), aspect);
   folDraw(pass);
 
   pass.setPipeline(instPipe); pass.setBindGroup(0, bindG.inst);
@@ -14278,6 +14394,7 @@ function renderFrame(t) {
   flushSkinDraws(pass);
   pass.setPipeline(waterPipe); pass.setBindGroup(0, bindG.water);
   pass.setVertexBuffer(0, waterVB); pass.draw(6);
+  try { rivDraw(pass); } catch (e) { console.warn('river draw', e); }
   try { cloudDraw(pass); } catch (e) { console.warn('cloud draw', e); }
   pass.end();
   if (R2on) r2PostPass(enc, fog);
@@ -14424,8 +14541,10 @@ async function rebuildWorld() {
   world = C.makeWorld(Object.assign({ w: WORLD_W, h: WORLD_H, tileSize: TILE, seed, rarityCap: boneApplyWorldRarity(seed), featureScale: 2, heightScale: HEIGHT_SCALE, maxSlope: 1, baseRelief: 0.35, plantArea: 0.5 }, panelOpts()));
   terrain = world.terrain;
   BR.bays = BR.arming ? brCarveBays(BR.players.length) : [];
+  try { rivBuild(seed); } catch (e) { console.warn('rivers', e); }
   buildCanopyMap(); FOL.key = '';
   buildTerrain(); buildWater(); waterHeightUpload(); buildMinimap();
+  try { rivInit(); rivBuildMesh(); } catch (e) { console.warn('river mesh', e); }
   await warmUp(panelWarmup());
   const dl = world.params.dayLen || 6;
   world.bt = Math.ceil((world.bt || 0) / dl) * dl + dl * 0.25;
@@ -17656,6 +17775,310 @@ function cloudDraw(pass) {
   pass.drawIndexed(sphCount, cloudCount);
 }
 
+// =====================================================================
+// RIVERS
+// Water that runs downhill in one direction, from the high ground to the sea,
+// in a channel it cut for itself with rock banks standing over it.
+//
+// Three stages, and the ORDER matters:
+//   1. route   -- steepest descent from a spring to the coast, forced monotonic
+//   2. carve   -- cut the channel into the heightmap. Must happen BEFORE the
+//                 terrain render mesh is built, or the mesh is already baked.
+//                 The banks are cut steep on purpose: the terrain shader draws
+//                 anything past about 22 degrees as layered rock, so a steep
+//                 bank IS a rock cliff with no extra geometry.
+//   3. ribbon  -- a strip of quads following the route at the water's surface,
+//                 carrying how far along it each vertex is, so the shader can
+//                 scroll the flow one way and break it into whitewater where
+//                 the bed steepens.
+// =====================================================================
+const RIV = {
+  paths: [],            // [{ pts: [{x,z,y,w,grad}], len }]
+  vb: null, ib: null, count: 0, pipe: null, bind: null,
+  built: false, mask: null, maskNX: 0, maskNZ: 0, maskCell: 96,
+};
+const RIVER_TRY = 34;              // springs attempted per world
+const RIVER_MIN_LEN = 14;          // samples; shorter routes are gullies, not rivers
+const RIVER_STEP = 46;             // world units between route samples
+const RIVER_VF = 8;                // pos3, u, v, grad, depth, bank
+
+function rivRng(seed) {
+  let a = (seed >>> 0) || 1;
+  return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+
+// ---- 1. routing ------------------------------------------------------------
+// Walk downhill from a spring. At each step look around a ring for the lowest
+// neighbour; if nothing is lower we are in a bowl, so stop. The route is forced
+// monotonically downhill afterwards, because a river that climbs is not a river.
+function rivRoute(sx, sz, rnd) {
+  const T = terrain, sea = T.LV.water;
+  const pts = [];
+  let x = sx, z = sz;
+  let heading = rnd() * Math.PI * 2;
+  const MAX_STEPS = 420;                               // about 19000 units of river
+  for (let step = 0; step < MAX_STEPS; step++) {
+    const e = T.height(x, z);
+    pts.push({ x, z, e });
+    if (e <= sea + 0.004) break;                       // reached the sea
+    if (x < 120 || z < 120 || x > WORLD_W - 120 || z > WORLD_H - 120) break;
+    // the lowest point on a ring ahead, with a bias to keep going the way we
+    // were going so the river meanders instead of zig-zagging
+    let bestA = null, bestE = Infinity;
+    for (let k = 0; k < 16; k++) {
+      const a = (k / 16) * Math.PI * 2;
+      let da = Math.abs(((a - heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+      if (da > 1.9) continue;                          // never double back
+      const nx = x + Math.cos(a) * RIVER_STEP, nz = z + Math.sin(a) * RIVER_STEP;
+      if (nx < 60 || nz < 60 || nx > WORLD_W - 60 || nz > WORLD_H - 60) continue;
+      const ne = T.height(nx, nz) + da * 0.00012;      // gentle straightening bias
+      if (ne < bestE) { bestE = ne; bestA = a; }
+    }
+    if (bestA == null || bestE >= e + 0.0009) break;    // a bowl: the river ends here
+    // A river that has stopped descending has become a marsh. Look back over
+    // the last stretch: if it has barely dropped, end it here rather than
+    // letting it wander across a plain for twenty thousand units.
+    if (step > 40) {
+      const back = pts[pts.length - 41];
+      if (back && back.e - e < 0.006) break;
+    }
+    heading = bestA;
+    x += Math.cos(bestA) * RIVER_STEP;
+    z += Math.sin(bestA) * RIVER_STEP;
+  }
+  if (pts.length < RIVER_MIN_LEN) return null;
+  // force it downhill: the water surface can never rise along the route
+  let run = pts[0].e;
+  for (const q of pts) { run = Math.min(run, q.e); q.wy = run; }
+  return pts;
+}
+
+// ---- 2. carving ------------------------------------------------------------
+// Cut the bed and stand the banks up. Depth and width both wander along the
+// route, so a river is a gorge in one reach and a shallow braid in the next,
+// which is where the varying cliff heights come from.
+function rivCarve(pts, rnd) {
+  const T = terrain, HS = T.heightScale || 420, sea = T.LV.water;
+  const phase = rnd() * 100, phase2 = rnd() * 100;
+  const n = pts.length;
+  for (let i = 0; i < n; i++) {
+    const q = pts[i];
+    const u = i / (n - 1);
+    // wider and calmer toward the mouth, narrow and cut-in up in the hills
+    const wob = Math.sin(u * 9 + phase) * 0.5 + Math.sin(u * 23 + phase2) * 0.28;
+    const halfW = (26 + 54 * u) * (1 + wob * 0.35);
+    // how far the banks stand over the water, in world units
+    const gorge = clamp(0.5 + wob, 0, 1.6);
+    const bankH = (18 + 150 * gorge) * (1 - 0.55 * u);
+    const depth = (7 + 16 * gorge) / HS;
+    q.w = halfW;
+    q.bank = bankH;
+    // the bed sits below the running surface
+    const bedE = Math.max(0.002, q.wy - depth);
+    T.carveChannel(q.x, q.z, halfW, Math.max(10, halfW * 0.55), bedE, bankH / HS, q.wy);
+  }
+  // gradient along the route, for whitewater
+  for (let i = 0; i < n; i++) {
+    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)];
+    const d = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+    pts[i].grad = Math.max(0, (a.wy - b.wy) * HS / d);
+  }
+}
+
+// ---- build -----------------------------------------------------------------
+function rivBuild(seed) {
+  RIV.paths.length = 0;
+  RIV.built = false;
+  if (!terrain || !terrain.carveChannel) return 0;
+  const T = terrain, sea = T.LV.water;
+  const rnd = rivRng((seed | 0) ^ 0x9E3779B9);
+  // springs: high ground, spread out, biased to the steep flanks where a river
+  // actually starts
+  const springs = [];
+  for (let k = 0; k < RIVER_TRY * 40 && springs.length < RIVER_TRY; k++) {
+    const x = 300 + rnd() * (WORLD_W - 600), z = 300 + rnd() * (WORLD_H - 600);
+    const e = T.height(x, z);
+    if (e < sea + 0.16) continue;                      // not high enough to run anywhere
+    let tooClose = false;
+    for (const s of springs) if (Math.hypot(s.x - x, s.z - z) < 2600) { tooClose = true; break; }
+    if (tooClose) continue;
+    springs.push({ x, z, e });
+  }
+  springs.sort((a, b) => b.e - a.e);
+  let made = 0;
+  for (const s of springs) {
+    if (made >= 7) break;
+    const pts = rivRoute(s.x, s.z, rnd);
+    if (!pts) continue;
+    rivCarve(pts, rnd);
+    RIV.paths.push({ pts });
+    made++;
+  }
+  // a coarse mask so the rest of the game can ask "is there a river here"
+  rivBuildMask();
+  return made;
+}
+function rivBuildMask() {
+  const cell = RIV.maskCell;
+  const nx = Math.ceil(WORLD_W / cell) + 1, nz = Math.ceil(WORLD_H / cell) + 1;
+  const m = new Float32Array(nx * nz);
+  for (const p of RIV.paths) for (const q of p.pts) {
+    const r = q.w + 20;
+    const i0 = Math.max(0, Math.floor((q.x - r) / cell)), i1 = Math.min(nx - 1, Math.ceil((q.x + r) / cell));
+    const j0 = Math.max(0, Math.floor((q.z - r) / cell)), j1 = Math.min(nz - 1, Math.ceil((q.z + r) / cell));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const d = Math.hypot(i * cell - q.x, j * cell - q.z);
+      if (d < r) m[j * nx + i] = Math.max(m[j * nx + i], q.wy);
+    }
+  }
+  RIV.mask = m; RIV.maskNX = nx; RIV.maskNZ = nz;
+}
+// The running surface height at a point, or null if there is no river here.
+function riverSurfaceAt(x, z) {
+  if (!RIV.mask) return null;
+  const cell = RIV.maskCell;
+  const i = clamp(Math.round(x / cell), 0, RIV.maskNX - 1);
+  const j = clamp(Math.round(z / cell), 0, RIV.maskNZ - 1);
+  const v = RIV.mask[j * RIV.maskNX + i];
+  return v > 0 ? v : null;
+}
+
+// ---- 3. the ribbon ---------------------------------------------------------
+function rivBuildMesh() {
+  if (!RIV.paths.length) { RIV.count = 0; RIV.built = true; return 0; }
+  const HS = terrain.heightScale || 420;
+  const verts = [], idx = [];
+  let base = 0;
+  for (const p of RIV.paths) {
+    const pts = p.pts;
+    let along = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const q = pts[i];
+      const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+      let tx = b.x - a.x, tz = b.z - a.z;
+      const tl = Math.hypot(tx, tz) || 1;
+      tx /= tl; tz /= tl;
+      const px = -tz, pz = tx;                         // across the flow
+      if (i > 0) along += Math.hypot(q.x - pts[i - 1].x, q.z - pts[i - 1].z);
+      const y = q.wy * HS + 0.6;
+      const w = q.w;
+      const g = q.grad || 0;
+      const dep = Math.min(1, (q.bank || 20) / 140);
+      // left and right edge of the water
+      verts.push(q.x - px * w, y, q.z - pz * w, -1, along, g, dep, 1);
+      verts.push(q.x + px * w, y, q.z + pz * w,  1, along, g, dep, 1);
+      // and a centre line, so the surface can bulge and the mesh has interior
+      verts.push(q.x, y + 0.5, q.z, 0, along, g, dep, 0);
+    }
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = base + i * 3, b = base + (i + 1) * 3;
+      // left half
+      idx.push(a, b, a + 2, a + 2, b, b + 2);
+      // right half
+      idx.push(a + 2, b + 2, a + 1, a + 1, b + 2, b + 1);
+    }
+    base += pts.length * 3;
+  }
+  const vd = new Float32Array(verts), id = new Uint32Array(idx);
+  if (RIV.vb) RIV.vb.destroy();
+  if (RIV.ib) RIV.ib.destroy();
+  RIV.vb = dev.createBuffer({ size: Math.max(16, vd.byteLength), usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+  dev.queue.writeBuffer(RIV.vb, 0, vd);
+  RIV.ib = dev.createBuffer({ size: Math.max(16, id.byteLength), usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST });
+  dev.queue.writeBuffer(RIV.ib, 0, id);
+  RIV.count = id.length;
+  RIV.built = true;
+  return id.length / 3;
+}
+
+const WGSL_RIVER_SRC = `
+struct VO { @builtin(position) pos: vec4<f32>, @location(0) wpos: vec3<f32>,
+            @location(1) uv: vec2<f32>, @location(2) grad: f32,
+            @location(3) dep: f32, @location(4) edge: f32 };
+@vertex fn vs(@location(0) p: vec3<f32>, @location(1) u: f32, @location(2) v: f32,
+              @location(3) grad: f32, @location(4) dep: f32, @location(5) edge: f32) -> VO {
+  var o: VO;
+  o.pos = g.viewProj * vec4<f32>(p, 1.0);
+  o.wpos = p; o.uv = vec2<f32>(u, v); o.grad = grad; o.dep = dep; o.edge = edge;
+  return o;
+}
+fn rh(p: vec2<f32>) -> f32 { var p3 = fract(vec3<f32>(p.x, p.y, p.x) * 0.1031); p3 += dot(p3, p3.yzx + vec3<f32>(33.33)); return fract((p3.x + p3.y) * p3.z); }
+fn rn(p: vec2<f32>) -> f32 {
+  let i = floor(p); let f = fract(p); let k = f * f * (3.0 - 2.0 * f);
+  return mix(mix(rh(i), rh(i + vec2<f32>(1.0, 0.0)), k.x), mix(rh(i + vec2<f32>(0.0, 1.0)), rh(i + vec2<f32>(1.0, 1.0)), k.x), k.y);
+}
+@fragment fn fs(i: VO) -> @location(0) vec4<f32> {
+  let t = g.params.x;
+  let day = g.params.z;
+  let L = normalize(g.lightDir.xyz);
+  let V = normalize(g.camPos.xyz - i.wpos);
+  // Everything scrolls along +v, which is downstream. One direction, always:
+  // that is the whole point of a river.
+  let speed = 26.0 + i.grad * 130.0;
+  let sv = i.uv.y - t * speed;
+  let across = i.uv.x;
+  // three layers of ripple at different rates so the surface does not read as
+  // one sliding texture
+  let n1 = rn(vec2<f32>(across * 3.0, sv * 0.055));
+  let n2 = rn(vec2<f32>(across * 7.0 + 3.1, sv * 0.13 + 11.0));
+  let n3 = rn(vec2<f32>(across * 15.0, sv * 0.31 + 5.0));
+  let rip = n1 * 0.5 + n2 * 0.32 + n3 * 0.18;
+  // the normal, tilted by the ripple, so the sun glints down the length of it
+  let N = normalize(vec3<f32>((rip - 0.5) * 0.55, 1.0, (n2 - 0.5) * 0.35));
+  // colour: shallow green at the banks, deeper blue-green down the middle
+  let mid = 1.0 - abs(across);
+  let shallow = vec3<f32>(0.26, 0.52, 0.45);
+  let deep = vec3<f32>(0.06, 0.24, 0.30);
+  var col = mix(shallow, deep, clamp(mid * (0.35 + 0.65 * i.dep), 0.0, 1.0));
+  col *= 0.35 + 0.65 * day;
+  // sky in the surface
+  let fres = 0.04 + 0.96 * pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 5.0);
+  let sky = mix(vec3<f32>(0.07, 0.09, 0.13), vec3<f32>(0.52, 0.64, 0.76), day);
+  col = mix(col, sky, fres * 0.55);
+  col += vec3<f32>(1.0, 0.96, 0.88) * pow(max(dot(reflect(-L, N), V), 0.0), 90.0) * 1.3 * day;
+  // Whitewater: where the bed steepens, and along the banks where the water
+  // drags. Broken into travelling streaks rather than a wash.
+  let steep = clamp(i.grad * 2.2, 0.0, 1.0);
+  let bank = smoothstep(0.55, 0.98, abs(across));
+  let streak = smoothstep(0.52, 0.88, rn(vec2<f32>(across * 5.0, sv * 0.22)) * 0.6 + n3 * 0.5);
+  let foam = clamp(steep * streak * 1.5 + bank * streak * 0.8 + steep * 0.35, 0.0, 1.0);
+  col = mix(col, vec3<f32>(0.90, 0.94, 0.94) * (0.4 + 0.6 * day), foam);
+  let d = distance(i.wpos, g.camPos.xyz);
+  let f = clamp(1.0 - exp(-(d * g.params.y) * (d * g.params.y)), 0.0, 1.0);
+  col = mix(col, g.fogCol.rgb, f);
+  // clear at the edges so the water meets the bank instead of ending at a line
+  let a = clamp(0.62 + 0.38 * mid + foam * 0.5, 0.0, 0.97);
+  return vec4<f32>(col, mix(a, 1.0, f));
+}`;
+
+function rivInit() {
+  if (RIV.pipe) return;
+  const m = dev.createShaderModule({ code: WGSL_COMMON + WGSL_RIVER_SRC });
+  RIV.pipe = dev.createRenderPipeline({
+    layout: 'auto',
+    vertex: { module: m, entryPoint: 'vs', buffers: [{ arrayStride: RIVER_VF * 4, attributes: [
+      { shaderLocation: 0, offset: 0,  format: 'float32x3' },
+      { shaderLocation: 1, offset: 12, format: 'float32' },
+      { shaderLocation: 2, offset: 16, format: 'float32' },
+      { shaderLocation: 3, offset: 20, format: 'float32' },
+      { shaderLocation: 4, offset: 24, format: 'float32' },
+      { shaderLocation: 5, offset: 28, format: 'float32' }] }] },
+    fragment: { module: m, entryPoint: 'fs', targets: [{ format: fmt, blend: {
+      color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha' },
+      alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } }] },
+    primitive: { topology: 'triangle-list', cullMode: 'none' },
+    depthStencil: { format: 'depth24plus', depthWriteEnabled: false, depthCompare: 'less' },
+    multisample: { count: SAMPLES },
+  });
+  RIV.bind = dev.createBindGroup({ layout: RIV.pipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: gBuf } }] });
+}
+function rivDraw(pass) {
+  if (!RIV.count || !RIV.pipe) return;
+  pass.setPipeline(RIV.pipe); pass.setBindGroup(0, RIV.bind);
+  pass.setVertexBuffer(0, RIV.vb); pass.setIndexBuffer(RIV.ib, 'uint32');
+  pass.drawIndexed(RIV.count);
+}
+
 function brRenderHud() {
   const el = document.getElementById('brPanel');
   if (el) { el.innerHTML = brHudHtml(); el.style.display = BR.on ? 'block' : 'none'; }
@@ -18019,6 +18442,7 @@ async function init() {
   // pressed reset.
   world = C.makeWorld(Object.assign({ w: WORLD_W, h: WORLD_H, tileSize: TILE, seed, rarityCap: boneApplyWorldRarity(seed), featureScale: 2, heightScale: HEIGHT_SCALE, maxSlope: 1, baseRelief: 0.35, plantArea: 0.5 }, panelOpts()));
   terrain = world.terrain;
+  try { rivBuild(seed); } catch (e) { console.warn('rivers', e); }
 
   buildPipelines();
   makeBindGroups();
@@ -18026,6 +18450,7 @@ async function init() {
   const info = buildTerrain();
   buildWater();
   waterHeightUpload();
+  try { rivInit(); rivBuildMesh(); } catch (e) { console.warn('river mesh', e); }
   buildMinimap();
 
   await warmUp(panelWarmup());
@@ -18071,6 +18496,12 @@ window.__G3D = {
   look(yaw, pitch) { player.yaw = yaw; if (pitch != null) player.pitch = pitch; },
   press(k, on) { keys[String(k).toLowerCase()] = !!on; },
   rebuild: () => rebuildWorld(),
+  get rivers() { return { n: RIV.paths.length, tris: RIV.count / 3,
+    lens: RIV.paths.map(p => Math.round(p.pts.length * 46)),
+    drops: RIV.paths.map(p => Math.round((p.pts[0].wy - p.pts[p.pts.length - 1].wy) * (terrain.heightScale || 420))) }; },
+  riverAt: (x, z) => riverSurfaceAt(x, z),
+  riverPts: (i) => (RIV.paths[i] ? RIV.paths[i].pts : []),
+  groundY: (x, z) => groundAt(x, z),
   swingTarget: () => fightFindSwingTarget(player.c, interactRange(player.c.ph) * 1.0),
   get cloudCount() { return cloudCount; },
   closeEditor: (apply) => closeEditor(!!apply),
@@ -18080,6 +18511,12 @@ window.__G3D = {
   becomeDesigned: (d) => becomeDesigned(d),
   get creatureCount() { return world ? world.creatures.length : 0; },
   camDefaultDist: (ph) => camDefaultDist(ph),
+  get terrStats() { return { chunks: TERR_STATS.total, drawnTris: TERR_STATS.drawn / 3, calls: TERR_STATS.calls, totalTris: terrCount / 3 }; },
+  fall: {
+    safeFor: (ph) => fallSafeFor(ph), fatalFor: (ph) => fallFatalFor(ph),
+    apply: (c, d) => applyFallDamage(c, d),
+    get jumpY() { return player.jumpY; }, get grounded() { return player.grounded; },
+  },
   br: {
     get on() { return BR.on; }, get phase() { return BR.phase; }, get t() { return BR.t; },
     get zone() { return BR.zone; }, get players() { return BR.players; }, get bays() { return BR.bays; },
