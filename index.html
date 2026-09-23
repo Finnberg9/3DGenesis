@@ -185,6 +185,17 @@
   /* free-roam furniture that has no business in a match */
   body.brmatch #objective{display:none !important}
   body.brmatch #resetbtn{display:none !important}
+  #pauseBox{position:fixed;inset:0;display:none;z-index:90;align-items:center;justify-content:center;
+    background:rgba(3,8,8,.82);backdrop-filter:blur(3px)}
+  #pauseBox.show{display:flex}
+  #pauseBox .pbin{min-width:320px;padding:30px 38px;border-radius:16px;text-align:center;
+    background:linear-gradient(180deg,rgba(14,26,24,.98),rgba(6,14,14,.98));border:1px solid #3d6a5e;color:#eafaf4}
+  #pauseBox h3{margin:0 0 6px;font-size:20px;letter-spacing:.20em}
+  #pauseBox .psub{margin:0 0 20px;font-size:12px;color:#8fb4c4;line-height:1.6}
+  #pauseBox button{display:block;width:100%;font:inherit;font-size:14px;margin:8px 0;padding:11px 20px;border-radius:9px;
+    cursor:pointer;background:#0a201d;border:1px solid #3d6a5e;color:#dff3ec}
+  #pauseBox button:hover{border-color:#b3140c;color:#fff}
+  #pauseBox button.warn{border-color:#8a3a2c;color:#ffd9cf}
   #brPanel{position:fixed;right:14px;top:120px;display:none;min-width:240px;padding:11px 14px;border-radius:12px;
     background:rgba(8,14,18,.82);border:1px solid #3a5a52;color:#dfeee9;font-size:13px;line-height:1.55;z-index:40}
   #brPanel .brtop b{font-size:20px;color:#fff;letter-spacing:.06em}
@@ -409,6 +420,7 @@
 <div id="cross"></div>
 <div id="act"></div>
 <div id="picker"></div>
+<div id="pauseBox"></div>
 <div id="brPanel"></div>
 <div id="brMsg"></div>
 <div id="brChoice"></div>
@@ -1340,6 +1352,7 @@
       ph.dSweep = (X.sweep || 0) > 0 ? 1 : 0;
       ph.dGrab = X.grab || 0;
       ph.dLegs = X.legs || 0; ph.dArms = X.arms || 0; ph.dSpring = X.spring || 0;
+      ph.climb = designClimb(genome.design, ph.mass);
     }
     ph.canFly = ph.speedAir > 0 ? 1 : 0;
     // Real fins unlock the deep-water niche: below this threshold the deep is a
@@ -1846,6 +1859,40 @@
 
     const terrain = {
       w, h, LV, island: isle, mountain: mt, lakes, islandMask,
+      hg, HX, HY, CELL,
+      // Level a disc of ground to one height, blending out over an apron so it
+      // does not leave a step around the edge. Returns the height it settled
+      // on. Anything built on the ground calls this BEFORE the render mesh is
+      // made; after that the mesh is already baked and this does nothing
+      // visible.
+      carveFlat(x, y, radius, apron, targetY) {
+        const R = Math.max(1, radius), A = Math.max(1, apron || R * 0.9);
+        const ci = Math.round(x / CELL), cj = Math.round(y / CELL);
+        const span = Math.ceil((R + A) / CELL) + 1;
+        // the height to settle on: the median of the disc, so a pad sits in
+        // the slope rather than on top of it or buried in it
+        const samples = [];
+        for (let j = -span; j <= span; j++) for (let i = -span; i <= span; i++) {
+          const gi = ci + i, gj = cj + j;
+          if (gi < 0 || gj < 0 || gi > HX - 1 || gj > HY - 1) continue;
+          if (Math.hypot(i * CELL, j * CELL) > R) continue;
+          samples.push(hg[gj * HX + gi]);
+        }
+        if (!samples.length) return null;
+        samples.sort((a, b) => a - b);
+        const tgt = targetY != null ? targetY : samples[samples.length >> 1];
+        for (let j = -span; j <= span; j++) for (let i = -span; i <= span; i++) {
+          const gi = ci + i, gj = cj + j;
+          if (gi < 0 || gj < 0 || gi > HX - 1 || gj > HY - 1) continue;
+          const d = Math.hypot(i * CELL, j * CELL);
+          if (d > R + A) continue;
+          const k = d <= R ? 1 : 1 - (d - R) / A;
+          const kk = k * k * (3 - 2 * k);                 // smoothstep apron
+          const o = gj * HX + gi;
+          hg[o] = hg[o] + (tgt - hg[o]) * kk;
+        }
+        return tgt;
+      },
       height(x, y) {
         let fx = x / CELL, fy = y / CELL;
         if (!(fx >= 0)) fx = 0; else if (fx > HX - 1.001) fx = HX - 1.001;
@@ -2965,6 +3012,23 @@
       //     whatever evolves wings.
       if (!p.canFly) {
         const lv0 = terrain.level(c.x, c.y);
+        // Slope, measured in the direction of travel over a fixed baseline
+        // rather than over the tick's own step, which is far too short to read
+        // a gradient from. 60 degrees for anything that walks; a scrambler
+        // earns its way up to 80.
+        const HSC = terrain.heightScale || 420;
+        const climbLim = SLOPE_TAN_WALK + (SLOPE_TAN_CLIMB - SLOPE_TAN_WALK) * Math.pow(clamp(p.climb || 0, 0, 1), 2.5);
+        const tooSteep = (bx, by) => {
+          const dxm = bx - c.x, dym = by - c.y;
+          const L = Math.hypot(dxm, dym);
+          if (L < 1e-6) return false;
+          const B = SLOPE_BASE;
+          const h0 = terrain.height(c.x, c.y);
+          const h1 = terrain.height(c.x + dxm / L * B, c.y + dym / L * B);
+          const tan = (h1 - h0) * HSC / B;
+          // airborne you clear more than you could walk up
+          return tan > climbLim + (c.jumpLv || 0) * 0.9;
+        };
         const blocked = (bx, by) => {
           if (!p.airBreath && c !== world.playerRef && !terrain.isWater(bx, by)) return true;   // gills only: the shoreline is a wall
           if (terrain.isDeep(bx, by)) return !p.canSwim;
@@ -2974,7 +3038,7 @@
             const dB = waterDepth(terrain, bx, by);
             return dB > headHeight(world, p) * 0.9 && dB > waterDepth(terrain, c.x, c.y);
           }
-          return terrain.level(bx, by) - lv0 > terrain.maxStep + (c.jumpLv || 0);
+          return tooSteep(bx, by);
         };
         if (blocked(nx, ny)) {
           c.stuck = (c.stuck || 0) + 1;
@@ -2985,6 +3049,19 @@
           // give up on the current heading and strike out somewhere else
           if (c.stuck > 40) { c.stuck = 0; c.wander = rng() * Math.PI * 2; }
         } else if (c.stuck) { c.stuck = 0; }
+      }
+      // Ground that falls away costs an animal the same as it costs the
+      // player. Wild animals carry no flight arc of their own, so the drop
+      // they take in a single step IS the fall.
+      if (!p.canFly && !terrain.isWater(nx, ny)) {
+        const HS2 = terrain.heightScale || 420;
+        const fell = (terrain.height(c.x, c.y) - terrain.height(nx, ny)) * HS2;
+        if (fell > FALL_SAFE_SIM) {
+          const over = fell - FALL_SAFE_SIM;
+          const sizeK = clamp(0.8 + (p.mass || 1) / 40, 0.8, 1.7);
+          c.energy -= Math.pow(over / FALL_FATAL_SIM, 1.6) * sizeK * Math.max(1, p.storage);
+          if (c.energy <= 0) { c.alive = false; c.deathCause = 'fall'; }
+        }
       }
       // Tree trunks are solid. Fliers pass over them (same exemption as the
       // terrain constraints above); everyone else gets pushed to just outside
@@ -3267,7 +3344,14 @@
     return Math.max(p.speedLand, p.canFly ? p.speedAir : 0, p.speedWater * 0.4);
   }
   // ---- being attacked ---------------------------------------------------
-  const HURT_TIME = 5;      // seconds after the last hit during which nothing can be eaten
+  const HURT_TIME = 5;
+// The same numbers the player falls by. One world unit is one foot.
+const FALL_SAFE_SIM = 20, FALL_FATAL_SIM = 70;
+// 60 degrees is the limit for anything that walks. A body built to scramble
+// earns its way to 80. Measured over this baseline, in world units.
+const SLOPE_TAN_WALK = 1.7321;    // tan 60
+const SLOPE_TAN_CLIMB = 5.6713;   // tan 80
+const SLOPE_BASE = 9;      // seconds after the last hit during which nothing can be eaten
   const FOE_TIME = 7;       // how long a victim keeps reacting to its attacker
   const BLEED_FRAC = 0.10;   // a hit above this share of storage opens a wound
   const BLEED_MAX_T = 14;    // seconds a stacked wound can keep bleeding
@@ -3771,6 +3855,25 @@
 
   // Small heritable drift for designed lineages: sizes, colours and joint
   // positions wander, and occasionally a part is lost or duplicated.
+  // What each foot is worth on rock. Hooves and claws grip; flippers do not.
+  const GRIP_TIP = { t_claw: 1.0, t_talon: 0.80, t_hoof: 0.65, t_hand: 0.50,
+                     t_pincer: 0.35, t_paw: 0.20, t_pad: 0.12, t_flipper: 0 };
+  // 0 = walks on flat ground only, 1 = mountain goat.
+  function designClimb(d, mass) {
+    if (!d || !d.limbs || !d.limbs.length) return 0;
+    let n = 0, grip = 0;
+    for (const lb of d.limbs) {
+      const tip = lb.tip && lb.tip.id;
+      const g = tip != null && GRIP_TIP[tip] != null ? GRIP_TIP[tip] : 0.2;
+      n++; grip += g;
+    }
+    if (!n) return 0;
+    // The square-cube law: holding yourself on a wall costs strength that goes
+    // as area while the weight goes as volume, so this falls away fast with
+    // size. A hoofed grazer is not a goat; a small clawed thing is.
+    const light = clamp(1.25 - (mass || 1) / 14, 0.05, 1);
+    return clamp((grip / n) * light, 0, 1);
+  }
   function jitterDesign(d, rng, rate) {
     const r = clamp(numOr(rate, 0.5), 0, 1);
     const jc = (c) => c ? c.map(v => clamp(v + gauss(rng) * 0.025 * r, 0, 1)) : c;
@@ -3825,7 +3928,7 @@
     return d;
   }
   const DESIGN_API = {
-    ITEM_SIM, ITEM_SINGLE, PLANS, BODY_RANGE, planProfile, buildDesignSkeleton, skinField, raySkin, snapToSkin, rarityCap: 'ultra',
+    ITEM_SIM, ITEM_SINGLE, PLANS, BODY_RANGE, planProfile, buildDesignSkeleton, skinField, raySkin, snapToSkin, rarityCap: 'ultra', designClimb, GRIP_TIP,
     anchorPos, setAnchor, reseatDesign, classifyLimbs, designCost, cloneDesign, compileDesign, jitterDesign,
     nearestBall, fieldNormal, SKIN_REACH, SKIN_ISO, sdfSkin, sdRoundCone, primDist, smin,
   };
@@ -6337,8 +6440,10 @@ function brDigit(m, d, cx, cy, cz, h, col, mat) {
 function buildCageMesh() {
   const m = folMB();
   const R = BR_CAGE_R, H = BR_CAGE_H, bar = 0.65, frame = 1.6;
-  // floor plate, sunk so uneven ground does not show through
-  brBox(m, 0, -1.6, 0, R, 1.6, R, BR_PLATE, MAT_STEEL);
+  // Floor plate on a deep plinth. The cage is anchored to the LOWEST ground
+  // under its footprint, so the plinth has to reach down far enough to bury
+  // itself on the uphill side instead of leaving a gap you can see under.
+  brBox(m, 0, -11, 0, R, 11, R, BR_PLATE, MAT_STEEL);
   // corner posts
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
     brBox(m, sx * (R - frame), H * 0.5, sz * (R - frame), frame, H * 0.5, frame, BR_STEEL_D, MAT_STEEL);
@@ -6395,11 +6500,20 @@ function buildDigitMesh(d) {
   brDigit(m, d, 0, 0, -1.4, 9, BR_LAMP, MAT_GLOW);
   return m;
 }
-const BRMESH = { cage: null, gate: null, digits: [], ready: false };
+// The mast the number sits on, rising off the roof line.
+function buildSignpostMesh() {
+  const m = folMB();
+  const H = BR_CAGE_H;
+  brBox(m, 0, H * 0.5 + 7, 0, 1.1, H * 0.5 + 7, 1.1, BR_STEEL_D, MAT_STEEL);
+  brBox(m, 0, H + 6.5, 0, 9, 1.0, 1.0, BR_STEEL_D, MAT_STEEL);     // cross bar under the plate
+  return m;
+}
+const BRMESH = { cage: null, gate: null, signpost: null, digits: [], ready: false };
 function brMeshInit() {
   if (BRMESH.ready) return;
   BRMESH.cage = folUpload(buildCageMesh());
   BRMESH.gate = folUpload(buildGateMesh());
+  BRMESH.signpost = folUpload(buildSignpostMesh());
   for (let d = 0; d < 10; d++) BRMESH.digits[d] = folUpload(buildDigitMesh(d));
   BRMESH.ready = true;
 }
@@ -6417,15 +6531,16 @@ function brPutCages(put, camX, camZ) {
       const gz = bay.z + Math.sin(bay.yaw) * BR_CAGE_R;
       put(BRMESH.gate, gx, bay.y + lift, gz, bay.yaw, 1, [1, 1, 1]);
     }
-    // the bay number over the gate, facing out along the cage's own axis
+    // The bay number, on a post standing off the roof rather than floating
+    // beside the cage with nothing holding it up.
     const s = String(bay.n);
     const nx = Math.cos(bay.yaw), nz = Math.sin(bay.yaw);
+    const sx = bay.x + nx * (BR_CAGE_R - 2), sz = bay.z + nz * (BR_CAGE_R - 2);
+    put(BRMESH.signpost, sx, bay.y, sz, bay.yaw, 1, [1, 1, 1]);
     for (let k = 0; k < s.length; k++) {
       const off = (k - (s.length - 1) / 2) * 7.5;
-      // digits run across the face, which is perpendicular to the cage axis
-      const px = bay.x + nx * (BR_CAGE_R + 1) - nz * off;
-      const pz = bay.z + nz * (BR_CAGE_R + 1) + nx * off;
-      put(BRMESH.digits[+s[k]], px, bay.y + BR_CAGE_H + 12, pz, bay.yaw + Math.PI / 2, 1, [1, 1, 1]);
+      const px = sx - nz * off, pz = sz + nx * off;
+      put(BRMESH.digits[+s[k]], px, bay.y + BR_CAGE_H + 13, pz, bay.yaw + Math.PI / 2, 1, [1, 1, 1]);
     }
   }
 }
@@ -6964,6 +7079,7 @@ function buildPipelines() {
 }
 function makeBindGroups() {
   const SE = r2ShadowEntries();
+  try { cloudInit(); } catch (e) { console.warn('cloud pipeline', e); }
   folBind = dev.createBindGroup({ layout: folPipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: gBuf } }].concat(SE) });
   skinBind = dev.createBindGroup({ layout: skinPipe.getBindGroupLayout(0), entries: [
     { binding: 0, resource: { buffer: gBuf } }, { binding: 1, resource: { buffer: boneBuf } }].concat(SE) });
@@ -7126,7 +7242,11 @@ function drawCreature(c, t, camDist) {
   // old form any change in speed multiplied the whole elapsed time and threw
   // the phase to an arbitrary value, which is what made legs flicker.
   const gaitHz = 3.0 + c._spSm * 0.05;
-  c._phase = (c._phase || (c.id % 6.283)) + gaitHz * frameDt;
+  // The clock only runs while the animal is actually walking. Letting it run
+  // through a standstill meant every idle body was mid-stride at some tiny
+  // amplitude, which reads as a slow bob.
+  if (c._phase == null) c._phase = c.id % 6.283;
+  if (gaitAmt > 0.02) c._phase += gaitHz * frameDt;
   const phase0 = c._phase;
   let bob = Math.sin(phase0 * 2 + c.id) * R * 0.07 * gaitAmt;
 
@@ -7320,7 +7440,7 @@ function drawCreature(c, t, camDist) {
     const hipX = (0.42 - u * 0.86) * BX * 1.15, hipZ = side * BY * 0.72;
     const hipY = bodyY - BY * 0.30;
     const phase = phase0 + c.id * 0.7 + pi * 1.9 + (side > 0 ? Math.PI : 0);
-    const stride = R * (0.05 + 0.80 * gaitAmt);
+    const stride = R * 0.85 * gaitAmt;      // no floor: still is still
     const frontPair = (pi === 0);
     let swing = Math.sin(phase) * stride;
     let lift = Math.max(0, Math.sin(phase)) * R * 0.35 * gaitAmt;
@@ -10874,6 +10994,14 @@ const player = {
   dist: 0,          // 0 = first person; >0 = third-person orbit distance
   jumpY: 0, jumpV: 0, grounded: true, atkCD: 0, absorbed: 0, fly: 0,
 };
+// One world unit is one foot. You can drop this far for free; past it the
+// damage goes as the height, so about ninety feet kills most bodies outright.
+const FALL_SAFE = 20;
+const FALL_FATAL = 70;        // feet of drop BEYOND the safe distance that costs a full body
+// Damage needs the nose on the target: 10 degrees, widened by however much of
+// the sky the target itself covers at this range.
+const AIM_DEG = 10;
+const AIM_COS = Math.cos(AIM_DEG * Math.PI / 180);
 const GRAV = 520;          // world units / s^2
 const JUMP_V0 = 128;       // launch speed; clears roughly one climb step
 const PLAYER_SPEED = 1.65; // the body you steer moves faster than the sim's own pace
@@ -10884,7 +11012,7 @@ const FLY_CLIMB = 320;     // world units / s while ascending
 const FLY_SINK = 62;       // passive sink when not actively climbing
 const FLY_DIVE = 240;      // held descent
 const FLY_CEIL = 1500;     // ceiling above ground level
-const THIRD_MAX = 1600, THIRD_DEFAULT = 150, THIRD_SNAP = 26;  // below SNAP, snap to first person
+const THIRD_MAX = 1600, THIRD_DEFAULT = 42, THIRD_SNAP = 26;  // below SNAP, snap to first person
 function isFirstPerson() { return !player.spectator && player.dist <= 0; }
 const keys = Object.create(null);
 let pointerLocked = false, started = false;
@@ -11036,7 +11164,7 @@ function becomeArchetype(kind) {
   // refused as "different species", and the whole reproduction half of the game
   // was unreachable from the start screen.
   const rng = world.rng;
-  const KIN = 6;
+  const KIN = (typeof opts === 'object' && opts && opts.noKin) || BR.on || BR.arming ? 0 : 6;
   for (let i = 0; i < KIN; i++) {
     let kg = C.cloneGenome(g);
     // a little drift so the deme is a population, not six identical copies,
@@ -11061,7 +11189,7 @@ function becomeArchetype(kind) {
   player.absorbed = 0;
   player.camX = me.x; player.camZ = me.y;
   player.camY = groundAt(me.x, me.y) + 20;
-  player.dist = THIRD_DEFAULT;
+  player.dist = camDefaultDist(player.c && player.c.ph);
   const ph = me.ph;
   toast('Born a ' + kind + ' with ' + KIN + ' of your own kind nearby. ' +
         (ph.carnivory > 0.5 ? 'Carnivore' : ph.scavenger > 0.5 ? 'Scavenger' : 'Herbivore') +
@@ -11081,16 +11209,23 @@ function takeNewbornBody(src) {
 // to you genetically, which in practice is almost always your own offspring or
 // a sibling, so the body you inhabit drifts as the lineage actually evolves.
 function respawn() {
+  // Not while you are at the workbench. edShield() is holding that body
+  // together on purpose; swapping it out from under the editor would leave the
+  // builder editing a creature that no longer exists.
+  if (ED.open) { edShield(); return; }
   const dead = player.c;
   if (dead && dead !== player._shownDeath) { player._shownDeath = dead; showDeath(dead); }
   // In a match your line does not continue into the wildlife. Who killed you
   // decides what happens next, and brChoose() puts you back or not.
-  if (BR.on && BR.phase !== 'over') {
+  if (BR.on) {
     const me = BR.players[BR.slot];
     if (me && me.alive) {
       const killer = dead && dead._brKiller != null ? dead._brKiller : null;
-      brOnPlayerKilled(BR.slot, killer, dead && dead.deathCause ? dead.deathCause : 'the island');
+      if (BR.phase !== 'over') brOnPlayerKilled(BR.slot, killer, dead && dead.deathCause ? dead.deathCause : 'the island');
+      else me.alive = false;
     }
+    // You do not come back as some wild animal's newborn. The match decides
+    // what happens to you, and if it has nothing to offer you watch it out.
     player.spectator = true;
     return;
   }
@@ -11134,7 +11269,9 @@ function respawn() {
 function interactRange(p) {
   return (p.radius + p.reach * 1.6 + 34) * (typeof rearReach === 'function' ? rearReach(p) : 1);
 }
-function pickTarget() {
+// aimed: true when this is for a strike. A strike needs the nose on it; the
+// soft interactions (mate, eat, inspect) keep the wide forward cone.
+function pickTarget(aimed) {
   const c = player.c;
   if (!c || !c.alive) return null;
   const p = c.ph;
@@ -11148,11 +11285,21 @@ function pickTarget() {
     const dx = o.x - c.x, dz = o.y - c.y;
     const d = Math.hypot(dx, dz);
     if (d > rr + o.ph.radius) continue;
-    if (d > 1e-6 && (dx * fx + dz * fz) / d < 0.0) continue;   // anything in the forward half
+    if (d > 1e-6) {
+      const cosA = (dx * fx + dz * fz) / d;
+      if (aimed) {
+        // the target's own angular half-width at this range: a big animal up
+        // close is a wide thing to hit, a small one far off is not
+        const half = Math.atan2(Math.max(1, (o.ph.radius || 4) * BODY_SCALE), Math.max(1, d));
+        if (cosA < Math.cos(Math.min(Math.PI * 0.45, AIM_DEG * Math.PI / 180 + half))) continue;
+      } else if (cosA < 0.0) continue;
+    }
     if (d < bestD) { bestD = d; best = o; }
   }
   return best;
 }
+// What the strike keys aim at.
+function pickAimed() { return pickTarget(true); }
 
 // You may mate with anything close enough genetically that the core would let
 // them breed with each other, and only when you are both grown and fed.
@@ -11213,7 +11360,7 @@ function tryMate() {
   // the body you were is now on its own
   player.c = baby;
   player.generation++;
-  player.dist = Math.max(player.dist, THIRD_DEFAULT);
+  player.dist = camDefaultDist(me.ph || (me.genome && C.develop(me.genome)));
   const gd2 = mateDistance(c, mate);
   toast('You mated' + (gd2 > 9 ? ' across species (distance ' + gd2.toFixed(1) + ')' : '') +
         '. You are now your own offspring, generation ' + player.generation +
@@ -11542,17 +11689,62 @@ function movePlayer(c, dt) {
 function updateFlight(dt) { flightTick(dt); rearTick(dt); swimTick(dt); }
 
 function updateJump(dt) {
-  if (!player.c || !player.c.alive) { player.jumpY = 0; player.jumpV = 0; player.grounded = true; return; }
-  if (player.c.ph.canFly) { player.jumpY = 0; player.jumpV = 0; player.grounded = true; return; }
+  if (!player.c || !player.c.alive) { player.jumpY = 0; player.jumpV = 0; player.grounded = true; player._gWas = null; return; }
+  if (player.c.ph.canFly && player.fly > 0.05) { player.jumpY = 0; player.jumpV = 0; player.grounded = true; player._gWas = null; player._fallTop = null; return; }
+  const c = player.c;
+  const gNow = groundAt(c.x, c.y);
+  // The ground dropping away under you is a fall, not a teleport. Whatever it
+  // dropped becomes height you are now standing on nothing above.
+  if (player._gWas != null) {
+    const drop = player._gWas - gNow;
+    if (drop > 1.2) { player.jumpY += drop; player.grounded = false; }
+  }
+  player._gWas = gNow;
   if (player.jumpY > 0 || player.jumpV > 0) {
     player.jumpV -= GRAV * dt;
     player.jumpY += player.jumpV * dt;
+    // the highest point of this flight, in world units, is what the landing is measured from
+    const topNow = gNow + player.jumpY;
+    player._fallTop = player._fallTop == null ? topNow : Math.max(player._fallTop, topNow);
     // terrain steps you can clear while in the air
     const blockH = terrain.hMax * HEIGHT_SCALE / Math.max(1, terrain.ELEV);
     player.c.jumpLv = Math.max(0, Math.floor(player.jumpY / Math.max(1, blockH)));
-    if (player.jumpY <= 0) { player.jumpY = 0; player.jumpV = 0; player.grounded = true; player.c.jumpLv = 0; }
-    else player.grounded = false;
-  } else player.grounded = true;
+    if (player.jumpY <= 0) {
+      const fell = player._fallTop != null ? player._fallTop - gNow : 0;
+      player.jumpY = 0; player.jumpV = 0; player.grounded = true; player.c.jumpLv = 0; player._fallTop = null;
+      applyFallDamage(c, fell);
+    } else player.grounded = false;
+  } else { player.grounded = true; player._fallTop = null; }
+}
+// Water you fall into takes the impact, as long as it is deep enough to take
+// the animal rather than just wet its feet.
+function fallBrokenByWater(c) {
+  if (!terrain.isWater(c.x, c.y)) return false;
+  const deep = waterDepth(terrain, c.x, c.y);
+  return deep > Math.max(4, (c.ph.radius || 4) * BODY_SCALE * 1.1);
+}
+function applyFallDamage(c, fell) {
+  if (!c || !c.alive || !isFinite(fell)) return 0;
+  const over = fell - FALL_SAFE;
+  if (over <= 0) return 0;
+  if (fallBrokenByWater(c)) {
+    if (fell > FALL_SAFE * 1.6) toast('You hit the water hard. The water took it.', 2000);
+    return 0;
+  }
+  // energy of a fall goes as its height, and a bigger body fares worse for it
+  const sizeK = clamp(0.8 + (c.ph.mass || 1) / 40, 0.8, 1.7);
+  const frac = Math.pow(over / FALL_FATAL, 1.6) * sizeK;
+  const dmg = frac * Math.max(1, c.ph.storage);
+  c.energy -= dmg;
+  FIGHT.hurtFx = Math.min(1, (FIGHT.hurtFx || 0) + Math.min(0.9, frac * 1.2));
+  if (SND.ctx && SND.on) sndThump(Math.min(0.9, 0.25 + frac));
+  if (c.energy <= 0) {
+    c.alive = false; c.deathCause = 'fall';
+    toast('You fell ' + Math.round(fell) + ' feet. It killed you.', 4200);
+  } else {
+    toast('You fell ' + Math.round(fell) + ' feet. ' + Math.round(frac * 100) + '% of you is gone.', 2600);
+  }
+  return dmg;
 }
 // How high this body can jump, in world units. The base hop clears about one
 // climb step; leg length (stand height relative to body size) adds to it, and
@@ -11784,6 +11976,8 @@ function fightUpdateBlood(dt) {
 // defer the hit (core then skips the exchange entirely).
 function fightHitFilter(victim, att, dmg) {
   const c = player.c;
+  // At the workbench you cannot be hit. See edShield().
+  if (ED.open && victim === c) return null;
   // In a match, who may hit whom is a match rule, not a combat rule.
   if (BR.on && !brHitAllowed(victim, att)) return null;
   // the body you steer only attacks when you press the button
@@ -11876,13 +12070,25 @@ function fightStartSwing() {
   FIGHT.swing = { mv, t: MD.dur * 0.44, weak };
   if (weak) toast('Exhausted: weak ' + MD.label + '.', 800);
 }
+// A strike lands only on what the body is pointed at: within 10 degrees of the
+// nose, widened by however much of the view the target itself fills, so a
+// sauropod's flank at arm's length is a broad thing to hit and a lizard across
+// the clearing is not. This used to accept anything inside 75 degrees, which
+// meant you could gut something standing almost beside you.
+function fightAimOk(c, o, d) {
+  if (d <= 1e-6) return true;
+  const fx = Math.cos(player.yaw), fz = Math.sin(player.yaw);
+  const cosA = ((o.x - c.x) * fx + (o.y - c.y) * fz) / d;
+  const half = Math.atan2(Math.max(1, (o.ph.radius || 4) * BODY_SCALE), Math.max(1, d));
+  return cosA >= Math.cos(Math.min(Math.PI * 0.45, AIM_DEG * Math.PI / 180 + half));
+}
 function fightFindSwingTarget(c, rr) {
   const lk = FIGHT.lock;
   if (lk && lk.alive && lk.ph) {
     const d = Math.hypot(lk.x - c.x, lk.y - c.y);
-    if (d <= rr + lk.ph.radius) return lk;
+    // even a locked target has to be in front of you to be hit
+    if (d <= rr + lk.ph.radius && fightAimOk(c, lk, d)) return lk;
   }
-  const fx = Math.cos(player.yaw), fz = Math.sin(player.yaw);
   let best = null, bestD = Infinity;
   const list = world.creatures;
   for (let i = 0; i < list.length; i++) {
@@ -11891,7 +12097,7 @@ function fightFindSwingTarget(c, rr) {
     const dx = o.x - c.x, dz = o.y - c.y;
     const d = Math.hypot(dx, dz);
     if (d > rr + o.ph.radius) continue;
-    if (d > 1e-6 && (dx * fx + dz * fz) / d < 0.25) continue;   // must be in front of you
+    if (!fightAimOk(c, o, d)) continue;
     if (d < bestD) { bestD = d; best = o; }
   }
   return best;
@@ -12877,7 +13083,7 @@ function showDeath(dead) {
   const el = document.getElementById('deathfx');
   if (!el) return;
   const cause = dead ? dead.deathCause : '';
-  const why = cause === 'drowned' ? 'You drowned.' : cause === 'suffocated' ? 'You suffocated out of water.' : cause === 'predation' ? 'You were killed.' :
+  const why = cause === 'fall' ? 'You fell.' : cause === 'drowned' ? 'You drowned.' : cause === 'suffocated' ? 'You suffocated out of water.' : cause === 'predation' ? 'You were killed.' :
               cause === 'oldage' ? 'You died of old age.' : cause === 'toxin' ? 'You were poisoned.' :
               cause === 'starvation' ? 'You starved.' : '';
   const sub = el.querySelector('.sub'); if (sub) sub.textContent = why + ' Your line continues in your nearest kin.';
@@ -13883,6 +14089,14 @@ function stepSim(dt) {
   if (!player.c || !player.c.alive) respawn();
 }
 
+// Where the camera sits behind a body by default: close enough to read the
+// animal, far enough not to clip through it, and proportional so it frames a
+// big body and a small one the same way.
+function camDefaultDist(p) {
+  if (!p) return THIRD_DEFAULT;
+  const body = Math.max(2, (p.bodyRX || p.radius || 4) * BODY_SCALE);
+  return clamp(THIRD_DEFAULT * 0.55 + body * 3.4, THIRD_SNAP + 8, 260);
+}
 function updateCamera(dt) {
   const c = player.c;
   if (player.spectator || !c || !c.alive) {
@@ -14008,18 +14222,22 @@ function renderFrame(t) {
   if (BR.on) {
     const bf = brFogAt(player.camX, player.camZ);
     if (bf > 0) {
-      gArr[29] = gArr[29] + bf * bf * 0.055;
-      const fogMix = clamp(bf * 1.1, 0, 1);
-      gArr[24] = gArr[24] * (1 - fogMix) + 0.30 * fogMix;
-      gArr[25] = gArr[25] * (1 - fogMix) + 0.34 * fogMix;
-      gArr[26] = gArr[26] * (1 - fogMix) + 0.30 * fogMix;
-      gArr[30] = gArr[30] * (1 - 0.5 * fogMix);
+      // Inside the cloud you cannot see, and that is the whole danger of it.
+      // Outside it you should see the WALL, not a grey pane over the world,
+      // so this only bites once you are actually in the band.
+      gArr[29] = gArr[29] + bf * bf * 0.075;
+      const fogMix = clamp(bf * 1.25, 0, 1);
+      gArr[24] = gArr[24] * (1 - fogMix) + 0.42 * fogMix;
+      gArr[25] = gArr[25] * (1 - fogMix) + 0.45 * fogMix;
+      gArr[26] = gArr[26] * (1 - fogMix) + 0.43 * fogMix;
+      gArr[30] = gArr[30] * (1 - 0.45 * fogMix);
     }
   }
   dev.queue.writeBuffer(gBuf, 0, gArr);
 
   const nInst = buildCreatureInstances(player.camX, player.camZ, t);
   const nPlant = buildPlantInstances(player.camX, player.camZ, t);
+  try { if (BR.on) cloudBuild(t); else cloudCount = 0; } catch (e) { console.warn('cloud build', e); }
   folUpdate(player.camX, player.camY, player.camZ, player.yaw);
 
   const enc = dev.createCommandEncoder();
@@ -14060,6 +14278,7 @@ function renderFrame(t) {
   flushSkinDraws(pass);
   pass.setPipeline(waterPipe); pass.setBindGroup(0, bindG.water);
   pass.setVertexBuffer(0, waterVB); pass.draw(6);
+  try { cloudDraw(pass); } catch (e) { console.warn('cloud draw', e); }
   pass.end();
   if (R2on) r2PostPass(enc, fog);
   dev.queue.submit([enc.finish()]);
@@ -14204,6 +14423,7 @@ async function rebuildWorld() {
   terrH = null;
   world = C.makeWorld(Object.assign({ w: WORLD_W, h: WORLD_H, tileSize: TILE, seed, rarityCap: boneApplyWorldRarity(seed), featureScale: 2, heightScale: HEIGHT_SCALE, maxSlope: 1, baseRelief: 0.35, plantArea: 0.5 }, panelOpts()));
   terrain = world.terrain;
+  BR.bays = BR.arming ? brCarveBays(BR.players.length) : [];
   buildCanopyMap(); FOL.key = '';
   buildTerrain(); buildWater(); waterHeightUpload(); buildMinimap();
   await warmUp(panelWarmup());
@@ -14213,7 +14433,7 @@ async function rebuildWorld() {
   const adult = pickInitialPlayer();
   player.c = takeNewbornBody(adult);
   player.generation = 0; player.deaths = 0; player.absorbed = 0;
-  player.dist = THIRD_DEFAULT; player.fly = 0;
+  player.dist = camDefaultDist(player.c && player.c.ph); player.fly = 0;
   births.length = 0; birthsPrimed = false;
   if (player.c) {
     player.camX = player.c.x; player.camZ = player.c.y;
@@ -14324,6 +14544,28 @@ function drawMinimap() {
   const k = MW / 432;                 // marker sizes track the canvas resolution
   const dotR = 1.1 * k;
   const me = player.c;
+  // The cloud, so you can see it coming rather than discovering it.
+  if (BR.on && BR.zone && BR.zone.r > 0) {
+    const zx = BR.zone.cx * sx, zy = BR.zone.cz * sz, zr = BR.zone.r * sx;
+    miniCtx.save();
+    // everything outside the ring is under cloud
+    miniCtx.beginPath();
+    miniCtx.rect(0, 0, MW, MH);
+    miniCtx.arc(zx, zy, Math.max(1, zr), 0, Math.PI * 2, true);
+    miniCtx.fillStyle = 'rgba(150,158,150,0.50)';
+    miniCtx.fill('evenodd');
+    // the band that kills, and the edge itself
+    miniCtx.beginPath(); miniCtx.arc(zx, zy, Math.max(1, zr), 0, Math.PI * 2);
+    miniCtx.strokeStyle = 'rgba(226,232,224,0.95)'; miniCtx.lineWidth = 2 * k; miniCtx.stroke();
+    // where it is heading, so the shrink is legible
+    const rNext = brZoneRadiusAt(BR.t + 45) * sx;
+    if (rNext < zr - 1) {
+      miniCtx.beginPath(); miniCtx.arc(zx, zy, Math.max(1, rNext), 0, Math.PI * 2);
+      miniCtx.strokeStyle = 'rgba(255,150,120,0.7)'; miniCtx.lineWidth = 1.2 * k;
+      miniCtx.setLineDash([4 * k, 4 * k]); miniCtx.stroke(); miniCtx.setLineDash([]);
+    }
+    miniCtx.restore();
+  }
   miniCtx.fillStyle = 'rgba(255,64,48,0.92)';
   for (const c of world.creatures) {
     if (!c.alive || c === me) continue;
@@ -14372,7 +14614,11 @@ function bindInput() {
     }
     if (player.picker && k >= '0' && k <= '9') { choosePicked(+k); e.preventDefault(); return; }
     if (k === 'b' && started) { openEditor(player.c && player.c.alive ? 'game' : 'start'); e.preventDefault(); return; }
-    if (k === 'escape' && player.picker) { player.picker = null; renderPicker(); return; }
+    if (k === 'escape') {
+      if (player.picker) { player.picker = null; renderPicker(); return; }
+      if (paused) { pauseClose(); return; }
+      pauseOpen(); return;
+    }
     if (k === 'l' && started) {
       if (pointerLocked) { document.exitPointerLock && document.exitPointerLock(); }
       else if (canvas.requestPointerLock) { try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (_) {} }
@@ -15796,6 +16042,7 @@ function edBuildUI() {
     <button id="edSaved">my creatures</button>
     <span id="edBones" title="5 bones for every kill. Bundles (100 for $2, 500 for $5, 10000 for $30) need an account server, which this build does not have."><b id="edBoneN">0</b> bones</span>
     <span class="edname"><input id="edName" maxlength="22" spellcheck="false" placeholder="name your species" title="what your species is called"><button id="edRollName" title="roll a name">roll</button></span>
+    <span id="edMatchNote" style="display:none;font-size:12px;color:#ffd9cf">match build &middot; shop closed</span>
     <span class="edsp"></span>
     <button id="edCancel">cancel</button><button id="edDone" class="go">done</button>
   </div>
@@ -15912,7 +16159,7 @@ function edRefreshUI() {
       const owned = isUnlocked(id);
       const tier = boneTier(id), price = bonePrice(id), col = BONE_TIER_COL[tier];
       const bal = boneBalance();
-      const buyable = !owned && !SANDBOX;
+      const buyable = !owned && !SANDBOX && !brLocked();
       const selling = ED.sellArm === id;
       html += `<div class="edcard${av ? '' : ' locked'}" data-item="${id}">` +
         `<div class="edtile item${av ? '' : ' locked'}" data-item="${id}">${tileHTML(id, av, `<span class="edcost">${itemCost(id)}</span>`)}</div>` +
@@ -15920,9 +16167,10 @@ function edRefreshUI() {
         `<div class="edccost">${itemCost(id)} genome space · <span class="edtierb" style="color:${col}">${BONE_TIER_LABEL[tier]}</span></div>` +
         (buyable
           ? `<button class="edbuy${bal >= price ? '' : ' poor'}" data-buy="${id}" style="border-color:${col}"><span>buy</span><b style="color:${col}">${price}</b></button>`
-          : owned && !SANDBOX
+          : owned && !SANDBOX && !brLocked()
             ? `<button class="edsell${selling ? ' arm' : ''}" data-sell="${id}">${selling ? 'sell for ' + boneRefund(id) + '?' : 'owned &middot; sell ' + boneRefund(id)}</button>`
-            : '<div class="edowned">yours</div>') +
+            : owned ? '<div class="edowned">yours</div>'
+                    : `<div class="edowned locked">locked &middot; not for sale in a match</div>`) +
         `</div>`;
     }
     html += '</div>';
@@ -15935,6 +16183,11 @@ function edRefreshUI() {
   edUpdateStats();
   edRenderSaved();
   { const b = $('edBoneN'); if (b) b.textContent = boneBalance(); }
+  // In a match the shop is shut and nothing is saved out: everyone builds from
+  // what they already own, on the same budget.
+  { const bs = $('edBones'); if (bs) bs.style.display = brLocked() ? 'none' : ''; }
+  { const sv = $('edSaved'); if (sv) sv.style.display = brLocked() ? 'none' : ''; }
+  { const h = $('edMatchNote'); if (h) h.style.display = brLocked() ? '' : 'none'; }
 }
 function edSkinAllowed(i) {
   const id = SKIN_ITEMS[i];
@@ -16352,6 +16605,7 @@ function edBindCanvas() {
 
 // ---- open / close / apply ---------------------------------------------------------------
 function openEditor(mode) {
+  ED.shieldE = null;
   if (!ED.ui) edBuildUI();
   if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();
   ED.mode = mode;
@@ -16394,7 +16648,7 @@ function closeEditor(apply) {
     saveProgress();
   }
   const mode = ED.mode, des = stripDesign(ED.des);
-  ED.open = false; ED.drag = null; ED.ghost = null;
+  ED.open = false; ED.shieldE = null; ED.drag = null; ED.ghost = null;
   document.body.classList.remove('editing');
   edHideTip();
   if (ED.ui) ED.ui.dragImg.style.display = 'none';
@@ -16454,9 +16708,11 @@ const BR_CAGE_SECS = 30;             // you walk around your cage before the gat
 const BR_BOTS = 23;                  // plus you: 24 bays on the ring
 const BR_CAGE_R = 34;                // half-width of a cage, world units
 const BR_CAGE_H = 46;
-const BR_ZONE_GRACE = 90;            // the fog does not start moving for this long
-const BR_ZONE_DPS = 7;               // health a second, deep in the fog
-const BR_ZONE_EDGE = 90;             // how far into the fog before it starts hurting
+const BR_ZONE_GRACE = 150;           // the wall holds this long before it moves at all
+const BR_ZONE_DPS = 9;               // health a second, deep inside it
+const BR_ZONE_EDGE = 420;            // the band over which it goes from harmless to lethal
+const BR_ZONE_FINAL = 480;           // the last ring is a real arena, not a pinprick
+const BR_ZONE_MAX_CLOSE = 11;        // units a second, absolute cap. A walk is about 40.
 const BR_PACK_NONE = -1;
 
 
@@ -16620,14 +16876,58 @@ function brBuildBays(n) {
     // island instead of standing in the sea, where a land animal would drown
     // before the gate ever opened.
     let x = cx + ca * R0, z = cz + sa * R0, found = false;
+    let bestX = x, bestZ = z, bestRelief = Infinity;
+    const yaw0 = Math.atan2(cz - (cz + sa * R0), cx - (cx + ca * R0));
     for (let r = R0; r > 200; r -= 40) {
       const px = clamp(cx + ca * r, 140, WORLD_W - 140), pz = clamp(cz + sa * r, 140, WORLD_H - 140);
-      if (terrain.height(px, pz) > sea + 0.012) { x = px; z = pz; found = true; break; }
+      if (terrain.height(px, pz) <= sea + 0.012) continue;
+      // dry land, but a cage wants ground it can stand level on
+      const rel = brFootprint(px, pz, yaw0);
+      const relief = rel.hi - rel.lo;
+      if (relief < bestRelief) { bestRelief = relief; bestX = px; bestZ = pz; }
+      if (relief < 14) { x = px; z = pz; found = true; break; }
     }
+    if (!found && bestRelief < Infinity) { x = bestX; z = bestZ; found = true; }
     if (!found) { x = clamp(cx + ca * 260, 140, WORLD_W - 140); z = clamp(cz + sa * 260, 140, WORLD_H - 140); }
-    out.push({ n: i + 1, x, z, y: groundAt(x, z), yaw: Math.atan2(cz - z, cx - x) });
+    const yaw = Math.atan2(cz - z, cx - x);
+    // Anchor on the LOWEST ground under the footprint. Anchoring on the centre
+    // left the cage hanging in the air on its downhill side, and an animal
+    // standing on the terrain then rendered below its own floor, which is what
+    // "inside the cage but visually outside" looked like.
+    const rel = brFootprint(x, z, yaw);
+    out.push({ n: i + 1, x, z, y: rel.lo, yaw, relief: rel.hi - rel.lo });
   }
   return out;
+}
+
+// Ground under a cage footprint: the lowest and highest terrain the walls
+// enclose, sampled on the cage's own axes.
+function brFootprint(x, z, yaw) {
+  const ca = Math.cos(yaw), sa = Math.sin(yaw), R = BR_CAGE_R;
+  let lo = Infinity, hi = -Infinity;
+  for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
+    const lx = a * R, lz = b * R;
+    const gx = x + lx * ca - lz * sa, gz = z + lx * sa + lz * ca;
+    const g = groundAt(gx, gz);
+    if (g < lo) lo = g;
+    if (g > hi) hi = g;
+  }
+  return { lo: isFinite(lo) ? lo : groundAt(x, z), hi: isFinite(hi) ? hi : groundAt(x, z) };
+}
+
+// Cut a level shelf under every cage. A cage is a built thing: on a hillside
+// it either hangs off the downhill side or buries its uphill wall, and no
+// amount of plinth fixes that. Called during the world build, while the
+// heightmap can still be changed, and before the render mesh is made from it.
+function brCarveBays(n) {
+  if (!terrain || !terrain.carveFlat) return [];
+  const bays = brBuildBays(n);
+  for (const b of bays) {
+    const y = terrain.carveFlat(b.x, b.z, BR_CAGE_R * 1.55, BR_CAGE_R * 2.1);
+    if (y != null) b.y = y * (terrain.heightScale || 420);
+    b.relief = 0;
+  }
+  return bays;
 }
 
 // ---- match -----------------------------------------------------------------
@@ -16654,14 +16954,23 @@ function brBegin() {
   BR.arming = false;
   BR.phase = 'cage';
   BR.t = 0;
-  BR.bays = brBuildBays(BR.players.length);
+  // Normally the pads were cut during the world build and the bays came with
+  // them. Only fall back to building them here if that never happened.
+  if (!BR.bays.length) BR.bays = brBuildBays(BR.players.length);
   BR.gateY = 0;
   BR.result = null;
   BR.deadChoice = null;
   BR.bones = 0;
   BR.log.length = 0;
   const bay = BR.bays[BR.slot];
-  BR.zone = { cx: WORLD_W / 2, cz: WORLD_H / 2, r0: Math.min(WORLD_W, WORLD_H) * 0.52, r1: 90, r: Math.min(WORLD_W, WORLD_H) * 0.52 };
+  // The ring starts just outside the furthest bay rather than at the corner of
+  // the map: most of that distance was open ocean nobody was ever standing in,
+  // and closing it forced the wall to move faster than anything could run.
+  const cx0 = WORLD_W / 2, cz0 = WORLD_H / 2;
+  let far = 0;
+  for (const b of BR.bays) far = Math.max(far, Math.hypot(b.x - cx0, b.z - cz0));
+  const r0 = Math.max(1200, far + 900);
+  BR.zone = { cx: cx0, cz: cz0, r0, r1: Math.min(BR_ZONE_FINAL, r0 * 0.25), r: r0 };
   if (player.c) { player.c.x = bay.x; player.c.y = bay.z; player.c._spawnT = simT; }
   player.camX = bay.x; player.camZ = bay.z;
   player.spectator = false;
@@ -16764,12 +17073,27 @@ function brAliveCount() {
 // ---- the fog ---------------------------------------------------------------
 // Radius shrinks from enclosing the island to a small circle over the match.
 // Standing outside it costs health, and the further out the worse it is.
+// The wall holds, then closes on an ease, and never faster than BR_ZONE_MAX_CLOSE
+// however far it has to travel. If the cap means it cannot finish in time it
+// simply stops where it got to, which is a better match than an unescapable one.
 function brZoneRadiusAt(t) {
   const z = BR.zone;
   if (t <= BR_ZONE_GRACE) return z.r0;
-  const u = clamp((t - BR_ZONE_GRACE) / Math.max(1, BR_MATCH_SECS - BR_ZONE_GRACE - 40), 0, 1);
-  // ease so the last minutes close fast
-  return z.r0 + (z.r1 - z.r0) * (u * u * (3 - 2 * u));
+  const span = Math.max(1, BR_MATCH_SECS - BR_ZONE_GRACE - 40);
+  // The rate it would need to finish the whole journey, and the rate it is
+  // actually allowed. Whichever is slower is what it does, at a CONSTANT rate:
+  // an eased curve peaks at one and a half times its own average, which broke
+  // the cap in the middle of the match exactly when it mattered.
+  const need = (z.r0 - z.r1) / span;
+  const rate = Math.min(need, BR_ZONE_MAX_CLOSE);
+  const ease = clamp((t - BR_ZONE_GRACE) / 25, 0, 1);      // 25 s to get up to speed
+  const travelled = rate * (t - BR_ZONE_GRACE) * (0.5 + 0.5 * ease);
+  return Math.max(z.r1, z.r0 - travelled);
+}
+// How fast the wall is coming in right now, for the HUD.
+function brZoneSpeed() {
+  const a = brZoneRadiusAt(BR.t), b = brZoneRadiusAt(BR.t + 1);
+  return Math.max(0, a - b);
 }
 // How deep into the fog a point is, 0 at the edge and 1 well inside it.
 function brFogAt(x, z) {
@@ -16916,8 +17240,10 @@ function brTick(dt) {
     brSay('GATES OPEN. No player can hurt another for ' + Math.round(BR_GRACE_SECS / 60) + ' minutes. Hunt the island and take its parts.', 7000);
   } else if (BR.phase === 'grace' && BR.t >= BR_CAGE_SECS + BR_GRACE_SECS) {
     BR.phase = 'open';
-    brSay('OPEN SEASON. Everyone can kill everyone.', 7000);
+    BR._cullAcc = 0;
+    brSay('OPEN SEASON. The island empties. Only players are left.', 7000);
   }
+  if (BR.phase === 'open') brCullWildlife(dt);
   // the gate slides up over two seconds once the cage phase ends
   const want = BR.phase === 'cage' ? 0 : 1;
   BR.gateY += clamp(want - BR.gateY, -dt * 0.5, dt * 0.5);
@@ -16987,11 +17313,45 @@ function brBotChase(c, foe, dt) {
   c.x = clamp(nx, 2, WORLD_W - 2);
   c.y = clamp(nz, 2, WORLD_H - 2);
 }
+// The cage is drawn rotated to face the island, so clamping to an axis-aligned
+// box let you stand outside the bars wherever the two disagreed: at 45 degrees
+// the corners of the box sit a long way past the walls. Clamp in the cage's own
+// axes instead, then rotate back.
+// When the real fight starts the island's own animals go. Not instantly: they
+// thin out over the first half minute of open season, leaving their bodies
+// behind as food, so what is left is players hunting players.
+const BR_CULL_SECS = 30;
+function brCullWildlife(dt) {
+  if (!world) return;
+  BR._cullAcc = (BR._cullAcc || 0) + dt;
+  const wild = [];
+  for (const c of world.creatures) {
+    if (!c.alive || c._br != null || c === player.c) continue;
+    wild.push(c);
+  }
+  if (!wild.length) return;
+  // fraction of the original herd that should be gone by now
+  if (BR._cullN == null) BR._cullN = wild.length;
+  const want = Math.ceil(BR._cullN * clamp(BR._cullAcc / BR_CULL_SECS, 0, 1));
+  const gone = BR._cullN - wild.length;
+  let n = Math.min(wild.length, want - gone);
+  for (let i = 0; i < n; i++) {
+    const c = wild[i];
+    c.alive = false;
+    c.deathCause = 'oldage';
+    if (world.onDeath) { try { world.onDeath(c); } catch (e) { /* remains are cosmetic */ } }
+  }
+}
 function brConfineToCage(c, bay) {
   if (!bay) return;
-  const r = BR_CAGE_R - (c.ph ? c.ph.radius * BODY_SCALE : 4) - 1;
-  c.x = clamp(c.x, bay.x - r, bay.x + r);
-  c.y = clamp(c.y, bay.z - r, bay.z + r);
+  const r = BR_CAGE_R - (c.ph ? c.ph.radius * BODY_SCALE : 4) - 1.5;
+  if (r <= 0) { c.x = bay.x; c.y = bay.z; return; }
+  const ca = Math.cos(bay.yaw), sa = Math.sin(bay.yaw);
+  const dx = c.x - bay.x, dz = c.y - bay.z;
+  const lx = clamp(dx * ca + dz * sa, -r, r);
+  const lz = clamp(-dx * sa + dz * ca, -r, r);
+  c.x = bay.x + lx * ca - lz * sa;
+  c.y = bay.z + lx * sa + lz * ca;
 }
 function brZoneDamage(dt) {
   for (const p of BR.players) {
@@ -17056,6 +17416,246 @@ function brBotTick(dt) {
 }
 
 // ---- HUD -------------------------------------------------------------------
+// While the builder is open the world runs but you are out of it: no hit
+// lands (fightHitFilter refuses them), and nothing that ticks away at a body
+// -- hunger, drowning, the match fog -- is allowed to finish you either.
+function edShield() {
+  const c = player.c;
+  if (!c) return;
+  if (ED.shieldE == null) ED.shieldE = c.energy;
+  // if the step managed to finish you off, take it back: you were at a
+  // workbench, not in the world
+  if (!c.alive) { c.alive = true; c.deathCause = null; }
+  // hold the body exactly where the editor found it
+  c.energy = Math.max(1, Math.min(ED.shieldE, c.ph.storage));
+  c._drown = 0; c._sub = false;
+  c._hurtT = 0;
+  if (c.energy <= 0) c.energy = 1;
+}
+
+// ---------------------------------------------------------------- pause
+// Esc from the game. There was no way back to the main menu at all before
+// this: once you were playing, you were playing.
+let paused = false;
+function pauseOpen() {
+  if (!started || ED.open) return;
+  paused = true;
+  const el = document.getElementById('pauseBox');
+  if (!el) return;
+  const inMatch = BR.on && BR.phase !== 'over';
+  el.innerHTML = '<div class="pbin"><h3>PAUSED</h3>' +
+    '<p class="psub">' + (inMatch
+      ? 'You are ' + Math.round(Math.max(0, BR_MATCH_SECS - BR.t) / 60) + ' minutes from the end of a match.<br>Leaving forfeits it.'
+      : 'The island keeps running while you are here.') + '</p>' +
+    '<button data-pause="resume">resume</button>' +
+    (inMatch ? '<button data-pause="menu" class="warn">forfeit and quit to menu</button>'
+             : '<button data-pause="menu">quit to main menu</button>') +
+    '</div>';
+  el.classList.add('show');
+  for (const b of el.querySelectorAll('[data-pause]')) {
+    b.onclick = () => (b.getAttribute('data-pause') === 'menu' ? quitToMenu() : pauseClose());
+  }
+}
+function pauseClose() {
+  paused = false;
+  const el = document.getElementById('pauseBox');
+  if (el) { el.classList.remove('show'); el.innerHTML = ''; }
+}
+function quitToMenu() {
+  pauseClose();
+  if (BR.on) brStop();
+  player.picker = null; renderPicker();
+  player.spectator = false;
+  started = false;
+  document.body.classList.remove('brmatch');
+  const st = document.getElementById('start');
+  if (st) st.style.display = '';
+  menuPage(null);
+  MENU.i = 0;
+  menuRender();
+  const m = document.getElementById('mmMusic');
+  if (m) { try { m.volume = 0.45; m.currentTime = 0; m.play().catch(() => {}); } catch (e) { /* no audio */ } }
+}
+// =====================================================================
+// THE CLOUD WALL
+// The closing zone was a global distance fog, which from outside read as a
+// flat grey pane hanging in the air. It is a real object now: a wall of large
+// soft cloud puffs standing on the ring, three rows deep and three layers
+// high, boiling slowly and drifting inward as the ring closes. Inside the wall
+// the old fog still takes your sight away, which is what makes it deadly; from
+// outside you see weather coming for you.
+//
+// Drawn with its own alpha-blended pipeline over the shared sphere mesh, sorted
+// back to front, so the puffs read as volume rather than as balls.
+// =====================================================================
+const CLOUD_MAX = 620;
+const CLOUD_FLOATS = 8;                 // pos3, radius, tint3, density
+const cloudData = new Float32Array(CLOUD_MAX * CLOUD_FLOATS);
+let cloudVB = null, cloudPipe = null, cloudBind = null, cloudCount = 0;
+const CLOUD_ROWS = [0, 210, 470];       // how far out from the ring each row stands
+const CLOUD_LAYERS = [0.30, 0.72, 1.18];// height, as a fraction of the wall height
+const CLOUD_WALL_H = 460;
+const CLOUD_SEE = 7200;                 // puffs are only built this close to the eye
+
+const WGSL_CLOUD_SRC = `
+struct VO { @builtin(position) pos: vec4<f32>, @location(0) nrm: vec3<f32>,
+            @location(1) wpos: vec3<f32>, @location(2) tint: vec3<f32>, @location(3) dens: f32 };
+@vertex fn vs(@location(0) p: vec3<f32>, @location(1) n: vec3<f32>,
+              @location(2) iPos: vec3<f32>, @location(3) iRad: f32,
+              @location(4) iTint: vec3<f32>, @location(5) iDens: f32) -> VO {
+  // squashed: a cloud bank is wider than it is tall
+  let q = vec3<f32>(p.x * iRad, p.y * iRad * 0.62, p.z * iRad);
+  let w = q + iPos;
+  var o: VO;
+  o.pos = g.viewProj * vec4<f32>(w, 1.0);
+  o.nrm = normalize(vec3<f32>(n.x, n.y * 1.6, n.z));
+  o.wpos = w; o.tint = iTint; o.dens = iDens;
+  return o;
+}
+fn ch(p: vec2<f32>) -> f32 { var p3 = fract(vec3<f32>(p.x, p.y, p.x) * 0.1031); p3 += dot(p3, p3.yzx + vec3<f32>(33.33)); return fract((p3.x + p3.y) * p3.z); }
+fn cn(p: vec2<f32>) -> f32 {
+  let i = floor(p); let f = fract(p); let u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(ch(i), ch(i + vec2<f32>(1.0, 0.0)), u.x), mix(ch(i + vec2<f32>(0.0, 1.0)), ch(i + vec2<f32>(1.0, 1.0)), u.x), u.y);
+}
+@fragment fn fs(i: VO) -> @location(0) vec4<f32> {
+  let N = normalize(i.nrm);
+  let V = normalize(g.camPos.xyz - i.wpos);
+  // soft at the silhouette, solid through the middle: a sphere becomes a puff
+  let facing = clamp(dot(N, V), 0.0, 1.0);
+  let t = g.params.x;
+  // three scales of drift, so the wall boils instead of sliding
+  let q = i.wpos * 0.0042;
+  let n1 = cn(q.xz + vec2<f32>(t * 0.016, t * -0.011));
+  let n2 = cn(q.xy * 2.3 + vec2<f32>(t * -0.027, t * 0.019));
+  let n3 = cn(q.zx * 5.1 + vec2<f32>(t * 0.041, t * 0.033));
+  let n = n1 * 0.55 + n2 * 0.30 + n3 * 0.15;
+  var a = smoothstep(0.015, 0.50, facing);
+  a *= smoothstep(0.34, 0.78, n * 0.72 + facing * 0.40);
+  a *= i.dens;
+  if (a < 0.012) { discard; }
+  let day = g.params.z;
+  let L = normalize(g.lightDir.xyz);
+  let up = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);
+  let sun = clamp(dot(N, L) * 0.5 + 0.5, 0.0, 1.0);
+  // lit from above and from the sun, dark and heavy underneath
+  var col = mix(vec3<f32>(0.085, 0.100, 0.105), vec3<f32>(0.62, 0.65, 0.64), day);
+  col *= 0.44 + 0.56 * up;
+  col = mix(col, mix(vec3<f32>(0.16, 0.19, 0.22), vec3<f32>(0.96, 0.94, 0.88), day), sun * 0.40);
+  col *= i.tint;
+  // the fog between you and it
+  let d = distance(i.wpos, g.camPos.xyz);
+  let f = clamp(1.0 - exp(-(d * g.params.y) * (d * g.params.y)), 0.0, 1.0);
+  col = mix(col, g.fogCol.rgb, f * 0.85);
+  return vec4<f32>(col, clamp(a, 0.0, 1.0));
+}`;
+
+function cloudInit() {
+  if (cloudPipe) return;
+  const m = dev.createShaderModule({ code: WGSL_COMMON + WGSL_CLOUD_SRC });
+  cloudPipe = dev.createRenderPipeline({
+    layout: 'auto',
+    vertex: { module: m, entryPoint: 'vs', buffers: [
+      { arrayStride: 24, attributes: [
+        { shaderLocation: 0, offset: 0, format: 'float32x3' },
+        { shaderLocation: 1, offset: 12, format: 'float32x3' }] },
+      { arrayStride: CLOUD_FLOATS * 4, stepMode: 'instance', attributes: [
+        { shaderLocation: 2, offset: 0,  format: 'float32x3' },
+        { shaderLocation: 3, offset: 12, format: 'float32' },
+        { shaderLocation: 4, offset: 16, format: 'float32x3' },
+        { shaderLocation: 5, offset: 28, format: 'float32' }] },
+    ] },
+    fragment: { module: m, entryPoint: 'fs', targets: [{ format: fmt, blend: {
+      color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha' },
+      alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } }] },
+    primitive: { topology: 'triangle-list', cullMode: 'none' },
+    // no depth write: the puffs blend through each other
+    depthStencil: { format: 'depth24plus', depthWriteEnabled: false, depthCompare: 'less' },
+    multisample: { count: SAMPLES },
+  });
+  cloudVB = dev.createBuffer({ size: cloudData.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+  cloudBind = dev.createBindGroup({ layout: cloudPipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: gBuf } }] });
+}
+
+// A stable hash per puff, so a given puff keeps its size and phase as the wall
+// creeps in rather than reshuffling every frame.
+function cloudHash(k, s) {
+  let h = (Math.imul(k | 0, 73856093) ^ Math.imul(s | 0, 19349663)) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 2246822519) >>> 0;
+  return ((h ^ (h >>> 13)) >>> 0) / 4294967296;
+}
+// Build the arc of the wall that is near enough to see, back to front.
+function cloudBuild(t) {
+  cloudCount = 0;
+  if (!BR.on || BR.phase === 'off') return 0;
+  const Z = BR.zone;
+  const camX = player.camX, camZ = player.camZ;
+  const R = Z.r;
+  if (!(R > 0)) return 0;
+  // the angle of the camera as seen from the ring centre, and how much of the
+  // ring is close enough to matter
+  const dcx = camX - Z.cx, dcz = camZ - Z.cz;
+  const dCentre = Math.hypot(dcx, dcz);
+  const aCam = Math.atan2(dcz, dcx);
+  // half-angle of the visible arc: everything whose ring point is within CLOUD_SEE
+  let halfArc = Math.PI;
+  if (dCentre > 1 && R > 1) {
+    const cosNeed = (dCentre * dCentre + R * R - CLOUD_SEE * CLOUD_SEE) / (2 * dCentre * R);
+    if (cosNeed > 1) return 0;                 // the whole wall is too far to see
+    if (cosNeed > -1) halfArc = Math.acos(cosNeed);
+  }
+  const stepA = Math.max(0.006, 165 / Math.max(200, R));   // puffs about 165 units apart
+  const n = Math.min(240, Math.ceil((halfArc * 2) / stepA));
+  const list = [];
+  for (let k = -Math.floor(n / 2); k <= Math.floor(n / 2); k++) {
+    const a = aCam + k * stepA;
+    const ca = Math.cos(a), sa = Math.sin(a);
+    for (let ri = 0; ri < CLOUD_ROWS.length; ri++) {
+      const rr = R + CLOUD_ROWS[ri];
+      const bx = Z.cx + ca * rr, bz = Z.cz + sa * rr;
+      if (bx < -2000 || bz < -2000 || bx > WORLD_W + 2000 || bz > WORLD_H + 2000) continue;
+      const dx = bx - camX, dz = bz - camZ;
+      const d2 = dx * dx + dz * dz;
+      if (d2 > CLOUD_SEE * CLOUD_SEE) continue;
+      const gy = groundAt(clamp(bx, 1, WORLD_W - 1), clamp(bz, 1, WORLD_H - 1));
+      for (let li = 0; li < CLOUD_LAYERS.length; li++) {
+        const key = (k * 97 + ri * 31 + li) | 0;
+        const h1 = cloudHash(key, 1), h2 = cloudHash(key, 2), h3 = cloudHash(key, 3);
+        // slow boil: each puff breathes and drifts on its own phase
+        const ph = h1 * 6.2832;
+        const rad = (150 + h2 * 170) * (1 + 0.10 * Math.sin(t * 0.25 + ph));
+        const y = gy + CLOUD_WALL_H * CLOUD_LAYERS[li] + Math.sin(t * 0.18 + ph) * 26 + h3 * 60;
+        const px = bx + Math.sin(t * 0.11 + ph) * 34;
+        const pz = bz + Math.cos(t * 0.09 + ph * 1.3) * 34;
+        // the outer rows and the top layer are thinner, so the wall has an edge
+        const dens = (ri === 0 ? 0.92 : ri === 1 ? 0.72 : 0.48) * (li === 2 ? 0.62 : 1);
+        const g1 = 0.88 + h1 * 0.16;
+        list.push({ x: px, y, z: pz, r: rad, tint: [g1 * 0.93, g1, g1 * 0.90], dens,
+                    d2: (px - camX) * (px - camX) + (pz - camZ) * (pz - camZ) });
+      }
+    }
+  }
+  // back to front, so the blend stacks correctly
+  list.sort((a, b) => b.d2 - a.d2);
+  const n2 = Math.min(list.length, CLOUD_MAX);
+  for (let i = 0; i < n2; i++) {
+    const c = list[i], o = i * CLOUD_FLOATS;
+    cloudData[o] = c.x; cloudData[o + 1] = c.y; cloudData[o + 2] = c.z;
+    cloudData[o + 3] = c.r;
+    cloudData[o + 4] = c.tint[0]; cloudData[o + 5] = c.tint[1]; cloudData[o + 6] = c.tint[2];
+    cloudData[o + 7] = c.dens;
+  }
+  cloudCount = n2;
+  if (n2) dev.queue.writeBuffer(cloudVB, 0, cloudData, 0, n2 * CLOUD_FLOATS);
+  return n2;
+}
+function cloudDraw(pass) {
+  if (!cloudCount || !cloudPipe) return;
+  pass.setPipeline(cloudPipe); pass.setBindGroup(0, cloudBind);
+  pass.setVertexBuffer(0, sphVB); pass.setIndexBuffer(sphIB, 'uint16');
+  pass.setVertexBuffer(1, cloudVB);
+  pass.drawIndexed(sphCount, cloudCount);
+}
+
 function brRenderHud() {
   const el = document.getElementById('brPanel');
   if (el) { el.innerHTML = brHudHtml(); el.style.display = BR.on ? 'block' : 'none'; }
@@ -17100,14 +17700,14 @@ function brHudHtml() {
   const d = player.c ? Math.hypot(player.c.x - BR.zone.cx, player.c.y - BR.zone.cz) : 0;
   const out = Math.max(0, d - BR.zone.r);
   return '<div class="brhud">' +
-    '<div class="brtop"><b>' + mm + ':' + String(ss).padStart(2, '0') + '</b> · ' + a.n + ' alive · bay ' + (BR.bays[BR.slot] ? BR.bays[BR.slot].n : '?') + '</div>' +
+    '<div class="brtop"><b>' + mm + ':' + String(ss).padStart(2, '0') + '</b> · ' + a.n + ' players · bay ' + (BR.bays[BR.slot] ? BR.bays[BR.slot].n : '?') + '</div>' +
     '<div class="brphase">' + phase + '</div>' +
     '<div class="brzone">' + (out > 0 ? '<span class="bad">IN THE FOG · ' + Math.round(out) + ' from safety</span>' : 'inside the ring · ' + Math.round(BR.zone.r - d) + ' to the edge') + '</div>' +
     '<div class="brk">' + (me ? me.kills : 0) + ' kills · ' + BR.bones + ' bones' + (me && me.pack !== BR_PACK_NONE ? ' · in ' + BR.players[me.pack].name + "'s pack" : '') + '</div>' +
     '</div>';
 }
 
-function becomeDesigned(des) {
+function becomeDesigned(des, opts) {
   if (!world) return;
   const rng = world.rng;
   const g = C.seedHerbivore(world, rng);
@@ -17123,7 +17723,7 @@ function becomeDesigned(des) {
   const me = C.makeCreature(g, x, y, 400);
   me._isPlayer = 1;
   world.creatures.push(me);
-  const KIN = 6;
+  const KIN = (typeof opts === 'object' && opts && opts.noKin) || BR.on || BR.arming ? 0 : 6;
   for (let i = 0; i < KIN; i++) {
     const kg = C.mutate(world, C.cloneGenome(g), rng, 0.10);
     const a2 = rng() * Math.PI * 2, r2 = 60 + rng() * 220;
@@ -17142,8 +17742,8 @@ function becomeDesigned(des) {
   player.absorbed = 0; player.fly = 0;
   player.camX = me.x; player.camZ = me.y;
   player.camY = groundAt(me.x, me.y) + 20;
-  player.dist = Math.max(player.dist, THIRD_DEFAULT);
-  toast('You hatch as a newborn, with ' + KIN + ' grown adults of your design nearby. Press B at any time to edit your creature.', 5200);
+  player.dist = camDefaultDist(me.ph || (me.genome && C.develop(me.genome)));
+  if (KIN) toast('You hatch as a newborn, with ' + KIN + ' grown adults of your design nearby. Press B at any time to edit your creature.', 5200);
 }
 function applyDesignToPlayer(des) {
   const c = player.c;
@@ -17353,6 +17953,15 @@ function loop(now) {
   const dt = lastT ? (now - lastT) / 1000 : 0.016;
   lastT = now;
   if (ED.open) {
+    // The shield goes on BEFORE the step and again after it: the step is what
+    // would starve or drown you, so guarding only afterwards let the world kill
+    // you and then hand back a corpse to protect.
+    try { edShield(); } catch (e) { console.warn(e); }
+    // the world goes on, but without drawing it: the editor owns the screen
+    try { tick(dt, true); } catch (e) { console.warn('sim while editing', e); }
+    try { objTick(dt); sndTick(dt); spatTick(dt); } catch (e) { console.warn(e); }
+    try { if (BR.on) brTick(dt); } catch (e) { console.warn('br while editing', e); }
+    try { edShield(); } catch (e) { console.warn(e); }
     try { renderEditor(now / 1000); } catch (e) { console.error(e); }
     requestAnimationFrame(loop);
     return;
@@ -17427,7 +18036,7 @@ async function init() {
   world.light = 0.5 + 0.5 * Math.sin((world.bt / dl) * 2 * Math.PI);
   const seedAdult = pickInitialPlayer();
   player.c = takeNewbornBody(seedAdult);
-  player.dist = THIRD_DEFAULT;
+  player.dist = camDefaultDist(player.c && player.c.ph);
   if (player.c) {
     player.camX = player.c.x; player.camZ = player.c.y;
     player.camY = groundAt(player.c.x, player.c.y) + (player.c.ph.standH || 8) * BODY_SCALE;
@@ -17462,6 +18071,15 @@ window.__G3D = {
   look(yaw, pitch) { player.yaw = yaw; if (pitch != null) player.pitch = pitch; },
   press(k, on) { keys[String(k).toLowerCase()] = !!on; },
   rebuild: () => rebuildWorld(),
+  swingTarget: () => fightFindSwingTarget(player.c, interactRange(player.c.ph) * 1.0),
+  get cloudCount() { return cloudCount; },
+  closeEditor: (apply) => closeEditor(!!apply),
+  pauseOpen: () => pauseOpen(), pauseClose: () => pauseClose(), quitToMenu: () => quitToMenu(),
+  get paused() { return paused; },
+  get started() { return started; },
+  becomeDesigned: (d) => becomeDesigned(d),
+  get creatureCount() { return world ? world.creatures.length : 0; },
+  camDefaultDist: (ph) => camDefaultDist(ph),
   br: {
     get on() { return BR.on; }, get phase() { return BR.phase; }, get t() { return BR.t; },
     get zone() { return BR.zone; }, get players() { return BR.players; }, get bays() { return BR.bays; },
@@ -17484,6 +18102,8 @@ window.__G3D = {
     panelWarmup: () => panelWarmup(),
     resetClick: () => resetWorldClick(),
     menuPage: (id) => menuPage(id),
+    speed: () => brZoneSpeed(),
+    radiusAt: (t) => brZoneRadiusAt(t),
     get deadChoice() { return BR.deadChoice; },
     renderHud: () => brRenderHud(),
   },

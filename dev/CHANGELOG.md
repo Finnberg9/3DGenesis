@@ -2,6 +2,41 @@
 
 Build: `dev/3dgenesis-dev-src.tgz` unpacks to the patch pipeline. `bash build.sh` (edit its `cd` to your folder) turns `g3.v3` + `src/patch_*.py` into `g3.html` (= `index.html`) and extracts `core.js` for node tests.
 
+## 2026-09-23 (evening): Ground rules, and a long list of things that were wrong
+
+### The ground
+- **A real slope limit.** Nothing that walks goes up anything steeper than **60 degrees**. A body built to scramble earns its way toward **80**: the limit comes from what its legs end in (claws best, then talons, then hooves) and how heavy it is, because holding yourself on a wall costs strength that goes as area while the weight goes as volume. In practice the stock body plans land between 60 and 69 degrees and 80 is reserved for something small and fully clawed that you built on purpose. It replaces the old "one block per step" rule, and it applies to every animal in the world, not just you.
+- **Fall damage.** One world unit is one foot. Under 20 feet costs nothing; past that the damage goes as the height, so about ninety feet kills most bodies outright, and a heavier body fares worse for it. Ground that falls away under you is a fall now rather than a teleport: you leave the edge, gravity takes over, and what you hit at the bottom is measured from the highest point of the drop. **Water takes the fall instead**, as long as it is deep enough to take the animal rather than just wet its feet. Wild animals pay the same price on the same numbers.
+
+### Aiming
+- **A strike only lands on what you are pointed at**: within **10 degrees** of the nose, widened by however much of the view the target itself fills, so a sauropod's flank at arm's length is a broad thing to hit and a lizard across the clearing is not. It used to accept anything inside 75 degrees, which meant you could gut something standing almost beside you. A locked target has to be in front of you too. Mating and the other soft interactions keep the old generous cone: only damage is aimed.
+
+### Standing still
+- Idle animals were slowly paddling their feet. The stride had a fixed floor the gait amount never scaled away, so a creature doing nothing still swept its legs through a small cycle forever. The floor is gone and the gait clock stops when the body does, so a stopped animal holds its stance.
+
+### The cages
+- **They sit on level ground now.** The heightmap gets a flat pad cut under each bay during the world build, before the render mesh is made from it (`terrain.carveFlat`, which is also the hook rivers will use). Worst relief under a cage across all 24 bays went from 61 feet to 2.6.
+- **You cannot stand outside the bars any more.** The cage is drawn rotated to face the island but the confinement was an axis-aligned box, so at 45 degrees its corners sat a long way past the walls. It clamps in the cage's own axes now.
+- The bay number stands on a mast off the roof instead of floating beside the cage with nothing holding it up.
+
+### The closing zone
+- **It is weather now, not a fog setting.** A wall of large soft cloud puffs stands on the ring, three rows deep and three layers high, boiling on its own noise and creeping inward as the ring closes. Its own alpha-blended pipeline, sorted back to front, about 600 puffs. The old global distance fog still takes your sight away once you are *inside* the band, which is what makes it deadly, but from outside you now see weather coming for you instead of a flat grey pane hanging in the air.
+- **The minimap shows it.** Everything under cloud is greyed out, the edge is drawn, and a dashed ring shows where it will be in 45 seconds.
+- **It was too fast to escape.** Three things were wrong: it started at the corner of the map and spent the first minutes closing over open ocean nobody was standing in; the eased curve peaked at one and a half times its own average exactly when it mattered; and the damage band was 90 units wide, so brushing it was instant. Now it starts just outside the furthest bay, holds for 150 seconds, then closes at a **constant 11 units a second against a walking speed of about 40**, and the band that hurts is 420 units deep. Measured peak closing rate across a full match: 11.0.
+- The final ring is a real arena rather than a pinprick.
+
+### Matches
+- **The island empties when the fight starts.** At open season the wild animals thin out over thirty seconds, leaving their bodies behind as food. What is left is players hunting players.
+- The HUD says "players" rather than "alive", which is what it always counted.
+- **Nothing respawns you inside a match.** Dying used to hand you a newborn of the nearest wild kin, which is how a match ended up with a creature in it that had never been drafted into it.
+- **Entering a match no longer founds a deme.** Taking a creature in used to spawn six grown adults of your own design beside you. In a match it spawns exactly one: you.
+- **The builder drops its shop inside a match**: no buying on the start line, no selling, and nothing saved out. It says so in the toolbar.
+
+### Everything else
+- **Esc opens a pause menu**, with a way back to the main menu. There was no way out of a game at all before this: once you were playing, you were playing. Quitting a match forfeits it and says so.
+- **The world keeps running while the creature builder is open.** It used to stop dead, which made the builder a free pause button you could open mid-hunt. In exchange **nothing can touch you in there**: no hit lands, and nothing that ticks away at a body is allowed to finish you either.
+- **The camera starts over the shoulder** rather than 150 units back, and the default distance is proportional to the body so a sauropod and a lizard are framed the same way.
+
 ## 2026-09-23 (later still): The cages are metal
 
 The cages were being drawn through the foliage shader's **bark** path, which was putting tree furrows, moss and lichen on steel. That is why they read as flat blue-grey slabs. They have their own material now.
