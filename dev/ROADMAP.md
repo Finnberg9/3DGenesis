@@ -3,6 +3,9 @@
 Recorded so every daily run knows where the game is headed and keeps the code compatible with it.
 
 ## STATUS (2026-09-23)
+- **No grace period** (2026-09-23, latest). The gates open straight into open combat. The island's wildlife now thins out on its own five-minute clock (`BR_WILD_SECS`) rather than as the end of a truce, so the early match is a choice between hunting parts and hunting people.
+- **Nameplates: built** (2026-09-23, latest). Name plus health bar over every other player, projected through the frame's own `vpM`, with terrain occlusion, a 1400-unit range and a fog cut-off so it is not a wallhack. `br.nameWhy(slot)` says why any given plate is missing. Still to do: the plate should carry the pack badge and the kill count once packs are used in earnest, and a server will have to decide what health a client is allowed to be told about a rival at all.
+- **Parts inventory: built** (2026-09-23, late). Parts are counted, not flagged: `PROG.owned` holds copies, one per kill or purchase, and `stockOf`/`spareOf` in the editor cap what can be worn. Closes Finn's standing complaint that one spike unlocked unlimited spikes. Still to do: a visible bag/inventory screen separate from the palette, and dropping a part you do not want in the world for someone else to pick up.
 - **Battle royale: built, single-machine.** The match runs end to end against bots: cages with bay numbers, gates, the five-minute grace, open combat, looting a kill's parts, the pack-or-spectate choice, the closing fog with its kill band, and a recorded win. Every world parameter is locked for the duration and the island is built from the match seed, so the fight is the same fight for everyone in it. See `src/br.js` and `src/brmesh.js`.
 - **Bones: built.** Tiers, prices, sell-back, the shop in the builder, and tier-matched rarity in the wild with a per-world ceiling. See `src/bones.js`.
 - **Map: doubled to 51200 x 32000** (2026-09-23), which needed the terrain chunked and culled first. Drawing four times the world now costs a quarter less per frame than the old one did.
@@ -12,7 +15,7 @@ Recorded so every daily run knows where the game is headed and keeps the code co
 ### What the online mode still needs (the only part that cannot be built here)
 This repo is one static HTML file with no server, so the twenty-three opponents are bots. Everything a server would decide already goes through one seam:
 - `BR_NET` — the transport contract, with `brNetLocal()` as the only implementation. `join / ready / send / poll / leave`, plain JSON events. A socket implementation is a drop-in.
-- `brHitAllowed(victim, attacker)` — the single place that decides who may hit whom (grace period, packs, self). Client and server call the same function, so they cannot disagree.
+- `brHitAllowed(victim, attacker)` — the single place that decides who may hit whom (cages, packs, self). Client and server call the same function, so they cannot disagree.
 - `BR_RULES` — the frozen ruleset a match runs on, handed down by `join()`. A server replaces it per match; nothing else in the page may write it.
 - `BONES.remote` — set it to an object with `credit/debit` and the local balance is never touched again. Until then balances live in the player's own browser and are trivially editable, which is exactly why a real economy needs the server.
 ### Measured, 2026-09-23, so nobody has to guess again
@@ -41,8 +44,8 @@ Still to decide and build elsewhere: the game server itself, matchmaking, accoun
 ## Online match flow
 1. **Cages (pre-match lobby).** Every player starts in their own dim-lit, enclosed metal cage. The cages sit on a huge ring around the entire map. Each cage has a bay number on top and a giant gate. You can walk around inside your cage until the match starts.
 2. **Gates open.** Everyone leaves their cage at once.
-3. **Grace period (first 5 minutes).** You cannot hurt other online players. You can kill the island's creatures (bots) and loot old skeleton remains for parts (legs, horns, jaws, etc.) to build your beast.
-4. **Open combat.** After the grace period, players can attack and kill each other, as well as bots.
+3. **Open combat, immediately.** There is no grace period: from the moment the gates open, players can attack and kill each other as well as the island's creatures. (Superseded the original five-minute truce, 2026-09-23, at Finn's call.)
+4. **The island empties** five minutes after the gates. Until then it is full of creatures to kill and skeletons to loot for parts (legs, horns, jaws, etc.), so the early match is a choice between building your beast and going straight at people.
 5. **Killing a player:**
    - You eat them and grow slightly in size.
    - You can equip parts from their inventory.
@@ -56,11 +59,11 @@ Still to decide and build elsewhere: the game server itself, matchmaking, accoun
 8. The next match begins.
 
 ## Implications to keep in mind now
-- **Parts as inventory:** loot and equipped body parts must be data that can be sent over the network. Designs are already plain JSON (`genome.design`); keep it that way.
+- **Parts as inventory:** loot and equipped body parts must be data that can be sent over the network. Designs are already plain JSON (`genome.design`); keep it that way. The counted inventory (`PROG.owned`, a plain id-to-count object) is the thing a server has to own, alongside the bones balance: it is as editable from the console as the balance is, and for the same reason.
 - **Skeleton remains as loot:** each remains entry should carry its creature's design parts so they can be picked up (the `REMAINS` list in `src/remains.js` is the hook).
 - **Rules the server decides:** damage must stay deterministic, with the server settling hits so players can't cheat.
   - The core sim is already DOM-free.
-  - Combat goes through `world.hitFilter` (`src/fight.js`), which is the natural place for grace-period and pack rules.
+  - Combat goes through `world.hitFilter` (`src/fight.js`), which is the natural place for the cage and pack rules.
 - **Fog zone:** needs a zone radius over time, a damage-per-second band, and very dense fog rendering (this can reuse the drowning damage path and the fog uniforms).
 - **Online backend (to be decided):** game server, matchmaking, and accounts/leaderboard (wins and winning creatures).
 

@@ -1,6 +1,57 @@
 # 3DGenesis dev log
 
-Build: `dev/3dgenesis-dev-src.tgz` unpacks to the patch pipeline. `bash build.sh` (edit its `cd` to your folder) turns `g3.v3` + `src/patch_*.py` into `g3.html` (= `index.html`) and extracts `core.js` for node tests.
+Build: `dev/3dgenesis-dev-src.tgz` unpacks to the patch pipeline. `bash build.sh` (it cds to its own folder now, so it runs wherever you unpack it) turns `g3.v3` + `src/patch_*.py` into `g3.html` (= `index.html`) and extracts `core.js` for node tests.
+
+## 2026-09-23 (latest): No grace period, and everyone is named
+
+Both of these came in from Finn mid-run.
+
+### The grace period is gone
+The gates go up and the match is live. Any player can hit any other from the first second: `brHitAllowed` no longer has a phase that refuses a player-on-player strike, and the `'grace'` phase does not exist. A match is now `cage -> open -> over`.
+
+What the grace period was actually buying was a **stocked island** to loot, and that is a different thing from a truce, so it is now its own clock. `BR_WILD_SECS` (five minutes past the gates) is when the wildlife thins out and the island empties, whoever is left standing. Walking into open combat with animals still everywhere is the point: you can spend the early match hunting parts, or you can spend it hunting people, and that is a choice rather than a schedule. The HUD says which it is: **LIVE · island empties in 212s**, then **LIVE · players only**.
+
+Bots hunt from the gate rather than from the five-minute mark, so the first minutes have real kills in them now.
+
+### Nameplates
+Every other player in the match carries their name and the health they have left, over their head.
+
+It is a DOM layer over the canvas, not geometry: text is the one thing the instanced renderer cannot draw. It is projected through **the same view-projection matrix the frame was rendered with**, read straight out of `vpM` after the submit, so a plate cannot drift from the body underneath it — no second camera, no interpolation, no lag of one frame.
+
+Three rules keep it from being a wallhack:
+- **Terrain occludes it.** Fourteen height samples along the line from the eye to the top of that animal's head. If the ground rises through that line, no plate. The heightmap is smooth at this scale, so fourteen lookups is enough and costs nothing next to one draw call.
+- **Range.** Nothing past 1400 units (about thirty-five seconds of walking), fading out over the last 420 rather than popping.
+- **The fog.** Once the closing wall is thick enough that you could not see them, the plate goes too.
+
+A packmate's plate is green and a rival's is red, the bar turns bright red under a quarter health, and the plate shrinks and fades with distance so a crowd at range does not shout. Nothing is drawn while the world is paused or the builder is open. Nodes are pooled and only touched when the text or the width actually changes, which matters at 60 fps with 23 of them.
+
+`br.nameWhy(slot)` answers, in one word, why a given player has no plate — `far 2180`, `fog`, `occluded`, `behind`, `offscreen`, `shown`. It exists because the first version of this silently drew nothing and there was no way to tell which rule had eaten it.
+
+### Tested
+`test_br_steps.js` now also checks: the gates open straight into open combat; a player may hit another the moment they do; the wildlife is still there to hunt at that point; the island's own emptying clock is five minutes; a rival across the island has no plate; a rival in view has one, with their name and their real health on it; and a rival behind the camera has none. It replays a full fifteen-minute match as before.
+
+## 2026-09-23 (late): Parts are counted
+
+The oldest wrong thing in the game is fixed. A part used to be a yes/no: the first spike you took off a corpse unlocked "spike" for good, and from then on you could cover a body in them for the price of genome space alone. That is not what taking a part off a dead animal means, and it made the whole loot economy decorative. Kill one animal with one horn and you had horns, plural, forever.
+
+**Parts are an inventory now.** `PROG.owned` maps a part id to how many copies you hold. One kill, one copy. One purchase, one copy. You may wear at most as many as you own.
+
+### The rule, exactly
+```
+stock(id)  = max(copies you own, copies the body carried when the editor opened)
+spare(id)  = stock(id) - copies currently on the design
+```
+The second half of `stock` is the only exception, and it is there because an inherited, evolved or wild-born creature carries parts you never earned: without it the editor would refuse to let you move your own animal's legs. That grant is recomputed from the open design every time and is **never written to storage**, so it cannot be farmed into permanent stock. Everything else in the editor already asked `edCanUse(id, n)` before placing, so mirror mode, limb tips and the random-creature roller all inherited the new arithmetic for free: with one spike, mirror placement is refused and says why.
+
+### What changed around it
+- **The shop sells copies.** A card no longer flips from *buy* to *sell* the moment you own one. It reads *buy another*, keeps its price, and you can buy a fourth leg. Selling takes back one copy at the usual quarter, and refuses a copy the creature is wearing rather than the part outright, so wearing two of three still lets you sell the spare.
+- **The card shows the count.** A `×N` badge on the tile, and a line under it: *you own 3 · 1 to place*, or *you own none*. The tooltip says the same, and distinguishes what you own from what the body arrived with.
+- **Every kill is worth looting.** The match loot picker used to filter out parts you already had and could end with "nothing on it you did not already have". A duplicate is a second copy now, which is the whole point, so the full list is offered and the picker reads *you have 2 · +1*.
+- **Old saves migrate rather than collapse.** A pre-v2 save holds a flat `unlocked` list with no counts. Each entry becomes as many copies as the largest creature you saved actually wears, and never fewer than one, so nothing you already built becomes illegal overnight. A save carrying a four-legged design comes back with four legs. (The pre-v2 free starter parts are still dropped on migration, as they were before.)
+- `PROG.unlocked` is gone entirely, and the build asserts the string appears zero times in the output so nothing can quietly keep using it.
+
+### Tested
+`test_inv_steps.js`, 25 checks against the real page through the real editor: a part you own none of has no stock; one copy places once and refuses the second with the reason; the refusal is the stock and not the genome budget; a second copy lets a second one on; taking one off returns it to the shelf; four purchases give four copies; selling removes one copy and never a worn one; the counts survive a reload; and a v1 save migrates to the counts its own saved body needs and nothing more. `test_shop_steps.js` updated for the new card (buy stays, sell appears) and `test_br_steps.js` replayed a full fifteen-minute match unchanged.
 
 ## 2026-09-23 (night): The map doubles, and rivers
 

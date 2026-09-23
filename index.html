@@ -48,6 +48,10 @@
   .edsell:hover{border-color:#8a6a4a;color:#e8c9a8}
   .edsell.arm{background:rgba(90,50,20,.5);border-color:#b07a3a;color:#ffe0c0}
   .edowned{margin-top:4px;font-size:10.5px;color:#6d97a4;text-align:center}
+  .edstock{margin-top:3px;font-size:10.5px;color:#9fd0bf;text-align:center;letter-spacing:.02em}
+  .edstock.none{color:#7d8f96;opacity:.8}
+  .edhave{position:absolute;right:3px;top:3px;font-size:10.5px;font-weight:700;line-height:1;
+    padding:2px 4px;border-radius:5px;background:rgba(8,26,24,.85);border:1px solid #37625a;color:#bff0dd}
   #edBones{margin-left:6px;font-size:12px;color:#8fb4c4;align-self:center}
   #edBoneN{color:#e8d9a8;font-size:13px}
   body.editing #objective{display:none !important}
@@ -205,6 +209,21 @@
   #brPanel .brk{margin-top:4px;color:#e8d9a8;font-size:12px}
   #brMsg{position:fixed;left:50%;top:150px;transform:translateX(-50%);display:none;padding:12px 24px;border-radius:12px;
     background:rgba(10,18,16,.9);border:1px solid #4a7a6c;color:#eafaf4;font-size:17px;letter-spacing:.08em;text-align:center;z-index:41}
+  #brNames{position:fixed;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:32}
+  .brname{position:absolute;left:0;top:0;transform-origin:50% 100%;will-change:transform;
+    display:none;min-width:86px;max-width:190px;padding:3px 7px 4px;border-radius:7px;
+    background:rgba(6,12,14,.58);border:1px solid rgba(255,120,100,.30);
+    font:600 12px/1.15 system-ui,sans-serif;color:#ffd9d2;text-align:center;
+    text-shadow:0 1px 3px rgba(0,0,0,.9);backdrop-filter:blur(2px)}
+  .brname.pack{border-color:rgba(110,220,180,.42);color:#ccf6e6;background:rgba(6,16,14,.58)}
+  .brname.hurt{border-color:rgba(255,70,50,.75)}
+  .brname .bn{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.01em}
+  .brname .bb{display:block;height:4px;margin-top:3px;border-radius:3px;overflow:hidden;
+    background:rgba(0,0,0,.55);box-shadow:inset 0 0 0 1px rgba(255,255,255,.10)}
+  .brname .bb b{display:block;height:100%;width:100%;border-radius:3px;background:#e2503c;
+    transition:width .12s linear}
+  .brname.pack .bb b{background:#49c98d}
+  .brname.hurt .bb b{background:#ff3a22}
   #brChoice{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);display:none;padding:26px 34px;border-radius:16px;
     background:linear-gradient(180deg,rgba(14,26,24,.98),rgba(6,14,14,.98));border:1px solid #4a7a6c;color:#eafaf4;z-index:60;text-align:center;max-width:460px}
   #brChoice h3{margin:0 0 10px;font-size:19px;letter-spacing:.12em}
@@ -424,6 +443,7 @@
 <div id="brPanel"></div>
 <div id="brMsg"></div>
 <div id="brChoice"></div>
+<div id="brNames"></div>
 <button id="ptab">controls</button>
 <button id="edOpenBtn" title="edit your creature (B)">edit creature (B)</button>
 <div id="panel" class="hidden">
@@ -10417,7 +10437,7 @@ const OBJ_LIST = [
   { title: 'Grow', text: 'Survive long enough to reach full size.', goal: 1, val: () => (player.c ? clamp((player.c._growthAvg || 0) / 0.95, 0, 1) : 0) },
   { title: 'First blood', text: 'Kill another animal.', goal: 1, val: () => OBJS.c.kills },
   { title: 'Endure the dark', text: 'Live through a whole night.', goal: 1, val: () => OBJS.c.nights },
-  { title: 'Adapt', text: 'Take four new body parts from your kills.', goal: 4, val: () => PROG.unlocked.size - OBJS.startUnlocked },
+  { title: 'Adapt', text: 'Take four new body parts from your kills.', goal: 4, val: () => ownedKinds() - OBJS.startUnlocked },
   { title: 'Continue the line', text: 'Mate, and live on as your offspring.', goal: 1, val: () => player.generation - OBJS.startGen },
   { title: 'Above the canopy', text: 'Reach the bare rock high on a mountain.', goal: 1, val: () => (OBJS.high ? 1 : 0) },
   { title: 'Hunt the hunter', text: 'Kill a meat eater.', goal: 1, val: () => OBJS.c.predKills },
@@ -10428,7 +10448,7 @@ const OBJ_LIST = [
 ];
 function objReset() {
   OBJS.idx = 0; OBJS.c = { eaten: 0, kills: 0, predKills: 0, bigKills: 0, nights: 0 };
-  OBJS.startGen = player.generation || 0; OBJS.startUnlocked = PROG.unlocked.size; OBJS.high = false; OBJS.wasNight = false; OBJS.doneAll = false; OBJS.shown = -1;
+  OBJS.startGen = player.generation || 0; OBJS.startUnlocked = ownedKinds(); OBJS.high = false; OBJS.wasNight = false; OBJS.doneAll = false; OBJS.shown = -1;
   objRender();
 }
 function objOnEat() { OBJS.c.eaten++; }
@@ -14399,6 +14419,7 @@ function renderFrame(t) {
   pass.end();
   if (R2on) r2PostPass(enc, fog);
   dev.queue.submit([enc.finish()]);
+  try { brDrawNames(); } catch (e) { if (!renderFrame._nameWarn) { renderFrame._nameWarn = 1; console.warn('br names', e); } }
   return { inst: nInst, plants: nPlant };
 }
 
@@ -15195,7 +15216,27 @@ const PROG_KEY = 'genesis3d.progress.v2';
 const PROG_KEY_OLD = 'genesis3d.progress.v1';
 // parts that used to be free at the start; they are not carried over as earned
 const OLD_STARTERS = new Set(['m_beak', 'm_grazer', 'm_jaws', 'e_round', 'e_slit', 'h_straight', 's_spike', 's_knob', 'l_leg', 'l_thin', 't_paw', 'f_fin', 'd_crest']);
-const PROG = { kills: 0, bones: 0, bought: [], unlocked: new Set(STARTER_ITEMS), saved: [], last: null };
+// PROG.owned maps a part id to how many copies you hold. A part missing
+// from it, or sitting at zero, is locked.
+const PROG = { kills: 0, bones: 0, bought: [], owned: {}, saved: [], last: null };
+for (const id of STARTER_ITEMS) PROG.owned[id] = (PROG.owned[id] | 0) + 1;
+function ownedCount(id) { return SANDBOX ? Infinity : Math.max(0, PROG.owned[id] | 0); }
+// How many different parts you hold at least one of.
+function ownedKinds() { let k = 0; for (const id in PROG.owned) if ((PROG.owned[id] | 0) > 0) k++; return k; }
+function ownedGain(id, n) {
+  if (!VIS[id]) return 0;
+  PROG.owned[id] = Math.max(0, PROG.owned[id] | 0) + Math.max(1, n | 0);
+  saveProgress();
+  return PROG.owned[id];
+}
+function ownedLose(id, n) {
+  n = Math.max(1, n | 0);
+  const have = Math.max(0, PROG.owned[id] | 0);
+  if (have < n) return false;
+  if (have - n > 0) PROG.owned[id] = have - n; else delete PROG.owned[id];
+  saveProgress();
+  return true;
+}
 const SANDBOX = /[?&]sandbox=1/.test(location.search);
 function loadProgress() {
   try {
@@ -15208,7 +15249,25 @@ function loadProgress() {
       PROG.kills = Math.max(0, (o.kills | 0));
       PROG.bones = Math.max(0, (o.bones | 0));
       if (Array.isArray(o.bought)) PROG.bought = o.bought.filter(id => typeof id === 'string');
-      if (Array.isArray(o.unlocked)) for (const id of o.unlocked) if (VIS[id]) PROG.unlocked.add(id);
+      if (o.owned && typeof o.owned === 'object' && !Array.isArray(o.owned)) {
+        for (const id in o.owned) if (VIS[id]) { const n = o.owned[id] | 0; if (n > 0) PROG.owned[id] = n; }
+      } else if (Array.isArray(o.unlocked)) {
+        // Saves from before parts were counted held a flat "unlocked" list.
+        // Turn each entry into a real count: as many copies as the largest
+        // body you saved actually wears, and never fewer than one, so no
+        // creature you already built becomes illegal overnight.
+        const need = {};
+        const scan = (d) => {
+          if (!d) return;
+          const m = {};
+          for (const q of d.parts || []) if (q && q.id) m[q.id] = (m[q.id] || 0) + 1;
+          for (const l of d.limbs || []) { if (!l) continue; if (l.id) m[l.id] = (m[l.id] || 0) + 1; if (l.tip && l.tip.id) m[l.tip.id] = (m[l.tip.id] || 0) + 1; }
+          for (const k in m) need[k] = Math.max(need[k] || 0, m[k]);
+        };
+        if (Array.isArray(o.saved)) for (const sv of o.saved) if (sv && sv.design) scan(sv.design);
+        scan(o.last);
+        for (const id of o.unlocked) if (VIS[id]) PROG.owned[id] = Math.max(1, need[id] || 0);
+      }
       if (Array.isArray(o.saved)) PROG.saved = o.saved.filter(s => s && s.design && s.design.parts).slice(0, 24);
       if (o.last && o.last.parts) PROG.last = o.last;
     }
@@ -15217,7 +15276,7 @@ function loadProgress() {
 function saveProgress() {
   try {
     localStorage.setItem(PROG_KEY, JSON.stringify({
-      kills: PROG.kills, bones: PROG.bones | 0, bought: PROG.bought || [], unlocked: [...PROG.unlocked], saved: PROG.saved, last: PROG.last,
+      kills: PROG.kills, bones: PROG.bones | 0, bought: PROG.bought || [], owned: PROG.owned, saved: PROG.saved, last: PROG.last,
     }));
   } catch (e) { /* storage full or blocked: progress simply is not remembered */ }
 }
@@ -15319,33 +15378,39 @@ function boneSpend(n, why) {
   return true;
 }
 // Buying a part unlocks it for good, exactly as a kill would.
+// Buying adds one copy. You may keep buying: four legs is four purchases.
 function boneBuy(id) {
   if (!VIS[id]) return { ok: false, msg: 'No such part.' };
-  if (isUnlocked(id)) return { ok: false, msg: 'You already own the ' + VIS[id].name + '.' };
+  if (SANDBOX) return { ok: false, msg: 'Sandbox: every part is already yours.' };
   const price = bonePrice(id);
-  if (boneBalance() < price) return { ok: false, msg: 'Not enough bones: the ' + VIS[id].name + ' costs ' + price + '.' };
+  if (boneBalance() < price) return { ok: false, msg: 'Not enough bones: ' + VIS[id].name + ' costs ' + price + '.' };
   if (!boneSpend(price, 'buy:' + id)) return { ok: false, msg: 'Purchase failed.' };
-  PROG.unlocked.add(id);
+  const n = ownedGain(id, 1);
   PROG.bought = PROG.bought || [];
   if (!PROG.bought.includes(id)) PROG.bought.push(id);
   saveProgress();
-  return { ok: true, msg: 'Bought the ' + VIS[id].name + ' for ' + price + ' bones.', price };
+  return { ok: true, msg: 'Bought ' + VIS[id].name + ' for ' + price + ' bones. You have ' + n + '.', price, count: n };
 }
 // Selling gives back a quarter, rounded down, and takes the part off you. A
 // part the body you are editing is actually wearing cannot be sold out from
 // under it.
+// Selling gives back a quarter of one copy. Copies the creature is actually
+// wearing cannot be sold out from under it, so you can only sell the spares.
 function boneSell(id) {
   if (!VIS[id]) return { ok: false, msg: 'No such part.' };
-  if (!PROG.unlocked.has(id)) return { ok: false, msg: 'You do not own the ' + VIS[id].name + '.' };
-  if (ED.des && countItem(ED.des, id) > 0) {
-    return { ok: false, msg: 'Your creature is wearing the ' + VIS[id].name + '. Take it off first.' };
+  const have = Math.max(0, PROG.owned[id] | 0);
+  if (have <= 0) return { ok: false, msg: 'You have no ' + VIS[id].name + ' to sell.' };
+  const worn = ED.des ? countItem(ED.des, id) : 0;
+  if (have - worn <= 0) {
+    return { ok: false, msg: 'Your creature is wearing every ' + VIS[id].name + ' you own. Take one off first.' };
   }
   const back = boneRefund(id);
-  PROG.unlocked.delete(id);
-  if (PROG.bought) PROG.bought = PROG.bought.filter(q => q !== id);
+  if (!ownedLose(id, 1)) return { ok: false, msg: 'Sale failed.' };
+  const left = Math.max(0, PROG.owned[id] | 0);
+  if (!left && PROG.bought) PROG.bought = PROG.bought.filter(q => q !== id);
   boneEarn(back, 'sell:' + id);
   saveProgress();
-  return { ok: true, msg: 'Sold the ' + VIS[id].name + ' for ' + back + ' bones.', back };
+  return { ok: true, msg: 'Sold one ' + VIS[id].name + ' for ' + back + ' bones. ' + (left ? left + ' left.' : 'None left.'), back, count: left };
 }
 
 // ---- per-world rarity ------------------------------------------------------
@@ -15439,19 +15504,30 @@ function countItem(des, id) {
   for (const l of des.limbs || []) { if (l.id === id) n++; if (l.tip && l.tip.id === id) n++; }
   return n;
 }
+// The most copies of a part that may be on the body at once: what you own,
+// or what the body was already carrying when the editor opened, whichever is
+// larger. The grant half keeps an inherited or evolved body rearrangeable and
+// is never written to storage, so it cannot be turned into stock.
+function stockOf(id) {
+  if (SANDBOX) return Infinity;
+  return Math.max(Math.max(0, PROG.owned[id] | 0), (ED.grantCount && ED.grantCount[id]) || 0);
+}
+// How many more you may place right now.
 function spareOf(id) {
-  if (SANDBOX || PROG.unlocked.has(id)) return Infinity;
+  if (SANDBOX) return Infinity;
   if (!ED.des) return 0;
-  return Math.max(0, ((ED.grantCount && ED.grantCount[id]) || 0) - countItem(ED.des, id));
+  return Math.max(0, stockOf(id) - countItem(ED.des, id));
 }
 const itemAvailable = (id) => spareOf(id) > 0;
-const isUnlocked = (id) => SANDBOX || PROG.unlocked.has(id);
+const isUnlocked = (id) => SANDBOX || (PROG.owned[id] | 0) > 0;
 function edCanUse(id, n) {
   const sp = spareOf(id);
   if (sp >= n) return true;
-  const own = (ED.grantCount && ED.grantCount[id]) || 0;
-  edFlash(own ? (sp > 0 && n > 1 ? 'You only have one more of these. Turn mirror off, or kill animals that have one to unlock it.' : 'Your body only has ' + own + ' of these. Kill an animal that has one to unlock more.')
-              : 'Locked. Kill an animal that has one and choose it to unlock it.');
+  const st = stockOf(id), nm = (VIS[id] && VIS[id].name) || id;
+  edFlash(
+    st <= 0 ? 'Locked. Kill an animal wearing ' + nm + ', or buy it on its card.'
+    : sp > 0 && n > 1 ? 'Only ' + sp + ' spare. Turn mirror off, or get another.'
+    : 'All ' + st + ' of your ' + nm + ' already on the body. Kill or buy another to add more.');
   return false;
 }
 function grantCountOf(d) {
@@ -16044,7 +16120,7 @@ function thumbItem(id, cols) {
 // trimmed to fit your genome space.
 function edRandomize() {
   const cur = ED.des;
-  const allow = (id) => (SANDBOX || PROG.unlocked.has(id)) ? Infinity : ((ED.grantCount && ED.grantCount[id]) || 0);
+  const allow = (id) => stockOf(id);
   const isMouth = (id) => C.ITEM_SIM[id] && C.ITEM_SIM[id].t === 'MOUTH';
   const curMouth = (cur.parts || []).find(p => isMouth(p.id));
   const rng = C.makeRNG((Math.random() * 4294967296) >>> 0);
@@ -16275,21 +16351,26 @@ function edRefreshUI() {
     for (const id of ids) {
       const av = itemAvailable(id);
       const v = VIS[id];
-      const owned = isUnlocked(id);
+      const nOwn = SANDBOX ? Infinity : Math.max(0, PROG.owned[id] | 0);
+      const worn = ED.des ? countItem(ED.des, id) : 0;
+      const sp = spareOf(id);
       const tier = boneTier(id), price = bonePrice(id), col = BONE_TIER_COL[tier];
       const bal = boneBalance();
-      const buyable = !owned && !SANDBOX && !brLocked();
+      const buyable = !SANDBOX && !brLocked();
+      const sellable = !SANDBOX && !brLocked() && nOwn - worn > 0;
       const selling = ED.sellArm === id;
       html += `<div class="edcard${av ? '' : ' locked'}" data-item="${id}">` +
-        `<div class="edtile item${av ? '' : ' locked'}" data-item="${id}">${tileHTML(id, av, `<span class="edcost">${itemCost(id)}</span>`)}</div>` +
+        `<div class="edtile item${av ? '' : ' locked'}" data-item="${id}">${tileHTML(id, av, `<span class="edcost">${itemCost(id)}</span>`)}` +
+          `${nOwn > 0 && nOwn !== Infinity ? `<span class="edhave">×${nOwn}</span>` : ''}</div>` +
         `<div class="edcname">${v.name}</div><div class="edcuse">${v.use || effectText(id) || ''}</div>` +
         `<div class="edccost">${itemCost(id)} genome space · <span class="edtierb" style="color:${col}">${BONE_TIER_LABEL[tier]}</span></div>` +
+        (SANDBOX ? '<div class="edowned">sandbox &middot; unlimited</div>'
+          : `<div class="edstock${nOwn ? '' : ' none'}">${nOwn ? 'you own ' + nOwn + ' &middot; ' + (sp > 0 ? sp + ' to place' : 'all worn') : 'you own none'}</div>`) +
         (buyable
-          ? `<button class="edbuy${bal >= price ? '' : ' poor'}" data-buy="${id}" style="border-color:${col}"><span>buy</span><b style="color:${col}">${price}</b></button>`
-          : owned && !SANDBOX && !brLocked()
-            ? `<button class="edsell${selling ? ' arm' : ''}" data-sell="${id}">${selling ? 'sell for ' + boneRefund(id) + '?' : 'owned &middot; sell ' + boneRefund(id)}</button>`
-            : owned ? '<div class="edowned">yours</div>'
-                    : `<div class="edowned locked">locked &middot; not for sale in a match</div>`) +
+          ? `<button class="edbuy${bal >= price ? '' : ' poor'}" data-buy="${id}" style="border-color:${col}"><span>${nOwn ? 'buy another' : 'buy'}</span><b style="color:${col}">${price}</b></button>` : '') +
+        (sellable
+          ? `<button class="edsell${selling ? ' arm' : ''}" data-sell="${id}">${selling ? 'sell one for ' + boneRefund(id) + '?' : 'sell one &middot; ' + boneRefund(id)}</button>` : '') +
+        (!buyable && !sellable && !SANDBOX ? '<div class="edowned locked">no trading in a match</div>' : '') +
         `</div>`;
     }
     html += '</div>';
@@ -16389,10 +16470,12 @@ function edShowTip(id, el) {
   const v = VIS[id]; if (!v) return;
   const av = itemAvailable(id);
   const tip = ED.ui.tip;
-  const sp = spareOf(id), own = (ED.grantCount && ED.grantCount[id]) || 0;
+  const sp = spareOf(id), nOwn = Math.max(0, PROG.owned[id] | 0), grant = (ED.grantCount && ED.grantCount[id]) || 0;
   tip.innerHTML = `<b>${v.name}</b><span class="c">genome space ${itemCost(id)}</span><div>${effectText(id)}</div>` +
-    (sp === Infinity ? '' : own ? `<div class="lk">not unlocked: your body has ${own}, ${sp} left to place. kill an animal that has one to unlock it</div>`
-                                : '<div class="lk">locked: kill an animal that has one, or buy it on this card for ' + bonePrice(id) + ' bones (' + BONE_TIER_LABEL[boneTier(id)] + ')</div>');
+    (sp === Infinity ? ''
+      : nOwn > 0 ? `<div class="lk">you own ${nOwn}${grant > nOwn ? ' (your body came with ' + grant + ')' : ''}, ${sp} left to place</div>`
+      : grant > 0 ? `<div class="lk">not yours: the body you came in with has ${grant}, ${sp} left to place. kill an animal wearing one to keep it</div>`
+      : '<div class="lk">locked: kill an animal that has one, or buy it on this card for ' + bonePrice(id) + ' bones (' + BONE_TIER_LABEL[boneTier(id)] + ')</div>');
   const r = el.getBoundingClientRect(), pr = ED.ui.pal.getBoundingClientRect();
   tip.style.display = 'block';
   const z = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ui')) || 1;
@@ -16804,7 +16887,7 @@ function nearestSwimmable(x, y) {
 // or one pack is left.
 //
 // WHAT IS REAL HERE AND WHAT IS NOT
-// Every rule below -- the grace period, the zone, damage, looting, packs, the
+// Every rule below -- the cage, the zone, damage, looting, packs, the
 // win -- is real and runs to completion. The opponents are bots, because this
 // build has no game server: it is a single static HTML file. Everything that
 // would have to be decided by a server goes through BR_NET instead of being
@@ -16822,7 +16905,10 @@ function nearestSwimmable(x, y) {
 // and nothing outside it decides a match rule.
 // =====================================================================
 const BR_MATCH_SECS = 15 * 60;
-const BR_GRACE_SECS = 5 * 60;
+// There is no grace period. The gates go up and the match is live.
+// What the grace period was actually for was a stocked island: this is how
+// long the wildlife stays before it thins out and only players are left.
+const BR_WILD_SECS = 5 * 60;
 const BR_CAGE_SECS = 30;             // you walk around your cage before the gates go up
 const BR_BOTS = 23;                  // plus you: 24 bays on the ring
 const BR_CAGE_R = 34;                // half-width of a cage, world units
@@ -16927,7 +17013,7 @@ function brSyncPanel() {
 }
 
 const BR = {
-  on: false, phase: 'off',           // off | cage | grace | open | over
+  on: false, phase: 'off',           // off | cage | open | over
   t: 0, matchId: null, slot: 0, seed: 0,
   bays: [],                          // { n, x, z, y, yaw } one per player
   players: [],                       // { slot, name, bot, alive, pack, kills, x, z, c }
@@ -16960,8 +17046,8 @@ function brNetLocal() {
     },
     ready() { S.started = true; S.queue.push({ type: 'start', t: 0 }); },
     // An intent from this client. A server would validate it; locally the only
-    // thing that can be refused is a hit inside the grace period, which is
-    // enforced in brHitAllowed() so the client and a server agree on the rule.
+    // thing that can be refused is a hit on a caged or packmate target, which
+    // is enforced in brHitAllowed() so the client and a server agree.
     send(ev) { S.queue.push(Object.assign({ from: 0 }, ev)); },
     poll() { const q = S.queue; S.queue = []; return q; },
     leave() { S.started = false; S.queue.length = 0; },
@@ -17121,6 +17207,7 @@ function brStart(net) {
   return brBegin();
 }
 function brStop() {
+  try { brNamesHide(0); } catch (e) { /* the layer may not exist yet */ }
   if (BR.net) BR.net.leave();
   BR.on = false; BR.arming = false; BR.phase = 'off'; BR.net = null;
   BR.players.length = 0; BR.bays.length = 0;
@@ -17165,7 +17252,6 @@ function brHitAllowed(victim, att) {
   // island's own wildlife is fair game in both directions.
   if (BR.phase === 'cage') return vs == null;
   if (vs == null || as == null) return true;                 // wildlife: always fair game
-  if (BR.phase === 'grace') return false;                    // no player may touch another yet
   const vp = BR.players[vs], ap = BR.players[as];
   if (!vp || !ap) return true;
   if (vp.pack !== BR_PACK_NONE && vp.pack === ap.pack) return false;  // packmates cannot hurt each other
@@ -17259,8 +17345,8 @@ function brLootDesign(design, from) {
     if (VIS[lb.id]) ids.add(lb.id);
     if (lb.tip && VIS[lb.tip.id]) ids.add(lb.tip.id);
   }
-  const opts = [...ids].filter(id => !PROG.unlocked.has(id));
-  if (!opts.length) { brSay('You ate ' + from + '. Nothing on it you did not already have.', 2600); return; }
+  const opts = [...ids];
+  if (!opts.length) { brSay('You ate ' + from + '. There was nothing on it to take.', 2600); return; }
   player.picker = { opts: opts.slice(0, 6), label: 'You killed ' + from + '. Take one of their parts', t0: performance.now(), items: true };
   renderPicker();
 }
@@ -17355,14 +17441,17 @@ function brTick(dt) {
   BR.t += dt;
   // phase
   if (BR.phase === 'cage' && BR.t >= BR_CAGE_SECS) {
-    BR.phase = 'grace';
-    brSay('GATES OPEN. No player can hurt another for ' + Math.round(BR_GRACE_SECS / 60) + ' minutes. Hunt the island and take its parts.', 7000);
-  } else if (BR.phase === 'grace' && BR.t >= BR_CAGE_SECS + BR_GRACE_SECS) {
     BR.phase = 'open';
     BR._cullAcc = 0;
-    brSay('OPEN SEASON. The island empties. Only players are left.', 7000);
+    BR._wildSaid = false;
+    brSay('GATES OPEN. Everyone can kill everyone. Hunt the island for parts while it lasts.', 7000);
   }
-  if (BR.phase === 'open') brCullWildlife(dt);
+  // The island empties partway through, whoever is left alive. It is a clock
+  // on the loot, not a truce.
+  if (BR.phase === 'open' && BR.t >= BR_CAGE_SECS + BR_WILD_SECS) {
+    if (!BR._wildSaid) { BR._wildSaid = true; brSay('THE ISLAND EMPTIES. Only players are left.', 7000); }
+    brCullWildlife(dt);
+  }
   // the gate slides up over two seconds once the cage phase ends
   const want = BR.phase === 'cage' ? 0 : 1;
   BR.gateY += clamp(want - BR.gateY, -dt * 0.5, dt * 0.5);
@@ -17489,9 +17578,9 @@ function brZoneDamage(dt) {
     }
   }
 }
-// Bots: run for the middle of the zone, fight what is in reach once the grace
-// period is over, and take the fog's damage like everyone else. Deliberately
-// simple -- they stand in for players, they are not the point.
+// Bots: run for the middle of the zone, fight whatever is in reach from the
+// moment the gates open, and take the fog's damage like everyone else.
+// Deliberately simple -- they stand in for players, they are not the point.
 function brBotTick(dt) {
   for (const p of BR.players) {
     if (p.bot === false || !p.alive) continue;
@@ -18109,6 +18198,98 @@ function brRenderChoice() {
     b.onclick = () => { el.style.display = 'none'; el.innerHTML = ''; el.dataset.t = ''; brChoose(b.getAttribute('data-brjoin') === '1'); };
   }
 }
+// ---- nameplates ------------------------------------------------------------
+// Every other player in the match, named, with the health they have left, over
+// their head. Text is the one thing the instanced renderer cannot draw, so
+// this is a DOM layer, projected through the SAME view-projection matrix the
+// frame was rendered with: a plate cannot drift from the body it belongs to.
+//
+// It is not a wallhack. A plate is dropped when terrain stands between the
+// camera and the body, when the target is beyond BR_NAME_FAR, and when the
+// closing fog is thick enough that you could not see them anyway.
+const BR_NAME_FAR = 1400;          // world units; a walk is about 40 a second
+const BR_NAME_FADE = 420;          // the last stretch fades out rather than popping
+const BR_NAME_SAMPLES = 14;        // terrain samples along the line of sight
+const BRN = { pool: [], box: null };
+// True when the ground rises through the line from the eye to the target.
+// Sampled rather than marched: the heightmap is smooth at this scale, and 14
+// lookups per player is nothing next to one draw call.
+function brNameOccluded(ex, ey, ez, tx, ty, tz) {
+  for (let i = 1; i < BR_NAME_SAMPLES; i++) {
+    const u = i / BR_NAME_SAMPLES;
+    const x = ex + (tx - ex) * u, y = ey + (ty - ey) * u, z = ez + (tz - ez) * u;
+    if (groundAt(x, z) > y + 2) return true;
+  }
+  return false;
+}
+function brNameNode(i) {
+  if (BRN.pool[i]) return BRN.pool[i];
+  const el = document.createElement('div');
+  el.className = 'brname';
+  el.innerHTML = '<span class="bn"></span><i class="bb"><b></b></i>';
+  el.style.display = 'none';
+  BRN.box.appendChild(el);
+  const node = { el, name: el.querySelector('.bn'), bar: el.querySelector('.bb'), fill: el.querySelector('.bb b'),
+                 lastName: '', lastF: -1, lastCls: '' };
+  BRN.pool[i] = node;
+  return node;
+}
+function brDrawNames() {
+  if (!BRN.box) BRN.box = document.getElementById('brNames');
+  const box = BRN.box;
+  if (!box) return;
+  // Nothing over a frozen screen: not while paused, and not while the builder
+  // is open over the top of the world.
+  if (!BR.on || BR.phase === 'off' || paused || (typeof ED !== 'undefined' && ED.open)) { brNamesHide(0); return; }
+  const rect = canvas.getBoundingClientRect();
+  const ex = player.camX, ey = player.camY, ez = player.camZ;
+  let n = 0;
+  for (const q of BR.players) {
+    if (q.slot === BR.slot) continue;                       // not your own head
+    if (!q.alive || !q.c || !q.c.alive) continue;
+    const c = q.c;
+    const dx = c.x - ex, dz = c.y - ez;
+    const dist = Math.hypot(dx, dz);
+    if (dist > BR_NAME_FAR) continue;
+    // the fog takes your sight before it takes your health
+    if (typeof brFogAt === 'function' && brFogAt(c.x, c.y) > 0.35) continue;
+    const ty = fightTopY(c) + 14;
+    if (brNameOccluded(ex, ey, ez, c.x, ty, c.y)) continue;
+    // project through the frame's own view-projection
+    const wx = vpM[0] * c.x + vpM[4] * ty + vpM[8] * c.y + vpM[12];
+    const wy = vpM[1] * c.x + vpM[5] * ty + vpM[9] * c.y + vpM[13];
+    const ww = vpM[3] * c.x + vpM[7] * ty + vpM[11] * c.y + vpM[15];
+    if (!(ww > 0.001)) continue;                            // behind the camera
+    const ndcX = wx / ww, ndcY = wy / ww;
+    if (ndcX < -1.3 || ndcX > 1.3 || ndcY < -1.3 || ndcY > 1.3) continue;
+    const sx = (ndcX * 0.5 + 0.5) * rect.width;
+    const sy = (1 - (ndcY * 0.5 + 0.5)) * rect.height;
+    const node = brNameNode(n++);
+    const f = clamp(c.energy / Math.max(1, c.ph.storage), 0, 1);
+    const me = BR.players[BR.slot];
+    const friend = !!(me && q.pack !== BR_PACK_NONE && (q.pack === me.pack || q.pack === BR.slot || (me.pack !== BR_PACK_NONE && me.pack === q.slot)));
+    const cls = 'brname' + (friend ? ' pack' : '') + (f <= 0.25 ? ' hurt' : '');
+    if (node.lastCls !== cls) { node.el.className = cls; node.lastCls = cls; }
+    if (node.lastName !== q.name) { node.name.textContent = q.name; node.lastName = q.name; }
+    const pct = Math.round(f * 100);
+    if (node.lastF !== pct) { node.fill.style.width = pct + '%'; node.lastF = pct; }
+    // smaller and fainter with distance, so a crowd at range does not shout
+    const k = clamp(1 - (dist - (BR_NAME_FAR - BR_NAME_FADE)) / BR_NAME_FADE, 0, 1);
+    const scale = clamp(1.05 - dist / (BR_NAME_FAR * 1.5), 0.6, 1.05);
+    node.el.style.transform = 'translate(-50%,-100%) translate(' + sx.toFixed(1) + 'px,' + sy.toFixed(1) + 'px) scale(' + scale.toFixed(2) + ')';
+    node.el.style.opacity = (0.35 + 0.65 * k).toFixed(2);
+    node.el.style.display = 'block';
+  }
+  brNamesHide(n);
+}
+function brNamesHide(from) {
+  for (let i = from; i < BRN.pool.length; i++) {
+    const nd = BRN.pool[i];
+    if (nd && nd.el.style.display !== 'none') nd.el.style.display = 'none';
+  }
+}
+
+// ---- HUD -------------------------------------------------------------------
 function brHudHtml() {
   if (!BR.on) return '';
   const a = brAliveCount();
@@ -18117,8 +18298,10 @@ function brHudHtml() {
   const me = BR.players[BR.slot];
   let phase = '';
   if (BR.phase === 'cage') phase = 'IN THE CAGE · gate in ' + Math.ceil(BR_CAGE_SECS - BR.t) + 's';
-  else if (BR.phase === 'grace') phase = 'GRACE · players safe for ' + Math.ceil(BR_CAGE_SECS + BR_GRACE_SECS - BR.t) + 's';
-  else if (BR.phase === 'open') phase = 'OPEN SEASON';
+  else if (BR.phase === 'open') {
+    const wl = Math.ceil(BR_CAGE_SECS + BR_WILD_SECS - BR.t);
+    phase = wl > 0 ? 'LIVE · island empties in ' + wl + 's' : 'LIVE · players only';
+  }
   else phase = 'MATCH OVER';
   const d = player.c ? Math.hypot(player.c.x - BR.zone.cx, player.c.y - BR.zone.cz) : 0;
   const out = Math.max(0, d - BR.zone.r);
@@ -18305,9 +18488,11 @@ function renderPicker() {
   if (!ED.thumbsReady) edMakeThumbs().then(() => { if (player.picker === pk) renderPicker(); });
   el.innerHTML = '<div class="ptitle">' + pk.label + '</div><div class="pgrid">' +
     pk.opts.map((id, i) => {
-      const own = PROG.unlocked.has(id) || SANDBOX;
+      // Every option is worth taking now: a part you already hold is a
+      // second copy, which is one more you can wear.
+      const n = SANDBOX ? 0 : Math.max(0, PROG.owned[id] | 0);
       const th = ED.thumbs[id];
-      return `<div class="popt2${own ? ' own' : ''}" data-pick="${i + 1}"><b>${i + 1}</b>${th ? `<img src="${th}" alt="">` : ''}<span>${VIS[id].name}</span><em>${own ? 'already yours' : 'new'}</em></div>`;
+      return `<div class="popt2" data-pick="${i + 1}"><b>${i + 1}</b>${th ? `<img src="${th}" alt="">` : ''}<span>${VIS[id].name}</span><em>${SANDBOX ? 'sandbox' : n ? 'you have ' + n + ' &middot; +1' : 'new'}</em></div>`;
     }).join('') + '</div><div class="pskip" data-pick="0"><b>0</b> take nothing</div>';
   el.style.display = 'block';
   for (const o of el.querySelectorAll('[data-pick]')) o.onclick = () => choosePicked(+o.getAttribute('data-pick'));
@@ -18319,9 +18504,8 @@ function choosePicked(i) {
   if (i === 0) { toast('Took nothing. Your genome space still grew.', 1800); return; }
   const id = pk.opts[i - 1];
   if (!id) return;
-  const was = PROG.unlocked.has(id);
-  PROG.unlocked.add(id); saveProgress();
-  toast(was ? 'You already had the ' + VIS[id].name + '. Genome space still grew.' : 'Unlocked the ' + VIS[id].name + '. Press B to add it to your body.', 3600);
+  const n = ownedGain(id, 1);
+  toast('Took ' + VIS[id].name + '. You now have ' + n + '. Press B to put ' + (n > 1 ? 'one' : 'it') + ' on.', 3600);
 }
 function edHudLine() {
   const el = $('v-genome');
@@ -18331,7 +18515,7 @@ function edHudLine() {
   const used = des ? C.designCost(des) : null;
   const cap = des ? edCapacity(des) : null;
   el.innerHTML = (des ? `<span class="k">genome</span> <span class="v">${used}/${cap}</span> &middot; ` : '') +
-    `<span class="k">kills</span> <span class="v">${PROG.kills}</span> &middot; <span class="k">parts</span> <span class="v">${PROG.unlocked.size}/${Object.keys(VIS).length}</span>` +
+    `<span class="k">kills</span> <span class="v">${PROG.kills}</span> &middot; <span class="k">parts</span> <span class="v">${ownedKinds()}/${Object.keys(VIS).length}</span>` +
     (c && c.hurtT > 0 ? `<br><span style="color:#ff8a76">under attack: cannot eat for ${c.hurtT.toFixed(1)} s</span>` : '');
 }
 
@@ -18543,6 +18727,31 @@ window.__G3D = {
     radiusAt: (t) => brZoneRadiusAt(t),
     get deadChoice() { return BR.deadChoice; },
     renderHud: () => brRenderHud(),
+    wildSecs: BR_WILD_SECS,
+    names: () => [...document.querySelectorAll('#brNames .brname')]
+      .filter(e => e.style.display !== 'none')
+      .map(e => ({ name: e.querySelector('.bn').textContent, hp: e.querySelector('.bb b').style.width, pack: e.classList.contains('pack') })),
+    drawNames: () => brDrawNames(),
+    // why a given player has no plate, so a missing one can be diagnosed
+    // rather than guessed at
+    nameWhy: (slot) => {
+      const q = BR.players[slot | 0];
+      if (!q) return 'no such player';
+      if (q.slot === BR.slot) return 'self';
+      if (!q.alive || !q.c || !q.c.alive) return 'dead';
+      const c = q.c, ex = player.camX, ey = player.camY, ez = player.camZ;
+      const dist = Math.hypot(c.x - ex, c.y - ez);
+      if (dist > BR_NAME_FAR) return 'far ' + Math.round(dist);
+      if (brFogAt(c.x, c.y) > 0.35) return 'fog';
+      const ty = fightTopY(c) + 14;
+      if (brNameOccluded(ex, ey, ez, c.x, ty, c.y)) return 'occluded';
+      const ww = vpM[3] * c.x + vpM[7] * ty + vpM[11] * c.y + vpM[15];
+      if (!(ww > 0.001)) return 'behind w=' + ww.toFixed(3);
+      const ndcX = (vpM[0] * c.x + vpM[4] * ty + vpM[8] * c.y + vpM[12]) / ww;
+      const ndcY = (vpM[1] * c.x + vpM[5] * ty + vpM[9] * c.y + vpM[13]) / ww;
+      if (ndcX < -1.3 || ndcX > 1.3 || ndcY < -1.3 || ndcY > 1.3) return 'offscreen ' + ndcX.toFixed(2) + ',' + ndcY.toFixed(2);
+      return 'shown';
+    },
   },
   bones: {
     get balance() { return boneBalance(); },
@@ -18551,8 +18760,15 @@ window.__G3D = {
     buy: (id) => boneBuy(id), sell: (id) => boneSell(id),
     price: (id) => bonePrice(id), tier: (id) => boneTier(id), refund: (id) => boneRefund(id),
     audit: () => boneAuditTiers(), perKill: BONES_PER_KILL,
-    reset: () => { PROG.bones = 0; PROG.unlocked = new Set(); PROG.bought = []; ED.sellArm = null; saveProgress(); },
-    grant: (id) => { PROG.unlocked.add(id); saveProgress(); },
+    reset: () => { PROG.bones = 0; PROG.owned = {}; PROG.bought = []; ED.sellArm = null; saveProgress(); },
+    grant: (id, n) => { ownedGain(id, n || 1); },
+    count: (id) => Math.max(0, PROG.owned[id] | 0),
+    stock: (id) => stockOf(id),
+    spare: (id) => spareOf(id),
+    kinds: () => ownedKinds(),
+    canUse: (id, n) => { const sp = spareOf(id); return sp >= (n || 1); },
+    take: (id) => { const n = ownedGain(id, 1); return n; },
+    wornCount: (id) => (ED.des ? countItem(ED.des, id) : 0),
     // the palette IS the shop now
     tab: (t) => { ED.tab = t; edRefreshUI(); },
     buyButtons: () => [...document.querySelectorAll('#edGrid [data-buy]')].map(b => b.getAttribute('data-buy')),
@@ -18567,6 +18783,44 @@ window.__G3D = {
     refresh: () => edRefreshUI(),
   },
   openEditor: (m) => openEditor(m || 'game'),
+  inv: {
+    granted: (id) => (ED.grantCount && ED.grantCount[id]) || 0,
+    space: () => edSpaceLeft(),
+    addSpace: (kills) => { PROG.kills += Math.max(1, kills | 0); saveProgress(); edRefreshUI(); return edSpaceLeft(); },
+    // a part of this category that the open body is not already wearing and
+    // you own none of, so a test starts from a true zero
+    pickUnowned: (cat) => {
+      for (const id of Object.keys(VIS)) {
+        if (VIS[id].cat !== cat) continue;
+        if ((PROG.owned[id] | 0) > 0) continue;
+        if ((ED.grantCount && ED.grantCount[id]) || 0) continue;
+        if (!C.ITEM_SIM[id]) continue;
+        return id;
+      }
+      return null;
+    },
+    hit: (i) => {
+      if (!ED.des) return null;
+      const sk = designGeo(ED.des).sk, n = sk.balls.length;
+      const k = sk.balls[Math.max(0, Math.min(n - 1, i | 0))];
+      return C.raySkin(sk, k.x, k.y + 10, k.z, 0, -1, 0, 40);
+    },
+    place: (id, i) => {
+      const h = window.__G3D.inv.hit(i == null ? 1 : i);
+      if (!h) return false;
+      const sim = C.ITEM_SIM[id];
+      if (!sim) return false;
+      return sim.t === 'LIMB' ? edAddLimb(id, h) : edAddPart(id, h);
+    },
+    remove: (id) => {
+      if (!ED.des) return false;
+      const ps = ED.des.parts || [];
+      for (let i = ps.length - 1; i >= 0; i--) if (ps[i].id === id) { ED.des.parts.splice(i, 1); edTouch(); edRefreshUI(); return true; }
+      const ls = ED.des.limbs || [];
+      for (let i = ls.length - 1; i >= 0; i--) if (ls[i].id === id) { ED.des.limbs.splice(i, 1); edTouch(); edRefreshUI(); return true; }
+      return false;
+    },
+  },
   beginPlay: () => menuStart(),
   get sea() { return SEA; },
   get seaShoals() { return SEA.shoals.length; },
