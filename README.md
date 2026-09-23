@@ -39,4 +39,8 @@ Your design is a real genome. Your kin and offspring inherit it with small mutat
 - **No grace period.** The gates open and the match is live: anyone can kill anyone from the first second.
 - **The island empties five minutes after the gates.** Until then it is full of animals to hunt and skeletons to loot, so the opening is a choice between building your beast and going straight at people.
 - **Every other player carries their name and their health** over their head. Terrain hides a plate, so it is not a wallhack, and so do distance and the closing fog.
-- **The fog closes** at a constant rate against a walking speed four times faster, and the last ring is a real arena rather than a pinprick.
+- **The fog closes** at a rate you can outwalk, and the last ring is a real arena rather than a pinprick.
+- **Your pack cannot be hurt.** There is no attack key on a packmate, their marker is green, and on the minimap they are blue.
+- **Search the bodies.** Old carcasses lie all over the island, each carrying the parts it died with. Walk up to one and press **V** to take one part off it. A body can be searched once.
+- **The fog is not a circle.** Its edge wanders, its centre drifts, and the last ring lands somewhere different every match.
+

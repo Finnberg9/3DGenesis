@@ -2,6 +2,53 @@
 
 Build: `dev/3dgenesis-dev-src.tgz` unpacks to the patch pipeline. `bash build.sh` (it cds to its own folder now, so it runs wherever you unpack it) turns `g3.v3` + `src/patch_*.py` into `g3.html` (= `index.html`) and extracts `core.js` for node tests.
 
+## 2026-09-23 (evening): Packs, carcasses, the zone, flight, and a clock running double
+
+All of these came in from Finn while playing.
+
+### You cannot kill your own, and now the interface says so
+The rule had been in `brHitAllowed` since packs were built, but nothing in front of the player said so: you were shown an attack prompt, a red marker and a red dot for a packmate, you swung, and nothing happened. A rule the interface contradicts is a rule the player does not believe in.
+
+One predicate, `packFriend()`, answers whose a creature is, and `canAttackTarget()` gates the affordance on **the same filter the damage goes through**, so what the interface offers and what a swing can do are one decision rather than two that can drift apart.
+- **The attack key is not there** on a packmate. No F, no X, no "hits to kill". The line reads `YOUR PACK · <their name>` and, where the keys were, *you cannot hurt your own*.
+- Swinging at one is refused outright and costs no stamina, rather than playing the animation into nothing.
+- The marker over them is green, the lock-on reticle is green, and **on the minimap they are blue dots, a size larger, drawn over everything else**. A red dot means something you can kill; yours are never that.
+
+### Carcasses, and searching a body
+The island only had bones where something had died while you were watching, which in the opening minutes of a match is nowhere.
+
+There is a **carcass field** now, streamed and deterministic the way the foliage is: one candidate per 1150-unit cell, presence and position and body rolled from the world seed, built only while you are near and dropped again when you leave, one skeleton a frame so walking into new ground never costs a hitch. That covers the whole 51200 x 32000 island for the cost of the four or five in sight, and every player in a match finds the same bodies in the same places.
+
+Each one carries a real design from the same generator wild animals come from, at the world's own rarity ceiling, so what is lying there is a plausible dead animal and the parts on it are worth having. Measured on one island: bodies carrying 4, 8, 8 and 10 parts within sight of the spawn.
+
+**V searches a body.** You get one part off it, it goes into your inventory as a copy, and the body is picked clean for good. A pale marker floats over an unsearched body in reach, and the action prompt carries `V search the body at your feet · 8 parts` even while something living is also in front of you. Fresh kills work the same way: `remainsAdd` now records the design, which is the roadmap's own hook finally wired up.
+
+### The zone is not a circle, and it does not end in the middle
+It was a perfect circle centred on the exact middle of the map, so every match ended on the same ground.
+- **A seeded wobble runs around the edge** — three lobes of different periods, each turning at its own rate — so the wall bulges on one bearing and lags on another and the shape lives. The edge is now a function of bearing as well as time, and the damage, the cloud wall and the minimap all ask the same function, so they cannot disagree.
+- **The final ring lands somewhere else every match**: a seeded point chosen for dry land, and the centre **drifts** from where it started to where it will finish as the wall closes, so the safe ground slides across the island and standing still is never the answer.
+- The start is off-centre too.
+- The minimap draws the real shape, 96 points around the true boundary, including where it is heading in 45 seconds — drift and all.
+
+**The fog stopped killing anyone, and that was this change's fault.** Moving the ring off-centre pushed the furthest bay further out, while the close rate was a fixed 11 units a second chosen against the old, tighter start. Measured: a full fifteen-minute match ended at radius 10852 with not one player ever outside the wall. The opening hold is cut from 150 seconds to 75 (the cages last thirty; holding for a hundred and fifty left the first sixth of the match static) and the speed limit is raised to 22 units a second — still about half a walking pace, so it remains outrunnable, but it now finishes the job. Measured after: the ring closes 20219 to 4967, players are in the fog from the ten-minute mark on, and the field goes from 24 to 1.
+
+**The fog on the minimap is weather, not a diagram.** It was a half-transparent wash with a hard white ring on top, which read as a compass circle over a map you could still see through. It is a solid grey mass now — under the cloud there is nothing to see, so the map shows nothing — and its inner boundary is a soft outline rather than a drawn ring.
+
+### Flying followed the ground
+Altitude is stored as height **above the ground**, which is the right thing to store, but nothing took the ground back out of it while you were airborne. Crossing a hill added the hill to your altitude and crossing a valley took it away: you rode the terrain instead of flying over it, and jolted up and down at every ridge. Whatever the ground does under you is now subtracted the moment it happens, so a level glide is level in the world. Measured: over ground that rose 354 units, a level glide moved 26 units — the wing's own sink — with a worst frame-to-frame step of 1 unit, where before the flight path tracked the hill exactly.
+
+**One press, one flap.** Holding space beat the wings on a timer, which is a helicopter. A flap is an event now: press, the wings beat once, you gain height, and you glide until you want another. Lift per beat goes hard with the wing — a big wing moves a lot of air in one stroke and a small one does not — and its beat period is the refractory, so a slow heavy wing cannot be spammed. Measured: 267 units of climb per beat at wing 0.55, 849 at wing 2.17.
+
+### The match clock ran at double speed in the creature editor
+`tick()` already advances the match — it has to, since a dropped frame must not be a dropped second — and the editor branch of the loop called `brTick` **again** right after it. Every frame the builder was open cost the match two seconds: the ring closed twice as fast and the clock on the HUD ran away from you while you were looking at parts. The editor branch now does what the playing branch does — tick once, then draw the HUD.
+
+### Tested
+Four new browser suites, and the four existing ones replayed:
+- `test_pack_steps.js` — a rival is attackable and the prompt carries the key; a packmate is not, the key is gone, the hits-to-kill line is gone, the swing is refused, the damage filter agrees in both directions, and leaving the pack makes them a target again.
+- `test_carcass_steps.js` — bodies are there, they carry real parts, none start looted, searching offers what is on the body, taking one adds exactly one copy, a searched body is picked clean, the next one along is not, and the same seed lays out the same bodies.
+- `test_fly_steps.js` — the hill does not lift you, the path is smooth frame to frame, a press lifts you and holding does not flap again, and a bigger wing lifts more per beat.
+- `test_spawn_steps.js`, `test_inv_steps.js`, `test_shop_steps.js`, `test_br_steps.js` — all green, including a full fifteen-minute match.
+
 ## 2026-09-23 (fixes): Spawned in the sky, a sand floor, and a hole in the fog
 
 Three things Finn hit playing the build, all reported in one go.
