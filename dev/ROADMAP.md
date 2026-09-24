@@ -2,6 +2,30 @@
 
 Recorded so every daily run knows where the game is headed and keeps the code compatible with it.
 
+## THE PIVOT (2026-09-24)
+Finn, mid-session: **"remove all the food eating mechanics, it is kind of stupid. It should be a fighting game."** The survival-sim half of the design is retired. The game is a PVP battle royale about fighting, and everything is now judged by whether it makes a duel better.
+
+### Built today
+- **Health and damage are designed.** `c.hp` is its own pool; energy no longer decides a fight. Every starting body is exactly 100 hp whatever its shape, a bare hit is exactly 10, the rarest full kit is exactly 100, armour soaks at most 55%, and no matchup can exceed 30 hits. Two stock creatures settle it in about 9.
+- **The self-damage is fixed**, both causes: the silent per-swing `counter` charge, and match bots writing into your health without a wind-up, guard, parry or dodge.
+- **Food is gone.** No eating, hunger, poison, illness or starving. The free-roam ecosystem is untouched underneath.
+- **Four mushroom spells** (POWER / WARD / VEIL / RAGE), streamed deterministically from the world seed, carried and spent, glowing on you, wiped every round.
+- **A match starts everyone at nothing**: bare body, a pile in your cage with a mouth and one weapon, your own parts stashed safely aside, zero wildlife, and a cage that actually holds you.
+- **The front screen is CAMPAIGN / ONLINE.**
+
+### Next up, in Finn's own priority order
+1. **Creature horror pass.** Reference: Grounded-style arthropods and xeno sculpts. Drool strings off the jaw, long lolling tongues, inner secondary jaws, tendril beards, eyeless plated skulls, wet slick hide. This is the thing he has asked for most.
+2. **New body plans: mythical, not dinosaur.** Stilt-walker, hydra, crab/arachnid, **scorpion** (segmented tail, stinger, pincers, low carapace), serpent, hunched brute, mantis, drifter. The body picker shows **black silhouettes with no names**.
+3. **Stealth.** Tall grass in some regions that genuinely hides you, moving silently, and sneak attacks. VEIL already carries the visibility multiplier (`spellSeenMul`) that the AI's senses should read.
+4. **Fortnite-style loot.** Rarity-coloured glow on dropped parts, floating visibly above the body that holds them, searchable.
+5. **Ruins.** Small broken concrete buildings, smashed walls, exposed rebar, low cover walls to fight around.
+6. **50 players** instead of 24.
+7. **The leg-intersection bug**: limbs pass through each other during the walk cycle.
+8. **Shader work.** Object-space (NOT world-space) triplanar micro-detail normals with a mask channel, a dual-specular clear-coat for wet hide, cheap translucency on thin parts, cavity darkening in plate seams. World-space triplanar swims across a moving body — the detail must be welded to the hide, so sample the rest-pose position.
+
+### Rendering techniques considered and rejected, with reasons
+Recorded so they are not proposed again. Meshlet/cluster culling, virtual texturing and dual-quaternion compute skinning all solve problems this game does not have: creatures are generated at runtime from the genome at a few thousand triangles each, with no imported sculpts and no texture atlas to page. POM is real but ray-marches per pixel and will fall over on browser integrated GPUs; if it lands it is Ultra-only. Moving to Unity, Unreal, Babylon or PlayCanvas means discarding the entire project, whose whole point is that nothing is hand-authored.
+
 ## STATUS (2026-09-24)
 - **Food overhaul: built.** Plants have a kind (grass, berry bush, fungus, tuber, cactus, kelp), a crop that is bitten down and regrows lazily on read, poison on fungus and rare berries, and height that needs reach. Animals graze rather than delete, herds move off cropped ground, carrion rots on its own clock with yields that favour scavengers as it goes, and eating poison or rot makes you ill. Old carcasses are food as well as loot. See the changelog for the measured numbers.
 - **Pickups pair** (2026-09-24, later). Every looted part arrives as two copies through the one `choosePicked` funnel; buying still adds one per purchase so prices stay meaningful.

@@ -1,5 +1,75 @@
 # 3DGenesis dev log
 
+## 2026-09-24 (pivot): It is a fighting game
+
+Finn called it mid-session: the food was the problem, not the food's art. "Having to constantly eat food is super annoying and dumb. It should be a fighting game." Everything below follows from that.
+
+### Health and damage are designed numbers now, not ecosystem leftovers
+Health was the food tank. That is why a fight had no shape: how long you lived was how recently you had eaten, and how hard you hit was a stat built for deciding whether a herbivore starved.
+
+**Health is its own pool.** `c.hp`, with `ph.hpMax` beside it. Energy stays exactly what it was and runs the free-roam ecosystem; it never decides a fight again.
+
+- **Every starting body reads exactly 100.** Not approximately: all ten stock body plans measure 100.0, and so does a newborn. The reference mass is the *heaviest* stock plan rather than an average one, which is what makes "whatever shape you start as, you have 100 hp" literally true rather than nearly true.
+- **Only a genuinely large body goes above it**, sub-linearly: mass 40 reads 190, mass 160 reads 537, and the ceiling is 1500 so nothing is unkillable.
+- **Growth keeps the wound, not the number.** `hpOf` carries the same fraction across a change of maximum, so getting bigger mid-match heals you in proportion instead of leaving you on a sliver of a much larger bar.
+- Writing health straight onto a creature is now safe. The first cut treated a missing `_hpMax` record as "full" and silently healed anything that set `c.hp` by hand — found by a nameplate test reading 100% off a body that had just been halved.
+
+**Damage is the part you are carrying.** A bare body hits for exactly 10. A body wearing the rarest weapon in the game, fully kitted, hits for exactly 100.
+
+- The rarity table moved *into the core* and bones now reads the core's copy. Price, wild spawn odds and damage were about to be three tables that agreed by hand.
+- Weapon quality is scored once at compile time from the parts actually worn: the single best weapon sets three quarters of it, everything else fills the rest. Measured ladder for one weapon on a stock body: weak 10.5, solid 14.0, super 22.7, ultra 39.2, alpha 60.6, full kit 100.
+- **Armour is a fraction, never a subtraction.** It cannot take a hit to zero and cannot be out-scaled into irrelevance: the ceiling is 55%, and defence 400 sits exactly on it.
+- **No fight can stall.** Every hit is at least hpMax/30, so thirty clean hits ends any matchup in the game. Swept 4000 random pairings: worst case 30.0.
+- Two stock creatures now settle it in about **9 hits**. Kitted-against-stock runs a median of 18 damage and a p95 of 58.
+
+### The self-damage, which was two bugs wearing one coat
+"I swear as I'm dealing damage I am also taking damage." Both real.
+
+1. **Every swing charged you the target's `counter` in full, silently.** Bite, claw, tail sweep, anything — you paid for their spikes on contact you never made. It now only answers a body slam or a headbutt, is capped at a tenth of what you dealt, and says so out loud when it happens.
+2. **Match bots wrote into your health directly.** `best.c.energy -= dmg` walked straight past the wind-up, the guard, the parry window and the dodge — against the *only* opponents a match has. Their strikes go through `world.hitFilter` like everything else now, so the defence the game gives you actually works.
+
+Killing something no longer poisons you either. You are not eating it.
+
+### Food is gone
+No eat key, no food prompt, no bites, no reach check on a bush, no carrion meal, no poison, no illness, no starving. The player's body is held full so the only number that can kill you is the one a fight moves. The island's own metabolism is untouched — free roam still has an ecosystem, and a match has no wildlife in it to care.
+
+`test_food_steps.js` is deleted rather than repaired. It tested a mechanic that no longer exists.
+
+### Four mushrooms you carry and spend
+What replaces food. Big glowing caps standing on the ground across the island, placed the way the carcass field is placed: one candidate per 760-unit cell, presence and kind rolled out of the world seed, so every player in a match walks onto the same mushrooms without a byte crossing the network. Built only near you, dropped again beyond 2600 units, and a picked cap regrows after 150 seconds so a long match does not end on a stripped map.
+
+| key | | | what it does |
+|---|---|---|---|
+| 1 | POWER | yellow, 30s | every hit you land is doubled |
+| 2 | WARD | green, 20s | nothing can hurt you at all, fog included |
+| 3 | VEIL | purple, 30s | 0.45x size, a quarter as noticeable |
+| 4 | RAGE | red, 20s | x1.5 damage and health, 1.35x size, 1.3x speed |
+
+You **glow the colour of whatever is running**, pulsing, and flashing faster in the last four seconds so it running out is never a surprise. VEIL and RAGE really do change the body's size and speed rather than the HUD claiming they did. RAGE's extra health arrives by raising the ceiling, which means the fraction carries and you are healed in proportion — and when it ends, exactly that much goes back.
+
+Different spells stack (POWER plus RAGE is x3). The same spell cannot be stacked on itself. You carry at most three of a kind. **Nothing survives the round**: the pouch is not in `PROG`, and it is emptied on entering a match and on leaving one.
+
+### A match starts everyone at nothing
+- **Bare bodies.** Your shape comes in; your kit does not. Legs stay, because a creature that cannot walk is not a fighter, and their tips are reset to a plain foot so a bought claw cannot ride in on the end of a leg. Eyes stay, because being blind is not a fair start. Measured across a full lobby: 24 players, maximum weapon quality 0, 100 hp each.
+- **Your own parts are stashed, not wiped.** Held aside for the length of the match and handed back exactly as they were, so a match can never cost you what you own.
+- **A pile on your cage floor** holding a mouth and one random spike, claw or horn, rolled per player from the match seed so every bay holds an equivalent heap and nobody can reroll theirs. Press E. That is your entire head start, and the thirty seconds before the gate is what it is for.
+- **No wildlife at all.** Not thinned out over five minutes: none, ever. The ruleset builds the island empty and a per-tick sweep keeps it that way whatever else in the page decides to spawn something. The old bodies are still lying around to be searched, so there is still loot on the ground and nothing breathing that is not somebody.
+- **The cage holds you.** The confinement ran *before* your movement did, so every frame you were pulled back to the wall and then walked straight out of it again — which is exactly why you could leave through any of the three barred faces. It is applied after the move now, and the gate face only opens once the gate has actually lifted.
+
+### The first screen is two words
+CAMPAIGN and ONLINE, and a third line for everything that is not a choice about what to play. Continue, new game, saved creatures, controls, options and about are all still there, one click deeper, no longer competing with the only two decisions a player arrives wanting to make. Story mode is not built; CAMPAIGN is the island it will be set in.
+
+### Tested
+- `test_hp.js` (node, new, 27 checks): the 100 on every stock plan and on a newborn, the sub-linear climb above it and the 1500 cap, the exact 10 and the exact 100, the rarity ladder's monotonicity, armour's ceiling, the 30-hit guarantee swept over 4000 random pairings, the stock-vs-stock median, that a bite costs the attacker nothing and a ram costs at most a tenth, and that health written by hand is respected.
+- `test_spell_steps.js` (browser, new, 24 checks): the field exists and is stable and of four kinds, the renderer queues one instance per cap in its own colour, walking onto one and taking it, the carry cap, every multiplier of every spell, RAGE's proportional heal and its proportional un-heal, WARD refusing damage outright, spells expiring on their own clock, two stacking, and a reset emptying everything.
+- `test_brstart_steps.js` (browser, new, 20 checks): bare on spawn with 100 hp and eyes and legs and plain feet, every bot the same, your own parts stashed and restored, the pile in your bay and its contents and that it cannot be taken twice, zero wildlife at the start and zero two minutes later, all four cage walls holding while the gate is down, and the gate opening on its own clock.
+- `test_menu_steps.js` (browser, new, 11 checks): three lines, the right two first, nothing else competing, and every page behind MORE still reachable and working.
+- Replayed green: `test_core`, `test_eco`, `test_combat` (updated to read health rather than the food tank), `test_fight_core`, `test_bones`, `test_food_eco`, `test_inv_steps`, `test_carcass_steps`, `test_spawn_steps`, `test_fly_steps`, `test_pack_steps`, `test_br_steps`, `test_shop_steps`.
+- Two stale tests repaired rather than the game bent to fit them: `test_carcass_steps` asserted one copy per pickup when pickups have paired since yesterday, and `test_inv_steps`' sell check bought four legs onto a body already wearing four — every copy worn, so the sale was correctly refused. It buys an unworn limb now.
+
+### What Finn asked for that is NOT in this build
+Said plainly so nothing looks finished that is not: Fortnite-style rarity-glow loot beacons floating over bodies; stealth, sneaking and tall grass you can hide in; the creature horror pass (drool, long tongues, inner jaws, tendril beards, wet chitin); the new mythical body plans and the scorpion; ruined concrete buildings and cover walls; the leg-intersection bug; 50 players instead of 24; and the shader work (object-space triplanar detail, clear-coat, translucency). All queued at the top of the roadmap.
+
 ## 2026-09-24 (later): Pickups come in pairs
 
 Taking one spike off a corpse gave you one spike. A body is bilateral, so a symmetrical change needed two separate kills, and mirror mode in the editor (the obvious way to place anything) was refused on the very part you had just earned. Every pickup now yields a **pair**.

@@ -232,6 +232,11 @@
     transition:width .12s linear}
   .brname.pack .bb b{background:#49c98d}
   .brname.hurt .bb b{background:#ff3a22}
+  .spells{margin-top:4px;display:flex;flex-wrap:wrap;gap:4px}
+  .spells .sp{display:inline-block;padding:1px 6px 2px;border:1px solid;border-radius:5px;
+    font:600 11px/1.3 system-ui,sans-serif;letter-spacing:.03em;background:rgba(0,0,0,.30)}
+  .spells .sp b{font-weight:800;opacity:.85;margin-right:3px}
+  .spells .sp i{font-style:normal;opacity:.75}
   #brChoice{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);display:none;padding:26px 34px;border-radius:16px;
     background:linear-gradient(180deg,rgba(14,26,24,.98),rgba(6,14,14,.98));border:1px solid #4a7a6c;color:#eafaf4;z-index:60;text-align:center;max-width:460px}
   #brChoice h3{margin:0 0 10px;font-size:19px;letter-spacing:.12em}
@@ -1406,6 +1411,12 @@
       if (genome.dx.lung) ph.airBreath = 1;
     }
     if (!ph.waterBreath && !ph.airBreath) ph.airBreath = 1;
+    // What a fight reads. Both are pure functions of the body, resolved here
+    // so no combat path ever has to walk a design.
+    ph.weapon = (designed && genome.dx && genome.dx.wq != null)
+      ? clamp(genome.dx.wq, 0, 1)
+      : clamp((ph.attack - mass * 0.35) / 30, 0, 1);
+    ph.hpMax = hpMaxOf(ph);
     if (ph.waterBreath) ph.canSwim = 1;   // a water animal swims at any age, calf or adult
     ph.finEff = finEff; ph.wingEff = wingEff;
     ph.carnivory = clamp(stat.mouthCarn / 1.2, 0, 1);
@@ -2374,6 +2385,7 @@
     }
     world.rarityCap = (opts && opts.rarityCap) || 'ultra';
     if (typeof CARC !== 'undefined') { CARC.cells.clear(); CARC.live.length = 0; CARC.q.length = 0; }
+    if (typeof SHROOM !== 'undefined') shroomReset();
     world.forest = buildForest(terrain, w, h, world.params.treeDensity || 1);
     world.pGrid._forest = world.forest;
     // Seed the flora to a real starting density (attempt-capped): the biome
@@ -3298,8 +3310,8 @@
         if (fell > safe) {
           const over = fell - safe;
           const sizeK = clamp(0.8 + (p.mass || 1) / 40, 0.8, 1.7);
-          c.energy -= Math.pow(over / Math.max(14, (p.standH || p.radius || 6) * FALL_FATAL_H_SIM), 1.6) * sizeK * Math.max(1, p.storage);
-          if (c.energy <= 0) { c.alive = false; c.deathCause = 'fall'; }
+          hpHurt(c, Math.pow(over / Math.max(14, (p.standH || p.radius || 6) * FALL_FATAL_H_SIM), 1.6) * sizeK * hpMaxOf(p));
+          if (c.hp <= 0) { c.alive = false; c.deathCause = 'fall'; }
         }
       }
       // Tree trunks are solid. Fliers pass over them (same exemption as the
@@ -3330,9 +3342,14 @@
       // when it has actually dived (the game sets _sub for the one you steer)
       const underNow = !p.canFly && deepHere && (!p.canSwim || !!c._sub);
       const cantBreathe = underNow ? !p.waterBreath : !p.airBreath;
-      if (cantBreathe) { c.energy -= p.storage * 0.12 * dt; c._drown = underNow ? 1 : 2; }
+      if (cantBreathe) { hpHurt(c, hpMaxOf(p) * 0.12 * dt); c._drown = underNow ? 1 : 2; }
       else c._drown = 0;
 
+      if (c.hp != null && c.hp <= 0 && c.alive) { c.alive = false; c.deathCause = c.deathCause || 'wounds'; recordDeath(world, c); continue; }
+      // The body the player is steering does not run on food any more. Held
+      // full rather than exempted from the loop, so every other rule that
+      // reads energy (mating, the brain's own inputs) still gets a number.
+      if (world.playerRef === c && p.storage) c.energy = p.storage;
       if (c.energy <= 0 || c.age >= c.maxAge) {
         c.alive = false;
         c.deathCause = c.age >= c.maxAge ? 'oldage' : c._drown === 1 ? 'drowned' : c._drown === 2 ? 'suffocated' : ((inHazard || c.deathCause === 'toxin') ? 'toxin' : 'starvation');
@@ -3621,29 +3638,29 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
   }
   function retaliate(world, att, foe, flags) {
     const a = att.ph, d = foe.ph;
-    const ratio = clamp(a.mass / Math.max(0.01, d.mass), 0.15, 2.5);
-    let dmg = Math.max(a.attack - d.defense * 0.6, d.storage * 0.03 * ratio, 1);
+    let dmg = strikeDamage(a, d, 1);
     dmg = filterHit(world, foe, att, dmg);
     if (dmg === null) return;
-    foe.energy -= dmg;
-    att.energy -= (d.counter || 0) * 0.5; if (att.energy < 0) att.energy = 0;
+    hpHurt(foe, dmg);
+    // fighting back is a body slam, so spikes are in play -- capped, never fatal
+    hpHurt(att, counterDamage(d, dmg, true));
     onHit(foe, att, dmg);
-    if (foe.energy <= 0 && foe.alive) {
+    if (foe.hp <= 0 && foe.alive) {
       foe.alive = false; foe.deathCause = 'predation'; recordDeath(world, foe);
       if (!(att.hurtT > 0)) att.energy = Math.min(a.storage, att.energy + Math.max(6, (d.mass * 8) * 0.6));
     }
   }
   function resolveAttack(world, att, prey, flags) {
     const a = att.ph, d = prey.ph;
-    let dmg = a.attack - d.defense * 0.6; if (dmg <= 0) dmg = 1;
+    let dmg = strikeDamage(a, d, 1);
     dmg = filterHit(world, prey, att, dmg);
     if (dmg === null) return;
-    prey.energy -= dmg;
+    hpHurt(prey, dmg);
     onHit(prey, att, dmg);
-    att.energy -= d.counter * 0.5; if (att.energy < 0) att.energy = 0;
-    if (prey.energy <= 0) {
+    hpHurt(att, counterDamage(d, dmg, true));
+    if (prey.hp <= 0) {
       prey.alive = false; prey.deathCause = 'predation'; recordDeath(world, prey);
-      const gain = (d.mass * 8 + Math.max(0, prey.energy + d.mass * 2)) * 0.6;
+      const gain = (d.mass * 8 + d.mass * 2) * 0.6;
       if (!(att.hurtT > 0)) att.energy = Math.min(a.storage, att.energy + Math.max(6, gain));
       if (flags.toxins && d.toxin > 0) att.energy -= d.toxin * 22; // poison payback
       if (att.energy < 0) att.energy = 0;
@@ -3723,6 +3740,151 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
   };
   // Parts that must never be duplicated: placing a second one replaces the first.
   const ITEM_SINGLE = { MOUTH: 1 };
+
+  // ---- part rarity ---------------------------------------------------------
+  // The single source of truth for how rare a part is. Price, wild spawn odds
+  // and now damage all read this one table, so a part cannot be cheap in the
+  // shop and devastating in a fight.
+  const ITEM_TIER = {
+    // weak: the starting kit. Cheap, common, on half the animals you meet.
+    m_beak: 'weak', m_grazer: 'weak', e_round: 'weak', e_slit: 'weak',
+    s_spike: 'weak', s_knob: 'weak', l_thin: 'weak', t_paw: 'weak', t_hoof: 'weak',
+    t_pad: 'weak', t_flipper: 'weak', d_crest: 'weak', d_frill: 'weak', d_antenna: 'weak',
+    // solid: a working body. Real jaws, real legs, real fins.
+    m_jaws: 'solid', m_hook: 'solid', m_duck: 'solid', e_big: 'solid', e_bug: 'solid',
+    h_straight: 'solid', h_curved: 'solid', h_tusk: 'solid', s_quills: 'solid', s_plate: 'solid',
+    l_leg: 'solid', t_talon: 'solid', t_claw: 'solid', f_fin: 'solid', f_dorsal: 'solid',
+    d_gills: 'solid', d_lungs: 'solid',
+    // super: specialist kit that changes how you hunt or move.
+    m_maw: 'super', m_trunk: 'super', m_short: 'super', e_stalk: 'super', e_cluster: 'super',
+    h_ram: 'super', h_rhino: 'super', s_club: 'super', l_thick: 'super', l_spring: 'super',
+    t_hand: 'super', t_pincer: 'super', f_fluke: 'super', w_insect: 'super', d_gland: 'super',
+    // ultra: flight, armour and the long killing jaws.
+    m_spino: 'ultra', h_antler: 'ultra', s_shell: 'ultra', w_bat: 'ultra', w_feather: 'ultra',
+    // alpha: the apex bite. Almost never born wild.
+    m_rex: 'alpha',
+  };
+  // What a tier is worth as a weapon, 0..1. The curve is deliberately steep at
+  // the top: an alpha part should feel like finding an alpha part.
+  const TIER_W = { weak: 0.10, solid: 0.28, super: 0.50, ultra: 0.76, alpha: 1.00 };
+  function itemTier(id) { return ITEM_TIER[id] || 'solid'; }
+  function tierWeight(id) { return TIER_W[itemTier(id)] || 0.28; }
+  // Every simulated part must have a tier or its damage is a guess. Checked
+  // once at load rather than discovered in a fight.
+  (function () {
+    const miss = Object.keys(ITEM_SIM).filter((k) => !ITEM_TIER[k]);
+    if (miss.length) console.warn('core: no rarity tier for', miss.join(', '), '-- weighted as solid');
+  })();
+
+  // ---- combat health -------------------------------------------------------
+  // Any body you can start a match with reads 100, whatever shape it is: a
+  // baby, a lean runner, a squat tank. Only a genuinely large body goes above
+  // it, and it does so sub-linearly so a giant is tough, not unkillable.
+  const HP_BASE = 100;          // the number on every starting creature
+  // Calibrated on the HEAVIEST stock body plan, not an average one, so that
+  // "whatever shape you start as, you have 100" is literally true: the squat
+  // armoured plan and the lean runner both read 100, and only a body that has
+  // grown past anything you can start as goes above it.
+  const HP_REF_MASS = 17;
+  const HP_EXP = 0.75;
+  const HP_CAP_MUL = 15;        // 1500 hp is the largest health the game builds
+  function hpMaxOf(ph) {
+    if (!ph) return HP_BASE;
+    const k = Math.pow(Math.max(0.01, ph.mass || 0) / HP_REF_MASS, HP_EXP);
+    return HP_BASE * clamp(k, 1, HP_CAP_MUL);
+  }
+
+  // ---- damage --------------------------------------------------------------
+  const DMG_STOCK = 10;         // a body with nothing on it
+  // Damage is calibrated on a TYPICAL body, health on the largest starting
+  // one. Two different reference masses on purpose: it is what makes both
+  // "every starting creature has 100 hp" and "a stock hit is 10" literally
+  // true at the same time, rather than approximately true of neither.
+  const DMG_REF_MASS = 10;
+  const DMG_MAX = 100;          // the rarest weapon in the game, fully kitted
+  const TTK_CEIL = 30;          // no clean exchange ever takes more hits than this
+  const ARMOUR_MAX = 0.55;      // armour never soaks more than this fraction
+  const ARMOUR_HALF = 90;       // defence at which armour is at half its ceiling
+  // 0..1, how armed a body is. Set once at compile time from the parts it
+  // actually wears, so a fight never walks the design.
+  function weaponQ(ph) {
+    if (!ph) return 0;
+    if (ph.weapon != null) return ph.weapon;
+    // A genome with no design (a seeded founder) has no part list to read, so
+    // fall back to the old aggregate with the body-size term taken back out.
+    return clamp(((ph.attack || 0) - (ph.mass || 0) * 0.35) / 30, 0, 1);
+  }
+  // The damage one clean hit does. mul is the move's own multiplier.
+  // The exponent is what keeps a starting creature on the stock 10 while the
+  // top of the ladder still reaches 100: a shallow curve made every weak part
+  // feel like a weapon, which flattened the whole point of looting.
+  const DMG_CURVE = 2.0;
+  function strikeDamage(a, d, mul) {
+    const q = weaponQ(a);
+    let base = DMG_STOCK + (DMG_MAX - DMG_STOCK) * Math.pow(clamp(q, 0, 1), DMG_CURVE);
+    // A heavier body puts more behind the same weapon, but only modestly:
+    // rarity is meant to decide a fight, not tonnage.
+    base *= 0.80 + 0.20 * clamp(Math.pow(Math.max(0.01, a.mass || 1) / DMG_REF_MASS, 0.5), 0.5, 2.5);
+    // The stated ceiling, applied before the move multiplier so that "the
+    // rarest weapon in the game hits for 100" is a number you can check.
+    base = clamp(base, DMG_STOCK * 0.5, DMG_MAX);
+    let dmg = base * (mul == null ? 1 : mul);
+    // Armour is a fraction, never a subtraction: it cannot take a hit to zero
+    // and it cannot be out-scaled into irrelevance either.
+    const def = Math.max(0, d.defense || 0);
+    dmg *= 1 - ARMOUR_MAX * (def / (ARMOUR_HALF + def));
+    // A fight must end. Whatever the armour, thirty clean hits kills.
+    const floor = hpMaxOf(d) / TTK_CEIL;
+    if (dmg < floor) dmg = floor;
+    return clamp(dmg, 1, DMG_MAX * 2.5);
+  }
+  // Spikes bite the thing that rammed them, and only the thing that rammed
+  // them: a tenth of what it dealt, never more, and never a surprise.
+  const COUNTER_FRAC = 0.10;
+  function counterDamage(d, dealt, contact) {
+    if (!contact || !d || !(d.counter > 0)) return 0;
+    return Math.min(dealt * COUNTER_FRAC, d.counter * 0.35);
+  }
+
+  // ---- the health pool -----------------------------------------------------
+  // Health is its own pool. Created on first read so nothing has to remember
+  // to initialise it, and carried as a FRACTION when a body grows, so getting
+  // bigger mid-match heals you proportionally rather than leaving you at 4%.
+  // A creature's real ceiling: its body, times whatever is currently running
+  // on it. One function, so nothing can read a stale maximum.
+  function hpMaxC(c) { return hpMaxOf(c && c.ph) * (c && c.hpMul > 0 ? c.hpMul : 1); }
+  function hpOf(c) {
+    if (!c) return 0;
+    const max = hpMaxC(c);
+    if (c.hp == null || !isFinite(c.hp)) { c.hp = max; c._hpMax = max; return c.hp; }
+    // A health value written straight onto the creature (a test, a respawn, a
+    // scripted wound) arrives with no record of what it was a fraction OF.
+    // Adopt the current ceiling rather than rescaling against nothing --
+    // treating the missing record as "full" silently healed anything that set
+    // c.hp by hand, which is exactly the sort of thing that is discovered in
+    // a fight rather than in a diff.
+    if (!(c._hpMax > 0)) { c._hpMax = max; c.hp = clamp(c.hp, 0, max); return c.hp; }
+    if (c._hpMax !== max) {
+      const f = clamp(c.hp / c._hpMax, 0, 1);
+      c.hp = max * f; c._hpMax = max;
+    }
+    return c.hp;
+  }
+  function hpFrac(c) { const m = hpMaxC(c); return m > 0 ? clamp(hpOf(c) / m, 0, 1) : 0; }
+  // Take damage. Returns the health left. Never goes below zero, so a caller
+  // can read it as "is it dead" without guarding for negatives.
+  function hpHurt(c, dmg) {
+    hpOf(c);
+    c.hp -= Math.max(0, dmg || 0);
+    if (!(c.hp > 0)) c.hp = 0;
+    return c.hp;
+  }
+  function hpHeal(c, amt) {
+    const max = hpMaxC(c);
+    hpOf(c);
+    c.hp = clamp(c.hp + Math.max(0, amt || 0), 0, max);
+    return c.hp;
+  }
 
   // Ten base body plans. Numbers are the rest-pose skeleton in R units:
   // a/b = spine half-length / body radius, seg = spine balls, prof = girth
@@ -4026,7 +4188,23 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
       const key = type + '|' + (mode || '');
       (groups[key] || (groups[key] = { type, mode: mode || null, sizes: [] })).sizes.push(size);
     };
-    const dx = { atk: 0, def: 0, reach: 0, sense: 0, spd: 0, fin: 0, grab: 0, sweep: 0, claw: 0, legs: 0, arms: 0, spring: 0, gill: 0, lung: 0 };
+    const dx = { atk: 0, def: 0, reach: 0, sense: 0, spd: 0, fin: 0, grab: 0, sweep: 0, claw: 0, legs: 0, arms: 0, spring: 0, gill: 0, lung: 0, wq: 0 };
+    // How armed this body is, 0..1. The single best weapon sets three
+    // quarters of it -- one alpha jaw should be the story of the creature --
+    // and everything else you are carrying fills in the rest, so a body
+    // bristling with solid parts can still reach the top without an alpha.
+    let wqBest = 0, wqRest = 0;
+    const arm = (id, scale) => {
+      const sim = ITEM_SIM[id];
+      // A weapon is a part that actually adds attack, or a jaw built to bite.
+      if (!sim) return;
+      const isWeapon = (sim.atk || 0) > 0 || (sim.t === 'MOUTH' && sim.mode === 'carn') ||
+                       sim.t === 'HORN' || (sim.t === 'SPIKE' && (sim.sweep || sim.atk));
+      if (!isWeapon) return;
+      const w = tierWeight(id) * clamp(scale == null ? 1 : scale, 0.3, 1.6);
+      if (w > wqBest) { wqRest += wqBest * 0.18; wqBest = w; }
+      else wqRest += w * 0.18;
+    };
     const extra = (s, scale) => {
       if (!s) return;
       dx.atk += (s.atk || 0) * scale; dx.def += (s.def || 0) * scale; dx.reach += (s.reach || 0) * scale;
@@ -4039,6 +4217,7 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
       const s = ITEM_SIM[pt.id];
       if (!s) continue;
       const sz = clamp(numOr(pt.s, 1), 0.3, 3);
+      arm(pt.id, sz);
       if (s.t === 'MOUTH') { mouth = { s, sz }; continue; }
       add(s.t, s.w * sz);
       extra(s, sz);
@@ -4056,10 +4235,12 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
         const tsz = clamp(numOr(o.lb.tip.s, 1), 0.4, 2.5);
         add('TIP', ts.w * tsz);
         // weapons on the ground are worth less than weapons you swing
+        arm(o.lb.tip.id, tsz * (o.leg ? 0.45 : 1));
         extra(ts, tsz * (o.leg ? 0.45 : 1));
         if (o.leg) dx.spd += (ts.spd || 0) * 0.5; else if (ts.atk) dx.claw += 1;
       }
     }
+    dx.wq = clamp(wqBest * 0.75 + Math.min(0.25, wqRest), 0, 1);
     if (dx.legs > 0) dx.spd = dx.spd / Math.max(1, dx.legs / 2);   // per-pair, not per-foot
     // body tree: CORE, GUT, MOUTH, TAIL, then one node per (type,mode) group,
     // split into chunks of <= MAX_RADIAL so repeat/radial stay in range
@@ -4574,6 +4755,9 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
     DESIGN_API,
     pushOutOfTrees, trunkClearance,
     onHit, HURT_TIME,
+    ITEM_TIER, TIER_W, itemTier, tierWeight,
+    HP_BASE, HP_REF_MASS, DMG_STOCK, DMG_MAX, DMG_REF_MASS, TTK_CEIL,
+    hpMaxOf, hpMaxC, hpOf, hpFrac, hpHurt, hpHeal, weaponQ, strikeDamage, counterDamage,
     makeRNG, gauss, clamp, PART, PART_TYPES, MOUTH_MODES, SINGLETON, CAPS, IN, OUT, MAX_SEGS, MAX_RADIAL,
     O_GAIT, O_GRAB, GAIT_BOOST, GAIT_COST, GRAB_GAIN, GRAB_COST, gaitFrac, grabFrac,
     seedHerbivore, mutate, crossover, cloneGenome, countNodes, collectNodes, develop,
@@ -6760,10 +6944,92 @@ function buildSignpostMesh() {
   brBox(m, 0, H + 6.5, 0, 9, 1.0, 1.0, BR_STEEL_D, MAT_STEEL);     // cross bar under the plate
   return m;
 }
-const BRMESH = { cage: null, gate: null, signpost: null, digits: [], ready: false };
+// A mushroom: a pale stem and a heavy glowing cap, built once and drawn with a
+// per-instance tint so one mesh covers all four kinds. Deliberately oversized
+// -- it has to read as a thing you can go and get from across a valley.
+const SHROOM_STEM = [0.72, 0.70, 0.66];
+// The opening kit, as a thing on the floor: a low heap of bone and plate with
+// a lit core, so it reads from the far corner of the bay.
+const BR_PILE_BONE = [0.80, 0.77, 0.70];
+function buildPileMesh() {
+  const m = folMB();
+  brBox(m, 0, 1.0, 0, 7.0, 1.0, 5.2, BR_PILE_BONE, MAT_STEEL);
+  brBox(m, -1.6, 2.4, 0.8, 4.2, 1.2, 3.0, fcol(BR_PILE_BONE, 0.88), MAT_STEEL);
+  brBox(m, 2.0, 2.9, -0.9, 3.0, 1.5, 2.2, fcol(BR_PILE_BONE, 0.94), MAT_STEEL);
+  brBox(m, 0.2, 4.3, 0.2, 1.9, 1.2, 1.6, fcol(BR_PILE_BONE, 1.02), MAT_STEEL);
+  // a few shards standing out of it, so it is obviously parts and not a rock
+  for (const [dx, dz, h] of [[-4.2, 1.8, 3.4], [4.4, 1.2, 2.8], [-1.2, -3.4, 3.0], [3.0, 3.2, 2.2]]) {
+    brBox(m, dx, 2.0 + h * 0.5, dz, 0.5, h * 0.5, 0.5, fcol(BR_PILE_BONE, 1.05), MAT_STEEL);
+  }
+  // the lit core: this is what you see across the cage
+  brBox(m, 0, 2.6, 0, 2.4, 0.9, 2.0, [0.98, 0.88, 0.45], MAT_GLOW);
+  return m;
+}
+function brPutPile(put, camX, camZ) {
+  if (!BR.on || BR.phase !== 'cage' || BR._pileTaken || !BRMESH.pile) return;
+  const bay = BR.bays[BR.slot];
+  const q = brPilePos(bay);
+  if (!q) return;
+  put(BRMESH.pile, q.x, q.y, q.z, bay.yaw, 1, [1, 1, 1]);
+}
+function buildShroomMesh() {
+  const m = folMB();
+  const H = 15, CAP = 13;
+  // stem: a slightly bellied tube, tapering into the cap
+  const pts = [], rad = [];
+  for (let i = 0; i <= 5; i++) {
+    const u = i / 5;
+    pts.push([0, u * H, 0]);
+    rad.push(2.6 - 1.1 * u + 1.3 * Math.sin(u * Math.PI) * 0.5);
+  }
+  folTube(m, pts, rad, 9, SHROOM_STEM, H, 0.0, 0.7);
+  // cap: rings of a squashed dome, lit rather than shaded, so it glows
+  const RINGS = 6, SIDES = 14;
+  const ringY = (k) => H + Math.cos((k / RINGS) * Math.PI * 0.5) * CAP * 0.52;
+  const ringR = (k) => Math.sin((k / RINGS) * Math.PI * 0.5) * CAP;
+  let prev = null;
+  for (let k = 0; k <= RINGS; k++) {
+    const y = ringY(k), r = ringR(k), ring = [];
+    for (let sI = 0; sI < SIDES; sI++) {
+      const a = sI / SIDES * Math.PI * 2;
+      const px = Math.cos(a) * r, pz = Math.sin(a) * r;
+      const nr = fnorm([px, CAP * 0.5, pz]);
+      ring.push(folV(m, [px, y, pz], nr, [1, 1, 1], 0, MAT_GLOW));
+    }
+    if (prev) for (let sI = 0; sI < SIDES; sI++) {
+      const a = prev[sI], b2 = prev[(sI + 1) % SIDES], c2 = ring[(sI + 1) % SIDES], d2 = ring[sI];
+      m.i.push(a, b2, c2, a, c2, d2);
+    }
+    prev = ring;
+  }
+  // gills under the rim, darker, so the cap has an underside from below
+  const yU = H + CAP * 0.30;
+  const hub = folV(m, [0, yU - 2.2, 0], [0, -1, 0], [0.45, 0.45, 0.45], 0, MAT_GLOW);
+  let rim = [];
+  for (let sI = 0; sI < SIDES; sI++) {
+    const a = sI / SIDES * Math.PI * 2;
+    rim.push(folV(m, [Math.cos(a) * CAP * 0.97, yU, Math.sin(a) * CAP * 0.97], [0, -1, 0], [0.62, 0.62, 0.62], 0, MAT_GLOW));
+  }
+  for (let sI = 0; sI < SIDES; sI++) m.i.push(hub, rim[(sI + 1) % SIDES], rim[sI]);
+  return m;
+}
+// Queue the mushrooms in view. Same bucket path the cages and the trees use.
+function shroomPut(put, camX, camZ) {
+  if (!BRMESH.shroom) return;
+  for (const e of SHROOM.live) {
+    if (e.taken) continue;
+    const d = Math.hypot(e.x - camX, e.z - camZ);
+    if (d > SHROOM_R) continue;
+    const col = SPELL_DEF[e.id].col;
+    put(BRMESH.shroom, e.x, e.y, e.z, e.rot, e.s, col);
+  }
+}
+const BRMESH = { cage: null, gate: null, signpost: null, digits: [], shroom: null, pile: null, ready: false };
 function brMeshInit() {
   if (BRMESH.ready) return;
   BRMESH.cage = folUpload(buildCageMesh());
+  BRMESH.shroom = folUpload(buildShroomMesh());
+  BRMESH.pile = folUpload(buildPileMesh());
   BRMESH.gate = folUpload(buildGateMesh());
   BRMESH.signpost = folUpload(buildSignpostMesh());
   for (let d = 0; d < 10; d++) BRMESH.digits[d] = folUpload(buildDigitMesh(d));
@@ -6838,6 +7104,8 @@ function folUpdate(camX, camY, camZ, yaw) {
   const fx = Math.cos(yaw), fz = Math.sin(yaw);
   const T = terrain;
   brPutCages(put, camX, camZ);
+  shroomPut(put, camX, camZ);
+  brPutPile(put, camX, camZ);
   for (const tr of world.forest.trees) {
     const dx = tr.x - camX, dz = tr.y - camZ, d = Math.hypot(dx, dz);
     if (d > FAR * 0.95) continue;
@@ -7451,7 +7719,17 @@ function bodyExtent(c) {
 
 function creatureBase(c) {
   const rgbv = C.hueToRGB(isFinite(c.ph.hue) ? c.ph.hue : 0.3, 0.52, 0.52);
-  return [rgbv[0] / 255, rgbv[1] / 255, rgbv[2] / 255];
+  const base = [rgbv[0] / 255, rgbv[1] / 255, rgbv[2] / 255];
+  // Whatever spell is running, you are lit up in its colour. Only ever the
+  // body the player is steering: a rival's buff shows on their own screen.
+  if (c === player.c) {
+    const g = spellGlow();
+    if (g) {
+      const k = 0.78 * g.amt;
+      return [base[0] * (1 - k) + g.col[0] * k, base[1] * (1 - k) + g.col[1] * k, base[2] * (1 - k) + g.col[2] * k];
+    }
+  }
+  return base;
 }
 
 let instCount = 0;
@@ -7536,7 +7814,7 @@ function drawCreature(c, t, camDist) {
   } else if (c._yaw3 == null) c._yaw3 = 0;
   const yaw = (c === player.c && !player.spectator) ? player.yaw : c._yaw3;
   const cy = Math.cos(yaw), sy = Math.sin(yaw);
-  const S = BODY_SCALE;
+  const S = BODY_SCALE * (c === player.c ? spellSizeMul() : 1);
   // Smoothed speed and a 0..1 walk/stand blend, so a creature eases into and
   // out of its stride rather than switching stance in a single frame.
   c._spSm = (c._spSm || 0) + (sp - (c._spSm || 0)) * Math.min(1, frameDt * 4);
@@ -11904,7 +12182,7 @@ function tryInspect() {
   // Searched is searched, whether or not you liked what was on it.
   t.looted = true;
   if (!opts.length) { toast('Picked clean. Nothing left on it.', 1800); return; }
-  player.picker = { opts: opts.slice(0, 6), label: 'You search the body. Take one of its parts',
+  player.picker = { opts: opts.slice(0, 6), label: 'You search the body. Take a pair of one of its parts',
                     t0: performance.now(), items: true };
   renderPicker();
 }
@@ -12127,6 +12405,14 @@ function sickStart(sev0, src, rot) {
   return sev;
 }
 function sickTick(dt) {
+  // Nothing can make you ill any more: the only sources were poison and rot.
+  // Held at zero rather than deleted so the vignette, the stamina multiplier
+  // and the HUD line all keep reading a real number.
+  if (SICK.t !== 0 || SICK.sev !== 0) { SICK.t = 0; SICK.sev = 0; SICK.dur = 0; SICK.src = ''; SICK.msgT = 0; }
+  sickFxTick(dt);
+  return;
+}
+function sickTickLegacy(dt) {
   const c = player.c;
   if (SICK.owner !== c) {                        // a new body is a new stomach
     SICK.owner = c; SICK.t = 0; SICK.sev = 0; SICK.dur = 0; SICK.src = ''; SICK.msgT = 0;
@@ -12152,6 +12438,12 @@ function sickTick(dt) {
   const el = document.getElementById('sickfx');
   const want = SICK.t > 0 ? clamp(0.20 + 0.45 * SICK.sev, 0, 0.72) * (0.84 + 0.16 * Math.sin(simT * 2.1)) : 0;
   SICK.fx += (want - SICK.fx) * Math.min(1, Math.max(0, dt) * 3);
+  if (el) el.style.opacity = SICK.fx.toFixed(3);
+}
+// the fade is the only part of the old tick that still has a job
+function sickFxTick(dt) {
+  const el = document.getElementById('sickfx');
+  SICK.fx += (0 - SICK.fx) * Math.min(1, Math.max(0, dt) * 3);
   if (el) el.style.opacity = SICK.fx.toFixed(3);
 }
 // player.sick reads as seconds remaining, and player.sickOf as what did it.
@@ -12238,6 +12530,12 @@ function eatCarcassField(c, e) {
   return { ok: true, why: 'carcass', gain, rot, sick, msg };
 }
 function tryEat() {
+  // There is no food. The key is kept bound because it is the pick-up key
+  // now (see the mushrooms), and this is what it answers when there is
+  // nothing under your nose.
+  return { ok: false, why: 'nofood', msg: 'There is nothing to eat. Fight.' };
+}
+function tryEatLegacy() {
   const c = player.c;
   if (!c || !c.alive || player.spectator) return { ok: false, why: 'nobody' };
   // Being hit still stops you eating for five seconds. Unchanged.
@@ -12271,7 +12569,8 @@ function tryEat() {
 // The food half of the action panel: what is in reach, how much of it is left,
 // what one mouthful is worth, and -- only for a body that can tell -- that it
 // smells wrong before you swallow it.
-function eatPrompt() {
+function eatPrompt() { return null; }
+function eatPromptLegacy() {
   const c = player.c;
   if (!c || !c.alive || player.spectator) return null;
   const p = c.ph;
@@ -12345,7 +12644,7 @@ function movePlayer(c, dt) {
   const sprint = !dodgeV && (shiftHeld || (!airborne && !!keys[' '] && !!keys['w'])) && fightCanSprint();
   FIGHT.sprinting = sprint;
   if (sprint) sp *= (1 + C.GAIT_BOOST);
-  sp *= PLAYER_SPEED * (dodgeV ? 1 : fightSpeedMul()) * (1 - 0.75 * (player.rear || 0));
+  sp *= PLAYER_SPEED * (dodgeV ? 1 : fightSpeedMul()) * (1 - 0.75 * (player.rear || 0)) * spellSpeedMul();
   if (dodgeV) { c.vx = fx; c.vy = fz; }
   else { c.vx = (fx / len) * sp; c.vy = (fz / len) * sp; }
   // The core deliberately keeps physical movement on real time so you can
@@ -12379,6 +12678,8 @@ function movePlayer(c, dt) {
     }
   }
   c.x = nx; c.y = ny;
+  // The cage is a wall, and a wall has to be the last word on where you are.
+  if (BR.on && BR.phase === 'cage') brConfineToCage(c, BR.bays[BR.slot]);
   // sprint is charged at the core's own gait rate, on biological time
   if (sprint) {
     const bdt = dt * (world.params.timeScale != null ? world.params.timeScale : 0.01);
@@ -12463,10 +12764,10 @@ function applyFallDamage(c, fell) {
   const sizeK = clamp(0.8 + (c.ph.mass || 1) / 40, 0.8, 1.7);
   const frac = Math.pow(over / fallFatalFor(c.ph), 1.6) * sizeK;
   const dmg = frac * Math.max(1, c.ph.storage);
-  c.energy -= dmg;
+  C.hpHurt(c, dmg);
   FIGHT.hurtFx = Math.min(1, (FIGHT.hurtFx || 0) + Math.min(0.9, frac * 1.2));
   if (SND.ctx && SND.on) sndThump(Math.min(0.9, 0.25 + frac));
-  if (c.energy <= 0) { c.alive = false; c.deathCause = 'fall'; }
+  if (c.hp <= 0) { c.alive = false; c.deathCause = 'fall'; }
   return dmg;
 }
 // How high this body can jump, in world units. The base hop clears about one
@@ -12743,7 +13044,7 @@ function fightResolveStrike(s) {
       fightMsg('PARRY! It is staggered: strike now.', 1600);
       return;
     }
-    const cost = 10 + 70 * dmg / Math.max(1, c.ph.storage);
+    const cost = 10 + 70 * dmg / Math.max(1, C.hpMaxOf(c.ph));
     if (FIGHT.stam >= cost && !FIGHT.exhausted) {
       fightSpend(cost);
       dmg *= BLOCK_MUL; blocked = true;
@@ -12754,13 +13055,19 @@ function fightResolveStrike(s) {
       fightMsg('Guard broken!', 1200);
     }
   }
-  c.energy -= dmg;
-  if (c.energy <= 0) { c.energy = 0; c._fatalBy = att; }
+  if (spellInvuln()) {
+    fightMsg('WARD holds. Nothing gets through.', 900);
+    FIGHT.hurtFx = Math.min(1, FIGHT.hurtFx + 0.06);
+    c._lastBlocked = true;
+    return;
+  }
+  C.hpHurt(c, dmg);
+  if (c.hp <= 0) c._fatalBy = att;
   c._lastBlocked = blocked;
   C.onHit(c, att, dmg);
-  att.energy -= (c.ph.counter || 0) * 0.5;       // spikes and armour still bite back on contact
-  if (att.energy < 0) att.energy = 0;
-  const frac = dmg / Math.max(1, c.ph.storage);
+  // your own spikes answer whatever rammed you, capped the same way
+  C.hpHurt(att, C.counterDamage(c.ph, dmg, true));
+  const frac = dmg / Math.max(1, C.hpMaxOf(c.ph));
   const ratio = clamp(att.ph.mass / Math.max(0.05, c.ph.mass), 0.25, 3);
   fightKnock(c, -dx, -dz, (blocked ? 12 : 26) * ratio * (0.6 + frac * 4));
   if (!blocked && frac >= 0.18) FIGHT.stagger = Math.max(FIGHT.stagger, 0.45);
@@ -12773,7 +13080,120 @@ function fightHitMsg(c, by) {
   const n = (c._lastDmg || 0).toFixed(0);
   let m = (c._lastBlocked ? 'Blocked ' + diet + ': took ' + n : 'Hit by ' + diet + ' for ' + n) + '.';
   if (c.bleedT > 0) m += ' Bleeding.';
-  return m + ' No eating for 5 s.';
+  return m;
+}
+
+// =====================================================================
+// SPELLS
+// =====================================================================
+const SPELL_DEF = {
+  power: { n: 1, name: 'POWER', dur: 30, col: [1.00, 0.80, 0.12], blurb: 'double damage',
+           hud: 'every hit you land is doubled' },
+  ward:  { n: 2, name: 'WARD',  dur: 20, col: [0.24, 1.00, 0.42], blurb: 'untouchable',
+           hud: 'nothing can hurt you' },
+  veil:  { n: 3, name: 'VEIL',  dur: 30, col: [0.66, 0.32, 1.00], blurb: 'small and unseen',
+           hud: 'small, quiet and very hard to see' },
+  rage:  { n: 4, name: 'RAGE',  dur: 20, col: [1.00, 0.20, 0.14], blurb: 'bigger, faster, stronger',
+           hud: 'x1.5 damage and health, bigger and faster' },
+};
+const SPELL_IDS = ['power', 'ward', 'veil', 'rage'];
+const SHROOM_IDS = SPELL_IDS;
+const SPELL_BY_N = { 1: 'power', 2: 'ward', 3: 'veil', 4: 'rage' };
+const SPELL_CARRY = 3;              // of each kind. A pouch, not a warehouse.
+// What is in the pouch and what is running. Deliberately NOT in PROG: a spell
+// is a thing this round gave you, and it does not leave with you.
+const SPELL = { bag: { power: 0, ward: 0, veil: 0, rage: 0 }, on: {}, owner: null };
+function spellReset(why) {
+  for (const k of SPELL_IDS) SPELL.bag[k] = 0;
+  SPELL.on = {};
+  SPELL.owner = player.c || null;
+  spellApply();
+  if (why) toast(why, 2200);
+}
+function spellActive(k) { return (SPELL.on[k] || 0) > 0; }
+function spellLeft(k) { return Math.max(0, SPELL.on[k] || 0); }
+// Multipliers, read by the fight and the renderer. One place each, so a buff
+// cannot be applied twice or forgotten in one of two code paths.
+function spellDamageMul() { return (spellActive('power') ? 2 : 1) * (spellActive('rage') ? 1.5 : 1); }
+function spellSizeMul()   { return (spellActive('veil') ? 0.45 : 1) * (spellActive('rage') ? 1.35 : 1); }
+function spellSpeedMul()  { return (spellActive('veil') ? 1.12 : 1) * (spellActive('rage') ? 1.30 : 1); }
+function spellHpMul()     { return spellActive('rage') ? 1.5 : 1; }
+function spellInvuln()    { return spellActive('ward'); }
+// How visible you are to everything else. VEIL is the stealth spell: a small
+// body that makes no noise is one the island's senses have to work for.
+function spellSeenMul()   { return spellActive('veil') ? 0.25 : 1; }
+// The colour you are giving off right now: the strongest thing running, so a
+// stack reads as its headline effect rather than as brown.
+function spellGlow() {
+  let best = null, bestT = 0;
+  for (const k of SPELL_IDS) {
+    const t = spellLeft(k);
+    if (t > 0 && t > bestT * 0.0001 && (!best || SPELL_DEF[k].n > SPELL_DEF[best].n)) { best = k; bestT = t; }
+  }
+  if (!best) return null;
+  // pulse, and flash faster as it runs out, so the end is never a surprise
+  const t = spellLeft(best);
+  const urg = t < 4 ? 6.5 : 2.0;
+  const amt = (0.55 + 0.45 * (0.5 + 0.5 * Math.sin(simT * urg))) * (t < 1 ? t : 1);
+  return { col: SPELL_DEF[best].col, amt, id: best };
+}
+// Push the buffs that live on the creature itself onto the creature.
+function spellApply() {
+  const c = player.c;
+  if (!c) return;
+  c.hpMul = spellHpMul();
+  C.hpOf(c);                 // re-reads the ceiling and carries the fraction
+}
+function spellTake(id) {
+  if (!SPELL_DEF[id]) return { ok: false, why: 'unknown' };
+  if (SPELL.bag[id] >= SPELL_CARRY) {
+    toast('You are already carrying ' + SPELL_CARRY + ' ' + SPELL_DEF[id].name + '. Spend one first.', 1800);
+    return { ok: false, why: 'full' };
+  }
+  SPELL.bag[id]++;
+  toast('Picked up ' + SPELL_DEF[id].name + ' · press ' + SPELL_DEF[id].n + ' to use it · ' + SPELL_DEF[id].blurb, 2600);
+  // a bright two-note chime, so a pickup is audible without looking
+  if (SND.ctx && SND.on) { sndNoiseBurst(1800, 14, 0.10, 0.16, 0, 1.0); setTimeout(() => { if (SND.ctx && SND.on) sndNoiseBurst(2700, 16, 0.12, 0.14, 0, 1.0); }, 70); }
+  return { ok: true, n: SPELL.bag[id] };
+}
+function spellUse(id) {
+  const c = player.c;
+  if (!SPELL_DEF[id]) return { ok: false, why: 'unknown' };
+  if (!c || !c.alive || player.spectator) return { ok: false, why: 'nobody' };
+  if (!SPELL.bag[id]) { toast('No ' + SPELL_DEF[id].name + ' to spend.', 1200); return { ok: false, why: 'none' }; }
+  if (spellActive(id)) { toast(SPELL_DEF[id].name + ' is already running · ' + Math.ceil(spellLeft(id)) + 's left.', 1400); return { ok: false, why: 'running' }; }
+  SPELL.bag[id]--;
+  SPELL.on[id] = SPELL_DEF[id].dur;
+  spellApply();
+  toast(SPELL_DEF[id].name + '! ' + SPELL_DEF[id].hud + ' · ' + SPELL_DEF[id].dur + 's', 3000);
+  return { ok: true };
+}
+function spellTick(dt) {
+  // a different body is a different pouch
+  if (SPELL.owner !== player.c) { SPELL.owner = player.c; SPELL.on = {}; spellApply(); }
+  let changed = false;
+  for (const k of SPELL_IDS) {
+    if (!(SPELL.on[k] > 0)) continue;
+    SPELL.on[k] -= dt;
+    if (SPELL.on[k] <= 0) {
+      delete SPELL.on[k]; changed = true;
+      toast(SPELL_DEF[k].name + ' has worn off.', 1800);
+    }
+  }
+  if (changed) spellApply();
+  else if (player.c && player.c.hpMul !== spellHpMul()) spellApply();
+}
+function spellHudHtml() {
+  const rows = [];
+  for (const k of SPELL_IDS) {
+    const D = SPELL_DEF[k], t = spellLeft(k), n = SPELL.bag[k];
+    if (!n && !(t > 0)) continue;
+    const c = D.col, css = 'rgb(' + Math.round(c[0] * 255) + ',' + Math.round(c[1] * 255) + ',' + Math.round(c[2] * 255) + ')';
+    rows.push('<span class="sp" style="border-color:' + css + ';color:' + css + '">' +
+      '<b>' + D.n + '</b> ' + D.name + (n ? ' ×' + n : '') +
+      (t > 0 ? ' <i>' + Math.ceil(t) + 's</i>' : '') + '</span>');
+  }
+  return rows.length ? '<div class="spells">' + rows.join('') + '</div>' : '';
 }
 
 // ---------------------------------------------------------------- your swing
@@ -12846,10 +13266,7 @@ function fightResolveSwing(sw) {
   const rr = interactRange(p) * MD.reach;
   const best = fightFindSwingTarget(c, rr);
   if (!best) { toast(MD.label + ' hits nothing.', 700); return; }
-  let dmg = (p.attack - best.ph.defense * 0.6) * MD.dmg;
-  const ratio = clamp(p.mass / Math.max(0.01, best.ph.mass), 0.12, 3);
-  const floor = Math.max(1, best.ph.storage * 0.05 * ratio * MD.dmg);
-  if (dmg < floor) dmg = floor;
+  let dmg = C.strikeDamage(p, best.ph, MD.dmg) * spellDamageMul();
   const dx = best.x - c.x, dz = best.y - c.y, dl = Math.hypot(dx, dz) || 1;
   const bh = best._yaw3 != null ? best._yaw3 : Math.atan2(best.vy || 0, best.vx || 1);
   const behind = (Math.cos(bh) * dx + Math.sin(bh) * dz) / dl > 0.5;   // it faces away from you
@@ -12861,11 +13278,14 @@ function fightResolveSwing(sw) {
   startAnim(best, 'flinch', 0.35);
   best._hitByPlayerT = simT;
   sndHit();
-  best.energy -= dmg;
+  C.hpHurt(best, dmg);
   C.onHit(best, c, dmg);
-  c.energy -= (best.ph.counter || 0) * 0.5;
-  if (c.energy < 0) c.energy = 0;
-  const frac = dmg / Math.max(1, best.ph.storage);
+  // Spikes answer a body slam or a headbutt, not a bite or a claw from reach,
+  // and never for more than a tenth of what you just dealt. This used to fire
+  // on every swing, in full, without a word about it.
+  const back = C.counterDamage(best.ph, dmg, sw.mv === 'slam' || sw.mv === 'headbutt');
+  if (back > 0) { C.hpHurt(c, back); toast('Its spikes cut you for ' + back.toFixed(0) + '.', 1100); }
+  const frac = dmg / Math.max(1, C.hpMaxOf(best.ph));
   fightKnock(best, dx, dz, 18 * clamp(p.mass / Math.max(0.05, best.ph.mass), 0.2, 3) * (0.6 + frac * 4));
   // a heavy hit interrupts whatever it was winding up
   if (frac >= 0.18) {
@@ -12874,22 +13294,19 @@ function fightResolveSwing(sw) {
     FIGHT.pending = FIGHT.pending.filter(q => q.att !== best);
     if (FIGHT.pending.length < had) tag += ', interrupted';
   }
-  if (best.energy > 0) {
-    const hits = Math.ceil(best.energy / Math.max(0.01, dmg));
+  if (best.hp > 0) {
+    const hits = Math.ceil(best.hp / Math.max(0.01, dmg));
     toast(MD.label.toUpperCase() + tag + ' for ' + dmg.toFixed(0) + '. ' +
-          Math.max(0, best.energy).toFixed(0) + ' left (~' + hits + ' more)' + (best.bleedT > 0 ? ', bleeding.' : '.'), 1200);
+          Math.max(0, best.hp).toFixed(0) + ' hp left (~' + hits + ' more)' + (best.bleedT > 0 ? ', bleeding.' : '.'), 1200);
     return;
   }
   best.alive = false; best.deathCause = 'predation'; best._creditedKill = true;
   if (FIGHT.lock === best) FIGHT.lock = null;
   FIGHT.pending = FIGHT.pending.filter(q => q.att !== best);
-  const gain = (best.ph.mass * 8 + best.ph.mass * 2) * 0.6;
-  if (c.hurtT > 0) toast('Killed it, but you are still under attack and cannot feed on it.', 2400);
-  else { c.energy = Math.min(p.storage, c.energy + Math.max(6, gain)); feedGrowth(c, best.ph.mass, 'Ate your kill'); }
-  if (world.flags.toxins && best.ph.toxin > 0) {
-    c.energy -= best.ph.toxin * 22;
-    if (c.energy < 0) c.energy = 0;
-  }
+  // A kill puts mass on you and patches you up. It does not poison you and it
+  // is never refused: winning a fight is the reward.
+  feedGrowth(c, best.ph.mass, 'Grew on the kill');
+  C.hpHeal(c, C.hpMaxOf(p) * 0.20);
   // a spattered pool, not one disc
   for (let q = 0; q < 7; q++) { const a = Math.random() * 6.283, d = Math.random() * (best.ph.radius || 4) * 0.5; fightSplat(best.x + Math.cos(a) * d, best.y + Math.sin(a) * d, 1.5 + Math.random() * 3); }
   remainsAdd(best);
@@ -12899,6 +13316,8 @@ function fightResolveSwing(sw) {
 // ---------------------------------------------------------------- per-frame
 function fightTick(dt) {
   world.hitFilter = fightHitFilter;
+  spellTick(dt);
+  shroomUpdate(dt);
   world.params.bodyScale = BODY_SCALE;
   world.playerRef = player.c;    // the one animal allowed to make its own bad decisions
   drownFx(dt);
@@ -12938,7 +13357,7 @@ function fightTick(dt) {
   // stamina: sprinting and guarding hold regen off; hunger slows it
   if (FIGHT.sprinting) fightSpend(STAM_SPRINT * dt);
   else if (FIGHT.stamDelay <= 0 && !fightBlocking()) {
-    const ef = clamp(c.energy / Math.max(1, c.ph.storage), 0, 1);
+    const ef = C.hpFrac(c);
     FIGHT.stam = Math.min(STAM_MAX, FIGHT.stam + STAM_REGEN * (0.35 + 0.65 * ef) * sickStamMul() * dt);
   }
   if (FIGHT.exhausted && FIGHT.stam >= STAM_RECOVER) FIGHT.exhausted = false;
@@ -13054,7 +13473,7 @@ function drawFight(t) {
     const top = fightTopY(lk) + 10;
     const rx = -Math.sin(player.yaw), rz = Math.cos(player.yaw);
     const segs = 12, W = 30;
-    const f = clamp(lk.energy / Math.max(1, lk.ph.storage), 0, 1);
+    const f = C.hpFrac(lk);
     for (let i = 0; i < segs; i++) {
       const u = (i + 0.5) / segs - 0.5;
       if ((i + 0.5) / segs > f) break;                 // only the health that is left
@@ -13133,7 +13552,7 @@ function feedGrowth(c, preyMass, label) {
   if (!c || !c.alive || !c.cellState || !c.cellState.length) return;
   const ratio = clamp((preyMass || 0.5) / Math.max(0.2, c.ph.mass), 0.05, 1.5);
   const gain = 0.02 + 0.10 * ratio;
-  const r0 = c.ph.radius, ef = c.energy / Math.max(1, c.ph.storage);
+  const r0 = c.ph.radius, ef = C.hpFrac(c);
   let sum = 0, n = 0;
   for (const q of c.cellState) {
     if (!q.alive) continue;
@@ -13146,7 +13565,7 @@ function feedGrowth(c, preyMass, label) {
   c._bulk = n ? sum / n : 1;
   c.ph = C.develop(c.genome, c.cellState);
   // the same fraction of a bigger stomach
-  c.energy = Math.min(c.ph.storage, Math.max(c.energy, ef * c.ph.storage));
+  C.hpOf(c);   // re-reads hpMax and carries the same fraction onto the bigger body
   if (c.ph.radius > r0 * 1.004) toast((label || 'Fed') + ': you grew to size x' + (c._bulk || 1).toFixed(2) + '.', 2200);
 }
 
@@ -13462,6 +13881,76 @@ const CARC_KEEP = 2600;          // built while this close, dropped beyond it
 const CARC_DRAW = 1250;
 const CARC_BUILD_PER_FRAME = 1;  // one skeleton a frame: it streams, never hitches
 const CARC = { cells: new Map(), live: [], q: [], seed: 0, t: 0 };
+// ---- the mushroom field -----------------------------------------------------
+// One candidate per cell, present or not and of a kind, rolled straight out of
+// the world seed. Nothing is stored for a cell until you are near it, so the
+// whole island costs what the handful in front of you costs, and two players
+// in the same match walk onto the same mushrooms.
+const SHROOM_CELL = 760;        // one candidate per cell
+const SHROOM_ODDS = 0.42;       // ...and this many cells actually hold one
+const SHROOM_R = 2600;          // built out to here, dropped again beyond it
+const SHROOM_REGROW = 150;      // seconds before a picked cap comes back
+const SHROOM = { cells: new Map(), live: [], seed: 0, t: 0 };
+function shroomReset() { SHROOM.cells.clear(); SHROOM.live.length = 0; }
+function shroomCell(ix, iz) {
+  const key = ix + ',' + iz;
+  if (SHROOM.cells.has(key)) return SHROOM.cells.get(key);
+  const h = carcHash(ix, iz, SHROOM.seed ^ 0x5eed);
+  let ent = null;
+  if ((h & 1023) / 1024 < SHROOM_ODDS) {
+    const r = carcRng(h);
+    const x = (ix + 0.18 + r() * 0.64) * SHROOM_CELL;
+    const z = (iz + 0.18 + r() * 0.64) * SHROOM_CELL;
+    // never in the sea, never on a cliff: it has to be somewhere you can stand
+    if (x > 60 && z > 60 && x < WORLD_W - 60 && z < WORLD_H - 60 && !terrain.isWater(x, z)) {
+      const id = SHROOM_IDS[(h >>> 11) % SHROOM_IDS.length];
+      ent = { x, z, id, y: 0, taken: 0, rot: r() * 6.283, s: 0.85 + r() * 0.45, built: false };
+    }
+  }
+  SHROOM.cells.set(key, ent);
+  return ent;
+}
+function shroomUpdate(dt) {
+  if (!world || !terrain) return;
+  SHROOM.seed = (world.seed | 0) >>> 0;
+  SHROOM.t += dt;
+  if (SHROOM.t < 0.3 && SHROOM.live.length) return;
+  SHROOM.t = 0;
+  const cx = player.camX, cz = player.camZ;
+  const i0 = Math.floor((cx - SHROOM_R) / SHROOM_CELL), i1 = Math.floor((cx + SHROOM_R) / SHROOM_CELL);
+  const j0 = Math.floor((cz - SHROOM_R) / SHROOM_CELL), j1 = Math.floor((cz + SHROOM_R) / SHROOM_CELL);
+  const live = [];
+  for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
+    const e = shroomCell(i, j);
+    if (!e) continue;
+    if (Math.hypot(e.x - cx, e.z - cz) > SHROOM_R) continue;
+    if (!e.built) { e.y = groundAt(e.x, e.z); e.built = true; }
+    // a picked cap comes back, so a long match does not end on a stripped map
+    if (e.taken > 0 && simT - e.taken > SHROOM_REGROW) { e.taken = 0; FOL.key = ''; }
+    live.push(e);
+  }
+  SHROOM.live = live;
+}
+// The one in reach, if any.
+function shroomAt() {
+  const c = player.c;
+  if (!c || !c.alive || player.spectator) return null;
+  const rr = Math.max(26, interactRange(c.ph) * 0.9);
+  let best = null, bd = Infinity;
+  for (const e of SHROOM.live) {
+    if (e.taken) continue;
+    const d = Math.hypot(e.x - c.x, e.z - c.y);
+    if (d < rr && d < bd) { bd = d; best = e; }
+  }
+  return best;
+}
+function shroomTake() {
+  const e = shroomAt();
+  if (!e) return { ok: false, why: 'none' };
+  const r = spellTake(e.id);
+  if (r.ok) { e.taken = simT; FOL.key = ''; }   // force the instance list to drop it now
+  return r;
+}
 function carcHash(a, b, c) {
   let h = (Math.imul(a | 0, 73856093) ^ Math.imul(b | 0, 19349663) ^ Math.imul(c | 0, 83492791)) >>> 0;
   h = Math.imul(h ^ (h >>> 15), 2246822519) >>> 0;
@@ -14751,16 +15240,14 @@ function rearReach(p) { return 1 + 0.85 * (player.rear || 0); }
 // creature, controls, options and credits. Mouse or arrow keys.
 // =====================================================================
 const MENU = { i: 0, page: null, items: [] };
+// Two choices, and a third short line for everything that is not a choice
+// about what to play.
 function menuItems() {
-  const out = [];
-  if (PROG.last) out.push({ id: 'continue', label: 'CONTINUE', desc: 'Play ' + (PROG.last.name || 'your last creature') + ' again on a fresh island.' });
-  out.push({ id: 'new', label: 'NEW GAME', desc: 'Build a creature from scratch and hatch it into a new island.' });
-  out.push({ id: 'load', label: 'LOAD CREATURE', desc: 'Pick one of the creatures you have saved and play it.' });
-  out.push({ id: 'online', label: 'BATTLE ROYALE', desc: 'A fifteen-minute match. Twenty-four cages, one island, a closing fog. Last one standing wins.' });
-  out.push({ id: 'controls', label: 'CONTROLS', desc: 'Every key and what it does: moving, fighting, flying and surviving.' });
-  out.push({ id: 'options', label: 'OPTIONS', desc: 'Graphics quality, render scale, sound and the world settings.' });
-  out.push({ id: 'credits', label: 'ABOUT', desc: 'What this game is and how its animals are made.' });
-  return out;
+  return [
+    { id: 'campaign', label: 'CAMPAIGN', desc: 'One island, one creature, one life at a time. Build a beast and survive it.' },
+    { id: 'online', label: 'ONLINE', desc: 'Battle royale. Everyone starts with nothing, the fog closes, one is left.' },
+    { id: 'more', label: 'MORE', desc: 'Controls, options, saved creatures and what this is.' },
+  ];
 }
 function menuRender() {
   const nav = document.getElementById('mmNav');
@@ -14800,20 +15287,43 @@ function menuPage(id) {
         'Nothing is hand-placed. The island, the weather, the animals and their behaviour all come out of the simulation, so no two worlds are alike.</p>' +
         '<p>You are one of those animals. Eat, grow, fight, take parts from what you kill, breed, and keep your line going.</p>' +
         '<p class="mmnote">Built with WebGPU. Made by Finn Berg.</p>';
+  } else if (id === 'campaign') {
+    const list = (PROG.saved || []);
+    h = '<h2>CAMPAIGN</h2>' +
+      '<p>You are one animal on one island. You hatch small, you grow into whatever your body can become, ' +
+      'and everything you are carrying you took off something that is no longer using it. There is no story ' +
+      'to follow yet: this is the world the story will be set in.</p>' +
+      '<div class="mmopt">' +
+      (PROG.last ? '<button class="mmb wide" data-camp="last">continue with your last creature</button>' : '') +
+      '<button class="mmb wide" data-camp="new">build a new creature</button>' +
+      (list.length ? '<button class="mmb wide" data-camp="load">load a saved creature</button>' : '') +
+      '</div>' +
+      '<p class="mmnote">Story mode is not built yet. Everything here is the free island it will run on.</p>';
+  } else if (id === 'more') {
+    h = '<h2>MORE</h2><div class="mmopt">' +
+      '<button class="mmb wide" data-more="controls">controls</button>' +
+      '<button class="mmb wide" data-more="options">options</button>' +
+      '<button class="mmb wide" data-more="load">saved creatures</button>' +
+      '<button class="mmb wide" data-more="credits">about</button>' +
+      '</div>';
   } else if (id === 'online') {
     const wins = PROG.brWins | 0, best = PROG.brBest | 0;
     h = '<h2>BATTLE ROYALE</h2>' +
-      '<p>Twenty-four creatures, one island, fifteen minutes. You start locked in a numbered cage on the ring. ' +
-      'The gates go up together. For the first five minutes no player can touch another: hunt the island\'s own ' +
-      'animals and take their parts. Then it is open. A fog closes in from the edge and kills whatever it catches. ' +
-      'Kill a player and you eat them, grow, take a part off their body and earn ' + BONES_PER_KILL + ' bones; they choose to watch you ' +
-      'or come back as your young, and a pack that wins, wins together.</p>' +
+      '<p>One island, fifteen minutes, and nobody brings anything in. Everyone spawns as a bare body in a ' +
+      'numbered cage on the ring, with a small pile on the cage floor holding a mouth and one weapon. That is ' +
+      'your entire head start. The gates go up together and it is live from the first second.</p>' +
+      '<p>There is no wildlife. Everything alive out there is somebody. What you fight with, you take off the ' +
+      'island\'s old bodies or off the players you beat, and the glowing mushrooms scattered across the map are ' +
+      'four one-shot powers you carry and spend: double damage, untouchable, small and unseen, or bigger and ' +
+      'faster and stronger. None of it leaves the match. A fog closes in from the edge and kills whatever it ' +
+      'catches. Kill a player and you grow, take a pair of their parts and earn ' + BONES_PER_KILL + ' bones; they choose to watch ' +
+      'you or come back as your young, and a pack that wins, wins together.</p>' +
       '<p>Nothing about the island is yours to set. The seed, the ecosystem, the weather, the clock and the ' +
       'terrain are fixed by the match and identical for everyone in it, and the world panel is dead for as long ' +
       'as the match runs. Climate drift is off: it re-classifies biomes as the match goes, and a player whose ' +
       'ground shifted under them would gain or lose cover through no choice of their own.</p>' +
-      '<p class="mmnote"><b>This build has no game server.</b> The match, the zone, the grace period, the looting, the ' +
-      'packs and the win are all real and run to the end, but the other twenty-three are bots on this machine. Every ' +
+      '<p class="mmnote"><b>This build has no game server.</b> The match, the zone, the looting, the ' +
+      'packs and the win are all real and run to the end, but the other players are bots on this machine. Every ' +
       'rule is settled through one transport interface, so pointing it at a real server is a swap rather than a rewrite. ' +
       'Nothing here talks to the network.</p>' +
       (wins ? '<p class="mmnote">You have won ' + wins + ' match' + (wins === 1 ? '' : 'es') + '. Best: ' + best + ' kills.</p>' : '') +
@@ -14834,6 +15344,8 @@ function menuChoose() {
   if (it.id === 'continue') { menuFresh(() => { becomeDesigned(C.cloneDesign(PROG.last)); menuStart(); }); return; }
   if (it.id === 'new') { menuFresh(() => { stopMenuMusic(true); const st = document.getElementById('start'); if (st) st.style.display = 'none'; openEditor('start'); }); return; }
   if (it.id === 'online') { menuPage('online'); return; }
+  if (it.id === 'campaign') { menuPage('campaign'); return; }
+  if (it.id === 'more') { menuPage('more'); return; }
   menuPage(it.id);
 }
 let menuFadeTimer = null;
@@ -14928,6 +15440,14 @@ function menuBind() {
     if (t.dataset.auto) { R2.auto = !R2.auto; toast('auto resolution ' + (R2.auto ? 'on' : 'off'), 1200); return; }
     if (t.dataset.snd) { sndToggle(); return; }
     if (t.dataset.wipe) { try { localStorage.removeItem(PROG_KEY); } catch (err) { /* nothing saved */ } location.reload(); return; }
+    if (t.dataset.camp != null) {
+      const m = t.dataset.camp;
+      if (m === 'last' && PROG.last) { becomeDesigned(C.cloneDesign(PROG.last)); menuStart(); return; }
+      if (m === 'load') { menuPage('load'); return; }
+      menuFresh(() => { stopMenuMusic(true); const st = document.getElementById('start'); if (st) st.style.display = 'none'; openEditor('start'); });
+      return;
+    }
+    if (t.dataset.more != null) { menuPage(t.dataset.more); return; }
     if (t.dataset.brgo != null) {
       const mode = t.dataset.brgo;
       if (mode === '2') { stopMenuMusic(true); BR.pending = true; const st = document.getElementById('start'); if (st) st.style.display = 'none'; openEditor('start'); return; }
@@ -15186,7 +15706,7 @@ function updateHUD() {
     if (p.apex) tags.push('apex');
     const nm = (c.genome && c.genome.design && c.genome.design.name) || '';
     $('v-name').textContent = (nm ? nm + ' · ' : '') + `${diet.toUpperCase()} · sp${c.speciesId} · gen ${player.generation}`;
-    $('v-e').style.width = clamp(c.energy / Math.max(1, p.storage) * 100, 0, 100) + '%';
+    $('v-e').style.width = (C.hpFrac(c) * 100).toFixed(1) + '%';
     $('v-g').style.width = clamp((c._growthAvg || 0) * 100, 0, 100) + '%';
     $('v-stats').innerHTML =
       `<span class="k">mass</span> <span class="v">${p.mass.toFixed(1)}</span> · ` +
@@ -15196,9 +15716,9 @@ function updateHUD() {
       `<span class="k">age</span> <span class="v">${c.age.toFixed(0)}/${c.maxAge.toFixed(0)}</span> · ` +
       `<span class="k">cells</span> <span class="v">${(p.parts || []).length}</span>` +
       (tags.length ? ` · <span class="v">${tags.join(' ')}</span>` : '') +
-      (p.canFly ? flightHud() : '') + swimHud() +
+      (p.canFly ? flightHud() : '') + swimHud() + spellHudHtml() +
       ((player.rear || 0) > 0.05 ? `<br><span style="color:#7ee787">reared up: reach x${rearReach(p).toFixed(2)}</span>` : '') +
-      (SICK.t > 0 ? `<br><span style="color:#c9d64a">ill from ${SICK.src} &middot; ${Math.ceil(SICK.t)} s &middot; stamina -${Math.round((1 - sickStamMul()) * 100)}%</span>` : '');
+      '';
   } else {
     $('v-name').textContent = player.spectator ? 'DETACHED CAMERA' : '-';
     $('v-stats').textContent = '';
@@ -15214,16 +15734,31 @@ function updateHUD() {
   }
   const act = $('act');
   if (act) {
+    if (brPileHere()) {
+      const ids = brPileFor(BR.slot).map((id) => (VIS[id] ? VIS[id].name : id));
+      act.innerHTML = '<div class="acth" style="color:#f5d98a">YOUR STARTING KIT</div>' +
+        '<div class="keys"><span class="ok">E</span> take the pile &middot; a ' + ids[0] + ' and a ' + ids[1] +
+        ' &middot; <span class="ok">B</span> to put them on</div>';
+      act.style.display = 'block';
+      return;
+    }
+    const sh = shroomAt();
+    if (sh) {
+      const D = SPELL_DEF[sh.id], cc = D.col;
+      const css = 'rgb(' + Math.round(cc[0] * 255) + ',' + Math.round(cc[1] * 255) + ',' + Math.round(cc[2] * 255) + ')';
+      act.innerHTML = '<div class="acth" style="color:' + css + '">' + D.name + ' MUSHROOM</div>' +
+        '<div class="keys"><span class="ok">E</span> take it &middot; ' + D.blurb + ' for ' + D.dur + 's</div>';
+      act.style.display = 'block';
+      return;
+    }
     const tgt = player.target, me = player.c;
     if (tgt && me && me.alive) {
       const why = mateBlock(me, tgt);
       const d = tgt.ph, mp = me.ph;
       const diet = d.carnivory > 0.5 ? 'carnivore' : d.scavenger > 0.5 ? 'scavenger' : 'herbivore';
       // how many swings this fight would take, so you can judge it before starting
-      let dmg = mp.attack - d.defense * 0.6;
-      const ratio = clamp(mp.mass / Math.max(0.01, d.mass), 0.12, 3);
-      dmg = Math.max(dmg, Math.max(1, d.storage * 0.05 * ratio));
-      const hits = Math.ceil(Math.max(0, tgt.energy) / Math.max(0.01, dmg));
+      const dmg = C.strikeDamage(mp, d, (MOVE_DEF[player.moveSel] || { dmg: 1 }).dmg);
+      const hits = Math.ceil(Math.max(0, C.hpOf(tgt)) / Math.max(0.01, dmg));
       const mayHit = canAttackTarget(tgt);
       const friend = packFriend(tgt);
       const fp = eatPrompt();
@@ -15580,7 +16115,12 @@ function bindInput() {
     if (k === 'n') sndToggle();
     if (k === 'r') playerRoar();
     if (k === 'm') tryMate();
-    if (k === 'e') tryEat();
+    if (k === 'e') {
+      let r = brTakePile();
+      if (!r.ok) r = shroomTake();
+      if (!r.ok && r.why === 'none') toast('Nothing to pick up here.', 900);
+    }
+    if (k >= '1' && k <= '4' && started && !player.picker) { spellUse(SPELL_BY_N[k]); e.preventDefault(); }
     if (k === 'v') tryInspect();
     if (k === ' ' && !player.spectator) {
       // one press, one wingbeat: the browser's key repeat is not a wing
@@ -16040,6 +16580,9 @@ for (const id of STARTER_ITEMS) PROG.owned[id] = (PROG.owned[id] | 0) + 1;
 function ownedCount(id) { return SANDBOX ? Infinity : Math.max(0, PROG.owned[id] | 0); }
 // How many different parts you hold at least one of.
 function ownedKinds() { let k = 0; for (const id in PROG.owned) if ((PROG.owned[id] | 0) > 0) k++; return k; }
+// A looted part arrives as a pair: a body has two sides and a single spike
+// cannot be placed symmetrically. Purchases deliberately do not use this.
+const PICKUP_PAIR = 2;
 function ownedGain(id, n) {
   if (!VIS[id]) return 0;
   PROG.owned[id] = Math.max(0, PROG.owned[id] | 0) + Math.max(1, n | 0);
@@ -17751,9 +18294,9 @@ const BR_PACK_NONE = -1;
 // so a player who happened to start in a band that shifted would gain or lose
 // cover through no choice of their own.
 const BR_RULES = Object.freeze({
-  startPop: 200,            // a living island worth hunting
+  startPop: 0,              // a match is players. Nothing else breathes on this island.
   startPlants: 0,
-  prerun: 30,               // biological seconds run before the gates, so the island is not empty
+  prerun: 0,                // nothing to run forward: there is no ecosystem in a match
   mutationRate: 0.8,
   plantRate: 20,
   plantEnergy: 10,
@@ -17952,6 +18495,36 @@ function brCarveBays(n) {
   return bays;
 }
 
+// ---- what you walk in as ---------------------------------------------------
+// A match body is the shape you chose and nothing else on it. Limbs stay,
+// because a creature that cannot walk is not a fighter, and their tips are
+// reset to a plain foot so a bought claw cannot sneak in on the end of a leg.
+// Eyes stay, because being blind is not a fair start. Everything that does
+// damage or soaks it comes off.
+const BR_BARE_TIP = { LIMB: 't_paw' };
+function brBareDesign(des) {
+  const src = des && des.plan != null ? des : C.defaultDesign(0);
+  const d = C.cloneDesign(src);
+  // keep only the eyes: they are how you see, not how you fight
+  d.parts = (d.parts || []).filter((pt) => {
+    const sim = C.ITEM_SIM[pt.id];
+    return sim && sim.t === 'EYE';
+  });
+  for (const lb of d.limbs || []) {
+    if (lb.tip) lb.tip = { id: BR_BARE_TIP.LIMB, c: null, s: 1 };
+  }
+  return d;
+}
+// The opening kit, rolled per player from the match seed so everyone's bay
+// holds an equivalent heap and nobody can reroll theirs.
+const BR_PILE_MOUTHS = ['m_beak', 'm_grazer', 'm_jaws', 'm_hook', 'm_duck'];
+const BR_PILE_ARMS = ['s_spike', 's_knob', 's_quills', 's_plate', 't_claw', 't_talon', 'h_straight', 'h_curved'];
+function brPileFor(slot) {
+  const r = carcRng(carcHash(slot | 0, 0x10de, BR.seed >>> 0));
+  return [BR_PILE_MOUTHS[Math.floor(r() * BR_PILE_MOUTHS.length)],
+          BR_PILE_ARMS[Math.floor(r() * BR_PILE_ARMS.length)]];
+}
+
 // ---- match -----------------------------------------------------------------
 // Entering a match is two halves with a world build between them. join()
 // hands down the seed and the ruleset, the island is rebuilt from exactly
@@ -18027,6 +18600,8 @@ function brBegin() {
   player.camX = bay.x; player.camZ = bay.z;
   player.spectator = false;
   brSpawnBots();
+  brStashInventory();    // what you own is yours; it is just not in this match
+  spellReset();          // nothing carries into a match
   BR.net.ready();
   brSyncPanel();
   brSay('BAY ' + bay.n + '. The gate opens in ' + BR_CAGE_SECS + ' seconds.', 5000);
@@ -18037,7 +18612,10 @@ function brBegin() {
 function brEnterMatch(design, net) {
   brArm(net);
   return Promise.resolve(rebuildWorld()).then(() => {
-    if (design) { try { becomeDesigned(design); } catch (e) { console.warn('br: could not take that creature in', e); } }
+    // Your shape comes in. Your kit does not: everyone starts the match bare
+    // and builds their beast out of what this island and these players give up.
+    const bare = brBareDesign(design || (ED.des ? ED.des : null));
+    try { becomeDesigned(bare); } catch (e) { console.warn('br: could not take that creature in', e); }
     brBegin();
   }).catch((e) => {
     console.warn('br: match could not start', e);
@@ -18054,7 +18632,9 @@ function brStart(net) {
   return brBegin();
 }
 function brStop() {
+  try { brRestoreInventory(); } catch (e) { console.warn('br: inventory restore', e); }
   try { brNamesHide(0); } catch (e) { /* the layer may not exist yet */ }
+  try { spellReset(); } catch (e) { /* the pouch is cosmetic once the match is over */ }
   if (BR.net) BR.net.leave();
   BR.on = false; BR.arming = false; BR.phase = 'off'; BR.net = null;
   BR.players.length = 0; BR.bays.length = 0;
@@ -18071,7 +18651,8 @@ function brSpawnBots() {
     let c = null;
     try {
       const g = C.seedHerbivore(world, rng);
-      g.design = C.randomDesign(rng, { diversity: 0.85, diet: rng() < 0.55 ? 'carn' : 'herb', rarityCap: world.rarityCap });
+      // Bare, exactly like you: the shape is random, the kit is not there.
+      g.design = brBareDesign(C.randomDesign(rng, { diversity: 0.85, diet: rng() < 0.55 ? 'carn' : 'herb', rarityCap: world.rarityCap }));
       C.compileDesign(g);
       c = C.makeCreature(g, bay.x, bay.z, 400);
       // start full: a player would not spawn one bite from starving
@@ -18085,6 +18666,52 @@ function brSpawnBots() {
     pl.alive = !!c;
     pl.x = bay.x; pl.z = bay.z;
   }
+}
+// Your own parts are put in a drawer for the length of the match and handed
+// back exactly as they were. A match must not be able to spend, lose or grant
+// anything you keep between matches -- only bones, which the match pays out
+// separately and deliberately.
+function brStashInventory() {
+  if (BR._stash) return;
+  BR._stash = JSON.parse(JSON.stringify(PROG.owned || {}));
+  PROG.owned = {};
+  BR._pileTaken = false;
+  saveProgress();
+  if (typeof edRefreshUI === 'function' && ED.open) edRefreshUI();
+}
+function brRestoreInventory() {
+  if (!BR._stash) return;
+  PROG.owned = BR._stash;
+  BR._stash = null;
+  saveProgress();
+  if (typeof edRefreshUI === 'function' && ED.open) edRefreshUI();
+}
+// ---- the pile on your cage floor -------------------------------------------
+// Where the heap sits inside a bay: just inside the back wall, so it is the
+// first thing you see when you turn away from the gate.
+function brPilePos(bay) {
+  if (!bay) return null;
+  const ca = Math.cos(bay.yaw), sa = Math.sin(bay.yaw);
+  const lx = -BR_CAGE_R * 0.52;
+  return { x: bay.x + lx * ca, z: bay.z + lx * sa, y: bay.y };
+}
+function brPileHere() {
+  if (!BR.on || BR.phase !== 'cage' || BR._pileTaken) return null;
+  const bay = BR.bays[BR.slot], c = player.c;
+  if (!bay || !c || !c.alive) return null;
+  const q = brPilePos(bay);
+  return Math.hypot(q.x - c.x, q.z - c.y) < 26 ? q : null;
+}
+function brTakePile() {
+  if (!brPileHere()) return { ok: false, why: 'none' };
+  const ids = brPileFor(BR.slot);
+  for (const id of ids) ownedGain(id, 1);
+  BR._pileTaken = true;
+  FOL.key = '';                       // the heap comes off the floor now
+  const names = ids.map((id) => (VIS[id] ? VIS[id].name : id)).join(' and a ');
+  toast('You take a ' + names + '. Press B to put them on before the gate opens.', 5000);
+  if (SND.ctx && SND.on) { sndThump(0.3); sndNoiseBurst(1400, 8, 0.14, 0.16, 0, 0.9); }
+  return { ok: true, ids };
 }
 function brSay(msg, ms) { BR.msg = msg; BR.msgT = performance.now() + (ms || 3000); }
 
@@ -18273,7 +18900,7 @@ function brLootDesign(design, from) {
   }
   const opts = [...ids];
   if (!opts.length) { brSay('You ate ' + from + '. There was nothing on it to take.', 2600); return; }
-  player.picker = { opts: opts.slice(0, 6), label: 'You killed ' + from + '. Take one of their parts', t0: performance.now(), items: true };
+  player.picker = { opts: opts.slice(0, 6), label: 'You killed ' + from + '. Take a pair of one of their parts', t0: performance.now(), items: true };
   renderPicker();
 }
 // The loser's choice: watch, or come back as a baby in the winner's pack.
@@ -18313,7 +18940,7 @@ function brTimeUp() {
   let best = null;
   for (const q of BR.players) {
     if (!q.alive) continue;
-    const hp = q.c && q.c.alive ? q.c.energy : 0;
+    const hp = q.c && q.c.alive ? C.hpOf(q.c) : 0;
     if (!best || q.kills > best.kills || (q.kills === best.kills && hp > best.hp)) best = { q, hp, kills: q.kills };
   }
   const winSide = best ? (best.q.pack !== BR_PACK_NONE ? best.q.pack : best.q.slot) : null;
@@ -18372,12 +18999,10 @@ function brTick(dt) {
     BR._wildSaid = false;
     brSay('GATES OPEN. Everyone can kill everyone. Hunt the island for parts while it lasts.', 7000);
   }
-  // The island empties partway through, whoever is left alive. It is a clock
-  // on the loot, not a truce.
-  if (BR.phase === 'open' && BR.t >= BR_CAGE_SECS + BR_WILD_SECS) {
-    if (!BR._wildSaid) { BR._wildSaid = true; brSay('THE ISLAND EMPTIES. Only players are left.', 7000); }
-    brCullWildlife(dt);
-  }
+  // Nothing that is not a player is allowed to be alive in a match. The
+  // ruleset builds the island empty; this is the guard that keeps it that
+  // way whatever else in the page decides to spawn something.
+  brNoWildlife();
   // the gate slides up over two seconds once the cage phase ends
   const want = BR.phase === 'cage' ? 0 : 1;
   BR.gateY += clamp(want - BR.gateY, -dt * 0.5, dt * 0.5);
@@ -18455,6 +19080,19 @@ function brBotChase(c, foe, dt) {
 // When the real fight starts the island's own animals go. Not instantly: they
 // thin out over the first half minute of open season, leaving their bodies
 // behind as food, so what is left is players hunting players.
+// Anything alive that is not somebody's body, gone. Cheap: in a match the
+// creature list is the players and nothing else, so this walks fifty entries.
+function brNoWildlife() {
+  if (!world || !world.creatures) return;
+  const list = world.creatures;
+  for (let i = 0; i < list.length; i++) {
+    const c = list[i];
+    if (!c.alive || c._br != null || c === player.c) continue;
+    c.alive = false;
+    c.deathCause = 'oldage';
+    if (world.onDeath) { try { world.onDeath(c); } catch (e) { /* remains are cosmetic */ } }
+  }
+}
 const BR_CULL_SECS = 30;
 function brCullWildlife(dt) {
   if (!world) return;
@@ -18483,7 +19121,10 @@ function brConfineToCage(c, bay) {
   if (r <= 0) { c.x = bay.x; c.y = bay.z; return; }
   const ca = Math.cos(bay.yaw), sa = Math.sin(bay.yaw);
   const dx = c.x - bay.x, dz = c.y - bay.z;
-  const lx = clamp(dx * ca + dz * sa, -r, r);
+  // Local axes: +x is the gate face, which is the only one that ever opens,
+  // and it only opens once the gate has actually lifted.
+  const gateOpen = BR.gateY > 0.5;
+  const lx = clamp(dx * ca + dz * sa, -r, gateOpen ? 1e9 : r);
   const lz = clamp(-dx * sa + dz * ca, -r, r);
   c.x = bay.x + lx * ca - lz * sa;
   c.y = bay.z + lx * sa + lz * ca;
@@ -18493,8 +19134,9 @@ function brZoneDamage(dt) {
     if (!p.alive || !p.c || !p.c.alive) continue;
     const f = brFogAt(p.c.x, p.c.y);
     if (f <= 0) continue;
-    p.c.energy -= BR_ZONE_DPS * f * dt;
-    if (p.c.energy <= 0) {
+    if (p.slot === BR.slot && spellInvuln()) continue;
+    C.hpHurt(p.c, BR_ZONE_DPS * f * dt);
+    if (p.c.hp <= 0) {
       p.c.alive = false;
       brOnPlayerKilled(p.slot, null, 'the fog');
     } else if (p.slot === BR.slot && f > 0.05) {
@@ -18541,9 +19183,13 @@ function brBotTick(dt) {
     const rate = 1.1 + 0.6 * Math.random();
     if (c._brAcc < rate) continue;
     c._brAcc = 0;
-    const dmg = (c.ph && c.ph.attack ? c.ph.attack : 4) * (0.8 + Math.random() * 0.5);
-    best.c.energy -= dmg;
-    if (best.c.energy <= 0) {
+    const dmg = C.strikeDamage(c.ph || { mass: 1 }, best.c.ph || { defense: 0, mass: 1 }, 0.9 + Math.random() * 0.5);
+    // Through the filter, exactly like anything else swinging at you: against
+    // the human that means a telegraphed wind-up you can guard, parry or dodge.
+    const let_ = world.hitFilter ? world.hitFilter(best.c, c, dmg) : dmg;
+    if (let_ === null) continue;
+    C.hpHurt(best.c, let_);
+    if (best.c.hp <= 0) {
       best.c.alive = false;
       brOnPlayerKilled(best.slot, p.slot);
     }
@@ -18557,15 +19203,15 @@ function brBotTick(dt) {
 function edShield() {
   const c = player.c;
   if (!c) return;
-  if (ED.shieldE == null) ED.shieldE = c.energy;
+  if (ED.shieldE == null) ED.shieldE = C.hpOf(c);
   // if the step managed to finish you off, take it back: you were at a
   // workbench, not in the world
   if (!c.alive) { c.alive = true; c.deathCause = null; }
   // hold the body exactly where the editor found it
-  c.energy = Math.max(1, Math.min(ED.shieldE, c.ph.storage));
+  c.hp = Math.max(1, Math.min(ED.shieldE, C.hpMaxOf(c.ph)));
+  c._hpMax = C.hpMaxOf(c.ph);
   c._drown = 0; c._sub = false;
   c._hurtT = 0;
-  if (c.energy <= 0) c.energy = 1;
 }
 
 // ---------------------------------------------------------------- pause
@@ -19237,7 +19883,7 @@ function brDrawNames() {
     const sx = (ndcX * 0.5 + 0.5) * rect.width;
     const sy = (1 - (ndcY * 0.5 + 0.5)) * rect.height;
     const node = brNameNode(n++);
-    const f = clamp(c.energy / Math.max(1, c.ph.storage), 0, 1);
+    const f = C.hpFrac(c);
     const me = BR.players[BR.slot];
     const friend = !!(me && q.pack !== BR_PACK_NONE && (q.pack === me.pack || q.pack === BR.slot || (me.pack !== BR_PACK_NONE && me.pack === q.slot)));
     const cls = 'brname' + (friend ? ' pack' : '') + (f <= 0.25 ? ' hurt' : '');
@@ -19270,10 +19916,7 @@ function brHudHtml() {
   const me = BR.players[BR.slot];
   let phase = '';
   if (BR.phase === 'cage') phase = 'IN THE CAGE · gate in ' + Math.ceil(BR_CAGE_SECS - BR.t) + 's';
-  else if (BR.phase === 'open') {
-    const wl = Math.ceil(BR_CAGE_SECS + BR_WILD_SECS - BR.t);
-    phase = wl > 0 ? 'LIVE · island empties in ' + wl + 's' : 'LIVE · players only';
-  }
+  else if (BR.phase === 'open') phase = 'LIVE · ' + a.n + ' left';
   else phase = 'MATCH OVER';
   const gap = player.c ? brEdgeGap(player.c.x, player.c.y) : 0;
   const out = Math.max(0, -gap);
@@ -19443,7 +20086,7 @@ function edOnKill(prey) {
   // A rival in a match pays out through the match, which handles the loot, the
   // growth, the bones and the pack offer, so the ordinary kill path is skipped.
   if (BR.on && prey && prey._br != null) {
-    if (prey.alive === false || prey.energy <= 0) brOnPlayerKilled(prey._br, BR.slot);
+    if (prey.alive === false || C.hpOf(prey) <= 0) brOnPlayerKilled(prey._br, BR.slot);
     return;
   }
   PROG.kills++;
@@ -19453,7 +20096,7 @@ function edOnKill(prey) {
   saveProgress();
   const opts = preyItems(prey);
   if (!opts.length) { toast('Killed it. +' + KILL_SPACE + ' genome space, +' + BONES_PER_KILL + ' bones.', 2600); return; }
-  player.picker = { opts, label: 'You killed it: +' + KILL_SPACE + ' genome space, +' + BONES_PER_KILL + ' bones. Take one of its parts', t0: performance.now(), items: true };
+  player.picker = { opts, label: 'You killed it: +' + KILL_SPACE + ' genome space, +' + BONES_PER_KILL + ' bones. Take a pair of one of its parts', t0: performance.now(), items: true };
   renderPicker();
 }
 function renderPicker() {
@@ -19480,8 +20123,12 @@ function choosePicked(i) {
   if (i === 0) { toast('Took nothing. Your genome space still grew.', 1800); return; }
   const id = pk.opts[i - 1];
   if (!id) return;
-  const n = ownedGain(id, 1);
-  toast('Took ' + VIS[id].name + '. You now have ' + n + '. Press B to put ' + (n > 1 ? 'one' : 'it') + ' on.', 3600);
+  // One pickup, one pair. choosePicked is the single funnel every pickup runs
+  // through (a kill, a player kill, searching a carcass), so pairing here
+  // cannot be inconsistent between the three of them.
+  const n = ownedGain(id, PICKUP_PAIR);
+  toast('Took a pair of ' + VIS[id].name + '. You now have ' + n + '. Press B to put ' +
+        (n > 2 ? 'them' : 'the pair') + ' on, or M in the editor to mirror.', 3600);
 }
 function edHudLine() {
   const el = $('v-genome');
@@ -19698,6 +20345,8 @@ window.__G3D = {
     start: (net) => brStart(net), stop: () => brStop(), tick: (dt) => brTick(dt),
     skip: (secs) => { BR.t += secs; },
     hitAllowed: (v, a) => brHitAllowed(v, a),
+    hpMaxOf: (c) => C.hpMaxC(c),
+    hpOf: (c) => C.hpOf(c),
     fogAt: (x, z) => brFogAt(x, z),
     edgeAt: (a, t) => brZoneEdge(a, t),
     edgeGap: (x, z) => brEdgeGap(x, z),
@@ -19733,6 +20382,37 @@ window.__G3D = {
     get deadChoice() { return BR.deadChoice; },
     renderHud: () => brRenderHud(),
     wildSecs: BR_WILD_SECS,
+    get gateY() { return BR.gateY; },
+    // everything alive that is not a player: must be zero, always
+    wildAlive: () => (world && world.creatures ? world.creatures.filter((c) => c.alive && c._br == null && c !== player.c).length : -1),
+    bare: (slot) => {
+      const q = BR.players[slot == null ? BR.slot : slot];
+      const d = q && q.c && q.c.genome ? q.c.genome.design : null;
+      if (!d) return null;
+      const cats = {};
+      for (const pt of d.parts || []) { const sim = C.ITEM_SIM[pt.id]; if (sim) cats[sim.t] = (cats[sim.t] || 0) + 1; }
+      const tips = (d.limbs || []).map((l) => (l.tip ? l.tip.id : null));
+      return { parts: (d.parts || []).length, limbs: (d.limbs || []).length, cats, tips,
+               weapon: +(q.c.ph.weapon || 0).toFixed(4), hp: Math.round(C.hpMaxC(q.c)) };
+    },
+    pile: () => {
+      const bay = BR.bays[BR.slot], q = brPilePos(bay);
+      return { taken: !!BR._pileTaken, ids: brPileFor(BR.slot), here: !!brPileHere(), x: q ? Math.round(q.x) : null, z: q ? Math.round(q.z) : null };
+    },
+    goToPile: () => { const q = brPilePos(BR.bays[BR.slot]); if (!q) return null; window.__G3D.teleport(q.x, q.z); return q; },
+    takePile: () => brTakePile(),
+    owned: () => Object.assign({}, PROG.owned),
+    stashed: () => (BR._stash ? Object.assign({}, BR._stash) : null),
+    // push the body at a cage wall and report whether it stayed inside
+    testWall: (lx, lz) => {
+      const bay = BR.bays[BR.slot], c = player.c;
+      if (!bay || !c) return null;
+      const ca = Math.cos(bay.yaw), sa = Math.sin(bay.yaw);
+      c.x = bay.x + lx * ca - lz * sa; c.y = bay.z + lx * sa + lz * ca;
+      brConfineToCage(c, bay);
+      const dx = c.x - bay.x, dz = c.y - bay.z;
+      return { lx: +(dx * ca + dz * sa).toFixed(1), lz: +(-dx * sa + dz * ca).toFixed(1), R: BR_CAGE_R };
+    },
     names: () => [...document.querySelectorAll('#brNames .brname')]
       .filter(e => e.style.display !== 'none')
       .map(e => ({ name: e.querySelector('.bn').textContent, hp: e.querySelector('.bb b').style.width, pack: e.classList.contains('pack') })),
@@ -19867,7 +20547,45 @@ window.__G3D = {
   get meshCacheSize() { return meshCache.size; },
   pumpMesh: () => pumpMeshQueue(),
   get picker() { return player.picker; },
+  menu: {
+    items: () => menuItems().map((it) => it.id),
+    page: (id) => { menuPage(id); return MENU.page; },
+    choose: (i) => { MENU.i = i | 0; menuRender(); menuChoose(); return MENU.page; },
+  },
   pick: (i) => choosePicked(i),
+  hp: () => C.hpOf(player.c),
+  hpMax: () => C.hpMaxC(player.c),
+  hurtMe: (n) => { const c = player.c; if (!c) return 0; if (spellInvuln()) return C.hpOf(c); C.hpHurt(c, n); return C.hpOf(c); },
+  spell: {
+    bag: () => Object.assign({}, SPELL.bag),
+    on: () => { const o = {}; for (const k of SPELL_IDS) if (spellLeft(k) > 0) o[k] = +spellLeft(k).toFixed(2); return o; },
+    give: (id, n) => { SPELL.bag[id] = Math.min(SPELL_CARRY, (SPELL.bag[id] | 0) + (n == null ? 1 : n)); return SPELL.bag[id]; },
+    use: (id) => spellUse(id),
+    tick: (dt) => spellTick(dt),
+    reset: () => spellReset(),
+    muls: () => ({ dmg: spellDamageMul(), size: spellSizeMul(), speed: spellSpeedMul(),
+                   hp: spellHpMul(), invuln: spellInvuln(), seen: spellSeenMul() }),
+    near: () => { const e = shroomAt(); return e ? { id: e.id, dist: Math.round(Math.hypot(e.x - player.c.x, e.z - player.c.y)) } : null; },
+    field: () => SHROOM.live.filter(e => !e.taken).map(e => ({ id: e.id, x: Math.round(e.x), z: Math.round(e.z) })),
+    take: () => shroomTake(),
+    // what the renderer would actually queue this frame: mesh present, one
+    // instance per standing cap, each with its own colour
+    drawn: () => {
+      let n = 0; const cols = [];
+      shroomPut((mesh, x, y, z, rot, sc, tint) => { n++; if (cols.length < 4) cols.push(tint.map(v => +v.toFixed(2))); },
+                player.camX, player.camZ);
+      return { mesh: !!BRMESH.shroom, n, cols };
+    },
+    // walk the player onto the nearest uncollected cap, so a test can pick one up
+    walkTo: () => {
+      let best = null, bd = Infinity;
+      for (const e of SHROOM.live) { if (e.taken) continue;
+        const d = Math.hypot(e.x - player.c.x, e.z - player.c.y); if (d < bd) { bd = d; best = e; } }
+      if (!best) return null;
+      window.__G3D.teleport(best.x, best.z);
+      return { id: best.id };
+    },
+  },
   offer: (g, l) => offerTraits(g, l),
   eat: () => tryEat(),
   food: {
