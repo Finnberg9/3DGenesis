@@ -8150,7 +8150,10 @@ function drawCreature(c, t, camDist) {
   // Heading is eased toward the direction of travel. The brain re-picks a
   // heading every step, so snapping straight to atan2(vy,vx) made creatures
   // twitch between poses instead of turning.
-  if (sp > 1) {
+  // While something is turning to face the player it owns its own heading:
+  // easing toward the direction of travel as well would drag it back off
+  // target every frame it stepped sideways.
+  if (sp > 1 && !(c._faceT > simT)) {
     const target = Math.atan2(c.vy, c.vx);
     if (c._yaw3 == null) c._yaw3 = target;
     else {
@@ -13501,6 +13504,12 @@ function fightHitFilter(victim, att, dmg) {
   if (att._stagT > simT) return null;                           // a staggered animal cannot strike
   for (const s of FIGHT.pending) if (s.att === att) return null;  // already winding up
   if (BR.on && brSlotOf(att) != null) c._brKiller = brSlotOf(att);
+  // It has to be looking at you before it may commit. Refusing the strike
+  // rather than letting it fly is what turns "it bit me over its shoulder"
+  // into "it turned, then bit me": the refusal costs it the tick, it spends
+  // that tick turning, and it tries again.
+  att._faceT = simT + 1.2;                         // keep turning toward the player
+  if (!fightFacing(att, c, FACE_COMMIT)) return null;
   const windup = clamp(0.40 + 0.09 * Math.sqrt(Math.max(0.1, att.ph.mass)), 0.40, 0.85);
   FIGHT.pending.push({ att, dmg, t: windup, dur: windup });
   // the strike animation peaks (strikeCurve k ~ 0.5) exactly at impact
@@ -13508,12 +13517,53 @@ function fightHitFilter(victim, att, dmg) {
   if (SND.ctx && SND.on) sndNoiseBurst(260 + 200 / Math.sqrt(Math.max(0.3, att.ph.mass)), 2.5, windup, 0.10, sndAtC(att), 0.6);
   return null;
 }
+// How far off straight-ahead an attacker may be. It has to be roughly facing
+// you to start a strike, and still facing you when it lands -- the second is
+// tighter, so turning away mid-swing throws it.
+const FACE_COMMIT = Math.cos(1.92);    // ~110 degrees: may begin the wind-up
+const FACE_LAND = Math.cos(1.31);      // ~75 degrees: may actually connect
+// Is `att` looking at `tgt`? Read off the same heading the body is drawn with,
+// so what the player SEES is what the rule uses.
+function fightFacing(att, tgt, cosNeed) {
+  if (!att || !tgt) return true;
+  const yaw = att._yaw3;
+  if (yaw == null) return true;                     // never drawn: do not punish it
+  const dx = tgt.x - att.x, dz = tgt.y - att.y;
+  const d = Math.hypot(dx, dz);
+  if (d < 1e-4) return true;
+  return (Math.cos(yaw) * dx + Math.sin(yaw) * dz) / d >= cosNeed;
+}
+// Turn whatever is trying to hit you toward you, every frame, whether or not
+// it is being drawn. This is behaviour, not rendering: a rule that only runs
+// inside the renderer is a rule that stops when the creature goes off screen.
+function fightFaceTick(dt) {
+  const c = player.c;
+  if (!c || !c.alive || !world) return;
+  for (const q of FIGHT.pending) if (q.att) q.att._faceT = Math.max(q.att._faceT || 0, simT + 0.35);
+  const list = world.creatures;
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i];
+    if (!a.alive || a === c || !(a._faceT > simT)) continue;
+    const dx = c.x - a.x, dz = c.y - a.y;
+    if (Math.hypot(dx, dz) < 1e-4) continue;
+    const want = Math.atan2(dz, dx);
+    if (a._yaw3 == null) { a._yaw3 = want; continue; }
+    let e = want - a._yaw3;
+    while (e > Math.PI) e -= Math.PI * 2;
+    while (e < -Math.PI) e += Math.PI * 2;
+    // heavy bodies swing round slowly, which is what makes flanking one work
+    const rate = clamp(4.2 - 0.05 * (a.ph ? a.ph.mass : 8), 1.3, 4.2);
+    const step = rate * dt;
+    a._yaw3 += Math.abs(e) <= step ? e : Math.sign(e) * step;
+  }
+}
 function fightResolveStrike(s) {
   const c = player.c, att = s.att;
   if (!c || !c.alive || !att.alive) return;
   const dx = att.x - c.x, dz = att.y - c.y, d = Math.hypot(dx, dz);
   const reach = (c.ph.radius + att.ph.radius + (att.ph.reach || 0)) * 1.3 + 14;
   if (d > reach) { fightMsg('Out of reach: it missed.', 700); return; }
+  if (!fightFacing(att, c, FACE_LAND)) { fightMsg('It swung wide: it is not facing you.', 900); return; }
   if (FIGHT.iframe > 0) { fightMsg('Dodged!', 700); FIGHT.hurtFx = Math.max(FIGHT.hurtFx, 0.12); return; }
   let dmg = s.dmg;
   const fx = Math.cos(player.yaw), fz = Math.sin(player.yaw);
@@ -13834,6 +13884,7 @@ function fightResolveSwing(sw) {
 // ---------------------------------------------------------------- per-frame
 function fightTick(dt) {
   world.hitFilter = fightHitFilter;
+  fightFaceTick(dt);
   spellTick(dt);
   shroomUpdate(dt);
   world.params.bodyScale = BODY_SCALE;
@@ -14401,6 +14452,10 @@ function remainsAdd(c) {
 // CARC_CELL square, rolled from the world seed, so the whole map is covered
 // for the cost of the handful within sight.
 // =====================================================================
+// Old bodies are drawn bigger than the animal that made them. They are the
+// loot landmarks of the island, and a ribcage you can pick out across a
+// valley is worth more to the player than an accurate one you walk past.
+const CARC_SCALE = 1.8;
 const CARC_CELL = 1150;          // one candidate per cell this wide
 const CARC_CHANCE = 0.46;        // ...and this often
 const CARC_KEEP = 2600;          // built while this close, dropped beyond it
@@ -14519,8 +14574,8 @@ function carcBuild(ent) {
     ent.design = d;
     ent.parts = designItems(d).filter(id => VIS[id]);
     ent.G = G;
-    ent.R = (G.cls && G.cls.radius ? G.cls.radius : 4) * BODY_SCALE;
-    if (!(ent.R > 0.5)) ent.R = 4 * BODY_SCALE;
+    ent.R = (G.cls && G.cls.radius ? G.cls.radius : 4) * BODY_SCALE * CARC_SCALE;
+    if (!(ent.R > 0.5)) ent.R = 4 * BODY_SCALE * CARC_SCALE;
   } catch (e) { ent.dead = true; }
 }
 // Keep the cells around the player loaded and everything else dropped.
@@ -14595,7 +14650,10 @@ function drawSkeleton(r, age, dcam) {
   const gy = groundAt(r.x, r.z);
   const k = age / REMAINS_LIFE;
   // bones sink as the soil takes them: nothing for a while, then steadily
-  const sinkK = clamp((k - 0.25) / 0.75, 0, 1);
+  // The soil takes them late and takes them slowly. Sinking early was what
+  // made a body read as a stain on the ground instead of a thing standing in
+  // it, and it is the ribs you want above the grass.
+  const sinkK = clamp((k - 0.55) / 0.45, 0, 1);
   const rot = clamp(1 - age / REMAINS_ROT, 0, 1);         // 1 fresh .. 0 clean
   const fresh = [0.86, 0.80, 0.68], old = [0.58, 0.53, 0.43];
   const bone = [fresh[0] + (old[0] - fresh[0]) * k, fresh[1] + (old[1] - fresh[1]) * k, fresh[2] + (old[2] - fresh[2]) * k];
@@ -14604,8 +14662,9 @@ function drawSkeleton(r, age, dcam) {
   // spine height above ground in body units (a collapsed carcass)
   let maxR = 0.3;
   for (let i = 0; i < P.seg; i++) if (B[i] && !B[i].hide) maxR = Math.max(maxR, B[i].r);
-  const hs = maxR * 0.62;
-  const sinkBy = (hs + 0.35) * S * sinkK * 1.15;
+  // A collapsed carcass, but one that still has a ribcage standing on it.
+  const hs = maxR * 1.05;
+  const sinkBy = (hs + 0.35) * S * sinkK * 0.70;
   // body-local (x fwd, y up, z side) -> world, ground-relative
   const W = (x, y, z) => [r.x + (x * cy - z * sy) * S, gy + y * S - sinkBy, r.z + (x * sy + z * cy) * S];
   const lod = dcam > 500 ? 1 : 0;
@@ -14616,7 +14675,7 @@ function drawSkeleton(r, age, dcam) {
   const spine = [];
   for (let i = 0; i < P.seg; i++) { const b = B[i]; if (b && !b.hide && Math.abs(b.z) < 1e-3) spine.push(b); }
   spine.sort((a, b) => a.x - b.x);
-  const vr = 0.055 + maxR * 0.035;
+  const vr = 0.075 + maxR * 0.048;
   const sp = spine.map((b, i) => [b.x, hs * (0.55 + 0.45 * b.r / maxR) + (remRand(r, i) - 0.5) * 0.03, (remRand(r, i + 50) - 0.5) * 0.05]);
   for (let i = 0; i < sp.length; i++) {
     if (i) T(sp[i - 1], sp[i], vr, vr, bone);
@@ -14632,11 +14691,13 @@ function drawSkeleton(r, age, dcam) {
       // some ribs have broken or been dragged off by scavengers
       if (remRand(r, i * 3 + side + 7) < 0.12 + 0.25 * k) continue;
       const w = b.r * (0.95 + remRand(r, i * 5 + side) * 0.1);
-      const splay = 0.10 + 0.25 * remRand(r, i * 7 + side);   // collapsed outward
+      const splay = 0.06 + 0.16 * remRand(r, i * 7 + side);   // collapsed outward, but only a little
       let prev = top;
       for (let q = 1; q <= ribN; q++) {
-        const th = (q / ribN) * 1.85;
-        const p = [b.x + side * 0 - 0.06 * q / ribN, Math.max(0.04, top[1] * Math.cos(th) * (1 - splay * 0.5)),
+        // A tighter sweep keeps the rib standing up out of the ground rather
+        // than folding it flat along the soil.
+        const th = (q / ribN) * 1.42;
+        const p = [b.x + side * 0 - 0.06 * q / ribN, Math.max(0.10, top[1] * Math.cos(th * 0.82) * (1 - splay * 0.4)),
                    side * w * Math.sin(th) * (1 + splay)];
         T(prev, p, vr * 0.62, vr * 0.5, q === ribN ? boneD : bone);
         prev = p;
@@ -19605,9 +19666,8 @@ function brLootDesign(design, from) {
     if (lb.tip && VIS[lb.tip.id]) ids.add(lb.tip.id);
   }
   const opts = [...ids];
-  if (!opts.length) { brSay('You ate ' + from + '. There was nothing on it to take.', 2600); return; }
-  player.picker = { opts: opts.slice(0, 6), label: 'You killed ' + from + '. Take a pair of one of their parts', t0: performance.now(), items: true };
-  renderPicker();
+  if (!opts.length) { brSay('You killed ' + from + '. There was nothing on them worth taking.', 2600); return; }
+  brSay('You killed ' + from + '. Their body is at your feet: press E to search it \u00b7 ' + opts.length + ' parts', 4200);
 }
 // The loser's choice: watch, or come back as a baby in the winner's pack.
 function brChoose(join) {
@@ -20800,10 +20860,13 @@ function edOnKill(prey) {
   objOnKill(prey);
   if (player.c) setTimeout(() => voxCall(player.c, 'win'), 400);
   saveProgress();
+  // A kill pays genome space and bones. It does NOT hand you parts: it leaves
+  // a body, and the body is searched with E like every other body on the
+  // island. Two payouts through two different code paths is how they came to
+  // disagree with each other in the first place.
   const opts = preyItems(prey);
-  if (!opts.length) { toast('Killed it. +' + KILL_SPACE + ' genome space, +' + BONES_PER_KILL + ' bones.', 2600); return; }
-  player.picker = { opts, label: 'You killed it: +' + KILL_SPACE + ' genome space, +' + BONES_PER_KILL + ' bones. Take a pair of one of its parts', t0: performance.now(), items: true };
-  renderPicker();
+  toast('Killed it. +' + KILL_SPACE + ' genome space, +' + BONES_PER_KILL + ' bones.' +
+        (opts.length ? ' Search the body with E: ' + opts.length + ' parts on it.' : ''), 3000);
 }
 function renderPicker() {
   const el = $('picker');
@@ -21065,6 +21128,9 @@ window.__G3D = {
     kill: (slot, by, cause) => brOnPlayerKilled(slot, by, cause),
     get slot() { return BR.slot; },
     resetFall: () => fallResetGround(),
+    facing: (a, t, need) => fightFacing(a, t, need == null ? FACE_LAND : need),
+    faceTick: (dt) => fightFaceTick(dt),
+    FACE_COMMIT, FACE_LAND,
     friend: (slot) => { const q = BR.players[slot | 0]; return !!(q && q.c && packFriend(q.c)); },
     mayHit: (slot) => { const q = BR.players[slot | 0]; return !!(q && q.c && canAttackTarget(q.c)); },
     setPack: (slot, leader) => { const q = BR.players[slot | 0]; if (q) q.pack = leader; },
@@ -21196,6 +21262,10 @@ window.__G3D = {
     // build everything in range now, rather than one a frame
     flush: () => { let n = 0; while (CARC.q.length && n++ < 400) { const e = CARC.q.shift(); if (e && !e.G && !e.dead) carcBuild(e); } return CARC.live.filter(e => !!e.G).length; },
     // put the player next to the nearest built body
+    get scale() { return CARC_SCALE; },
+    radii: () => CARC.live.filter(e => e.G).map(e => +e.R.toFixed(2)),
+    // how much of its height the soil has taken, at a given fraction of life
+    sinkAt: (ks) => (ks || []).map((k) => +clamp((k - 0.55) / 0.45, 0, 1).toFixed(3)),
     walkTo: (i) => { const e = CARC.live.filter(q => q.G && !q.looted)[i || 0]; if (!e) return null;
       if (player.c) { player.c.x = e.x + 6; player.c.y = e.z + 6; }
       player.camX = e.x + 6; player.camZ = e.z + 6; fallResetGround();
@@ -21204,6 +21274,29 @@ window.__G3D = {
     inspect: () => { tryInspect(); return player.picker ? player.picker.opts.slice() : null; },
     pick: (i) => choosePicked(i | 0),
     prompt: () => { updateHUD(); const el = document.getElementById('act'); return el && el.style.display !== 'none' ? el.innerHTML : ''; },
+  },
+  inspectTargetDbg: () => inspectTarget(),
+  // put a creature next to the player and kill it the way a swing would, so
+  // the loot rules can be driven end to end
+  spawnFoe: (x, z) => {
+    const g = C.seedHerbivore(world, world.rng);
+    g.design = C.randomDesign(world.rng, { diversity: 0.85, rarityCap: 'ultra' });
+    C.compileDesign(g);
+    const f = C.makeCreature(g, x, z, 400);
+    for (const q of f.cellState) q.grow = 1;
+    f.ph = C.develop(g, f.cellState);
+    C.hpOf(f);
+    world.creatures.push(f);
+    return f;
+  },
+  killNearest: () => {
+    const c = player.c;
+    if (!c) return { ok: false, why: 'nobody' };
+    const f = window.__G3D.spawnFoe(c.x + 12, c.y + 4);
+    f.alive = false; f.deathCause = 'predation'; f._creditedKill = true;
+    remainsAdd(f);
+    edOnKill(f);
+    return { ok: true, parts: (f.genome.design ? designItems(f.genome.design) : []).length };
   },
   inv: {
     granted: (id) => (ED.grantCount && ED.grantCount[id]) || 0,
@@ -21308,7 +21401,8 @@ window.__G3D = {
     },
   },
   offer: (g, l) => offerTraits(g, l),
-  eat: () => tryEat(),
+  eat: () => tryTake(),        // what the E key actually does now
+  take: () => tryTake(),
   food: {
     // what the scan sees, as plain numbers -- the same object the prompt and
     // the E key both act on

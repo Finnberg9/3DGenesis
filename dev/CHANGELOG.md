@@ -1,5 +1,39 @@
 # 3DGenesis dev log
 
+## 2026-09-24 (late): Ribcages, one loot per body, and nothing bites you over its shoulder
+
+Three from playing it.
+
+### A carcass is a ribcage, not a stain
+Bodies were drawn at the size of the animal that made them and started sinking into the soil almost immediately, so what should be a landmark you cross a valley for read as a mark on the ground.
+
+- **Drawn at 1.8x the animal**, on purpose. A field body is a loot landmark, and a ribcage you can pick out from across a valley is worth more to the player than an accurate one you walk past.
+- **The soil takes them late and slowly.** Sinking used to start at a quarter of the way through a body's life; it starts at 55% now and takes 30% less of the height when it does. A body at half its life is not sunk at all.
+- **The ribs stand up.** The spine sits at 1.05 of the body radius instead of 0.62, the rib sweep is tightened from 1.85 to 1.42 radians so they arc upward instead of folding flat along the ground, the outward splay is more than halved, and the bone is thicker so a big ribcage does not read as wire at distance.
+
+### One body, one loot
+Killing something opened the part picker AND left a body you could then search for a second pair. Two rewards for one kill, through two separate code paths -- which is also exactly how they came to disagree with each other.
+
+**A kill pays genome space and bones and no parts at all.** It leaves a body, and the body is searched with E like every other body on the island. The toast says how many parts are on it. The same now goes for killing a player in a match: their body is at your feet and you search it.
+
+One loot, one path, one rule -- and it is the rule that was already there for the streamed carcass field.
+
+### Nothing hits you without looking at you
+Heading is eased toward the direction of **travel**, and only while moving. An animal that stopped walking in order to attack kept whatever way it happened to be pointing and bit you over its own shoulder.
+
+- **It must be facing you to commit.** `fightHitFilter` refuses the wind-up outright if the attacker is more than about 110 degrees off you. Refusing rather than letting it fly is what turns "it bit me sideways" into "it turned, then bit me": the refusal costs it the tick, it spends that tick turning, and it tries again.
+- **It must still be facing you when the strike lands**, within about 75 degrees -- tighter than the commit angle, so something that turns away mid-swing throws it.
+- **Turning is behaviour, not rendering.** `fightFaceTick` runs in the fight tick, every frame, for anything that wants to hit you, whether or not it is on screen. A rule that only runs inside the renderer is a rule that stops the moment the creature leaves the frame.
+- **Heavy bodies swing round slowly** (4.2 rad/s falling to 1.3 with mass), which is what makes getting behind a big one worth doing.
+- The renderer stops easing toward the direction of travel while a creature is committed to facing you, or stepping sideways would drag it off target every frame.
+
+Facing is read off `_yaw3` -- the same heading the body is actually drawn with -- so what the player sees is what the rule uses. A creature that has never been drawn is not punished for a heading it does not have yet.
+
+### Tested
+- `test_fixes3_steps.js` (browser, new, 18 checks): bodies exist and are drawn at 1.8x, a body is unsunk fresh and at half its life and only part buried when old; a kill opens no picker and hands over no parts, the body it leaves can be searched, searching is what offers the parts, taking one is what grants it, and the same body cannot be searched twice; facing is true head-on and false side-on, away and at a wide angle, the commit angle is wider than the landing angle, and something that wants to hit you turns from facing away to facing you.
+- A stale surface caught by this: the test harness's `eat()` still pointed at the old food function, so it could have passed against code the player can no longer reach. It runs the E key's real action now.
+- Replayed green: `test_core`, `test_fight_core`, `test_combat`, `test_hp`, `test_plans`, `test_bones`, `test_carcass_steps`, `test_brstart_steps`, `test_loadout_steps`.
+
 ## 2026-09-24 (evening): The loadout screen, the horror pass, and a machine that could not keep up
 
 All of this came in from Finn while playing.
