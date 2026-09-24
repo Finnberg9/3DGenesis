@@ -9069,6 +9069,8 @@ const VIS = {
       const z = (i - 1.5) * 0.28, y = 0.52 + (1.5 - Math.abs(i - 1.5)) * 0.06;
       g.cn(-0.28 - o * 0.5, y, z, 1, 0.1, 0, 0.07, 0.26, IVORY);
     }
+    drool(g, e, 0.18, 0.40, 0.42, 2, 0.40 + o * 0.5, (e.seed || 0) + 0.9);
+    lipTendrils(g, e, 0.14, 0.34, 0.48, 2, 0.26, 0.4);
   } },
   m_maw: { name: 'fanged maw', cat: 'mouth', size: 0.56, col: 'base', draw(g, c, e) {
     const o = 0.18 + e.chomp * 0.3;
@@ -9079,6 +9081,10 @@ const VIS = {
     for (let i = 0; i < 6; i++) g.cn(0.26 + o * 0.5, 0.62, (i - 2.5) * 0.18, -1, 0.1, 0, 0.06, 0.26, IVORY);
     for (let i = 0; i < 6; i++) g.cn(-0.34 - o * 0.5, 0.6, (i - 2.5) * 0.2, 1, 0.1, 0, 0.065, 0.3, IVORY);
     for (const s of [1, -1]) g.cn(-0.34 - o * 0.5, 0.62, s * 0.62, 1, 0.2, 0, 0.1, 0.5, IVORY);
+    lollTongue(g, e, -0.1, 0.30, 0.66, 0.16, o);
+    innerJaw(g, e, -0.24, 0.34, 1.0, o);
+    drool(g, e, 0.24, 0.40, 0.55, 3, 0.52 + o * 0.6, (e.seed || 0) + 1.7);
+    lipTendrils(g, e, 0.18, 0.36, 0.62, 2, 0.34, 0.5);
   } },
   m_rex: { name: 'crushing jaw', cat: 'mouth', size: 0.66, col: 'base', use: 'a deep bone-cracking bite: the heaviest damage of any mouth, and the most genome space', draw(g, c, e) { dinoJawHard(g, c, e, jawShape('m_rex')); } },
   m_spino: { name: 'fishing jaw', cat: 'mouth', size: 0.5, col: 'base', use: 'long crocodile jaws full of conical teeth: extra reach, good in water', draw(g, c, e) { dinoJawHard(g, c, e, jawShape('m_spino')); } },
@@ -9495,6 +9501,112 @@ function dinoJawFlesh(F0, S) {
   F.main();
 }
 // the hard half: teeth, gums, tongue, throat, beak and horn ridges
+// ---- the wet half of a mouth ------------------------------------------------
+// The wet detail is the most expensive thing per creature in the game and the
+// least necessary on a machine that is struggling, so it rides the quality
+// setting. Palette icons keep it at every level: a still image costs nothing
+// and it is the one place anybody looks at a mouth closely.
+function gore(e) { return !!e.thumb || (!e.lod && GFX.gore); }
+const SPIT = [0.74, 0.80, 0.72];        // saliva: pale, cold, slightly green
+const SPIT_D = [0.58, 0.64, 0.56];
+const GORE = [0.42, 0.06, 0.05];        // the inside of things
+// One strand of saliva, hanging and swinging from where it is anchored.
+// Thins as it falls and ends in a bead, because a strand of even thickness
+// reads as wire.
+// Built from cones and balls only. The jaw draws through a wrapper that swaps
+// two axes and offers exactly sp/cn/ball, so a helper that reaches for tube()
+// works in the palette icon and throws in the game -- which is precisely what
+// the first cut of this did.
+function droolStrand(g, x, y, z, len, ph, t, r0) {
+  let p = [x, y, z];
+  const N = 4, R = r0 || 0.036;
+  for (let i = 0; i < N; i++) {
+    const u = (i + 1) / N;
+    // the swing grows toward the free end, which is what makes it hang
+    const sx = Math.sin(t * 1.6 + ph + u * 2.4) * 0.09 * u;
+    const sz = Math.cos(t * 1.27 + ph * 1.7 + u * 2.0) * 0.07 * u;
+    const q = [p[0] + sx * 0.4, p[1] - len / N, p[2] + sz * 0.4];
+    const d = v3.sub(q, p), L = v3.len(d) || 1e-4, dn = v3.mul(d, 1 / L);
+    g.cn(p[0], p[1], p[2], dn[0], dn[1], dn[2], R * (1 - 0.5 * (u - 1 / N)), L * 1.06,
+         u > 0.6 ? SPIT_D : SPIT);
+    p = q;
+  }
+  g.ball(p[0], p[1], p[2], R * 1.7, SPIT);
+}
+// Saliva across a mouth: a few strands on their own phases, plus one bead
+// that has already broken off and is falling. Saliva that never parts is a
+// rubber band, and the eye notices.
+function drool(g, e, x, y, halfW, n, len, seed) {
+  if (!gore(e)) return;
+  const t = e.t;
+  for (let i = 0; i < n; i++) {
+    const f = n === 1 ? 0 : (i / (n - 1)) * 2 - 1;
+    const ph = seed + i * 2.399;
+    // each strand runs its own slow stretch-and-snap cycle
+    const cyc = (t * 0.33 + i * 0.41 + seed * 0.11) % 1;
+    const grow = cyc < 0.82 ? 0.35 + cyc * 1.0 : 0.15;         // snaps back short
+    droolStrand(g, x, y, f * halfW, len * grow, ph, t, 0.034);
+  }
+  // the bead that let go, falling and repeating
+  const d = (t * 0.55 + seed * 0.37) % 1;
+  g.ball(x + 0.05, y - len * (0.4 + d * 1.5), (seed % 1 - 0.5) * halfW * 1.2, 0.05 * (1 - d * 0.35), SPIT);
+}
+// A tongue that lolls: segments, drooping further and dragging sideways the
+// wider the mouth is open.
+function lollTongue(g, e, x0, y0, len, wide, open) {
+  const t = e.t, out = 0.25 + open * 1.25;
+  let p = [x0, y0, 0];
+  const N = 5;
+  for (let i = 0; i < N; i++) {
+    const u = (i + 1) / N;
+    const drag = Math.sin(t * 1.1 + e.seed + u * 1.6) * 0.16 * u * out;
+    const q = [p[0] + (len * out) / N, p[1] - u * u * 0.30 * out, p[2] + drag * 0.5];
+    const d = v3.sub(q, p), L = v3.len(d) || 1e-4, dn = v3.mul(d, 1 / L);
+    const m = v3.mul(v3.add(p, q), 0.5), w = wide * (1 - 0.32 * u);
+    g.sp(m[0], m[1], m[2], dn[0], dn[1], dn[2], w, L * 0.58, w * 1.25,
+         i > 2 ? colMul(TONGUE, 0.82) : TONGUE);
+    p = q;
+  }
+  g.sp(p[0], p[1], p[2], 1, 0, 0, wide * 0.5, wide * 0.55, wide * 0.7, colMul(TONGUE, 0.7));
+  // and it is wet
+  if (gore(e) && open > 0.25) droolStrand(g, p[0], p[1] - wide * 0.4, p[2], 0.34 * open, e.seed * 3.1, t, 0.028);
+}
+// A second set of jaws, further in. It thrusts forward as the first set
+// closes, so a bite reads as two bites.
+function innerJaw(g, e, x0, y0, scale, open) {
+  if (!gore(e)) return;
+  const push = (0.22 + e.chomp * 0.9) * scale;
+  const x = x0 + push, gap = (0.06 + open * 0.10) * scale;
+  const s = scale;
+  g.sp(x, y0 + gap, 0, 1, 0.1, 0, 0.16 * s, 0.11 * s, 0.20 * s, colMul(GORE, 1.35));
+  g.sp(x, y0 - gap, 0, 1, -0.1, 0, 0.15 * s, 0.10 * s, 0.19 * s, colMul(GORE, 1.15));
+  for (let i = 0; i < 3; i++) {
+    const z = (i - 1) * 0.10 * s;
+    g.cn(x + 0.10 * s, y0 + gap * 0.4, z, 1, -0.5, 0, 0.022 * s, 0.11 * s, IVORY);
+    g.cn(x + 0.10 * s, y0 - gap * 0.4, z, 1, 0.5, 0, 0.020 * s, 0.10 * s, IVORY);
+  }
+}
+// Cilia round the lips, each on its own phase so they never move as a block.
+function lipTendrils(g, e, x0, y0, halfW, n, len, back) {
+  if (!gore(e)) return;
+  for (let i = 0; i < n; i++) {
+    for (const sg of [1, -1]) {
+      const u = n === 1 ? 0.5 : i / (n - 1);
+      const ph = e.seed * 2.1 + i * 1.7 + (sg > 0 ? 0 : 0.9);
+      let p = [x0 - u * back, y0, sg * halfW * (0.7 + u * 0.35)];
+      let d = [-0.25, -0.75, sg * 0.4];
+      const N = 3, L = len * (0.7 + 0.5 * (1 - u));
+      for (let k = 0; k < N; k++) {
+        const w = Math.sin(e.t * 1.9 + ph + k * 0.8) * 0.20;
+        d = v3.norm([d[0] - 0.12 + w * 0.3, d[1] - 0.10, d[2] + w * sg * 0.5]);
+        const q = v3.add(p, v3.mul(d, L / N));
+        g.cn(p[0], p[1], p[2], d[0], d[1], d[2], 0.032 * (1 - k * 0.22), (L / N) * 1.08, colMul(GORE, 1.5 + k * 0.2));
+        p = q;
+      }
+    }
+  }
+}
+
 function dinoJawHard(g0, c, e, S) {
   const open = (e.jaw || 0) * (S.gape || 1);
   const g = jawG(g0);
@@ -9541,8 +9653,18 @@ function dinoJawHard(g0, c, e, S) {
       }
     }
   }
-  // tongue along the floor of the mouth
-  j.sp(0.1, 0.24, 0, 0.1, 1, 0, 0.16, 0.5, S.wide * 0.5, TONGUE);
+  // The wet half. A grinding beak gets none of it: a duck bill with an inner
+  // jaw and a lolling tongue is a comedy, not a horror.
+  const horror = !S.grind && !S.beak;
+  if (horror) {
+    lollTongue(j, e, -0.05, 0.26, S.len * 0.62, S.wide * 0.30, open);
+    innerJaw(g, e, -0.20, 0.34, 0.9 + S.wide, open);
+    drool(g, e, S.len * 0.34, 0.30 - S.curve * 0.4, S.wide * 0.72, 3, 0.55 + open * 0.5, (e.seed || 0) + S.len);
+    lipTendrils(g, e, S.len * 0.20, 0.30, S.wide * 0.88, 3, 0.42, S.len * 0.45);
+  } else {
+    // tongue along the floor of the mouth
+    j.sp(0.1, 0.24, 0, 0.1, 1, 0, 0.16, 0.5, S.wide * 0.5, TONGUE);
+  }
   // beak tip (duck bill) or a bony snout tip
   if (S.beak) {
     const p = jawProfile(S, 1);
@@ -13887,20 +14009,28 @@ function drawFight(t) {
 // The choice is remembered in this browser.
 // =====================================================================
 const GFX_PRESETS = {
-  low:    { res: 0.65, cover: 380,  plant: 2600,  lod0: 420,  lod1: 1600, crit: 0.6, fog: 1.00, folMax: 50000,  shadow: 0, ao: 0, bloom: 0, rays: 0 },
-  medium: { res: 0.80, cover: 620,  plant: 4200,  lod0: 700,  lod1: 2600, crit: 0.9, fog: 0.80, folMax: 90000,  shadow: 1, ao: 0, bloom: 1, rays: 1 },
-  high:   { res: 0.90, cover: 1000, plant: 8000,  lod0: 1200, lod1: 4800, crit: 1.5, fog: 0.50, folMax: 140000, shadow: 2, ao: 1, bloom: 1, rays: 1 },
-  ultra:  { res: 1.15, cover: 1700, plant: 18000, lod0: 2300, lod1: 9500, crit: 2.8, fog: 0.26, folMax: 200000, shadow: 3, ao: 1, bloom: 1, rays: 1 },
+  low:    { res: 0.65, cover: 380,  plant: 2600,  lod0: 420,  lod1: 1600, crit: 0.6, fog: 1.00, folMax: 50000,  shadow: 0, ao: 0, bloom: 0, rays: 0, gore: 0 },
+  medium: { res: 0.80, cover: 620,  plant: 4200,  lod0: 700,  lod1: 2600, crit: 0.9, fog: 0.80, folMax: 90000,  shadow: 1, ao: 0, bloom: 1, rays: 1, gore: 0 },
+  high:   { res: 0.90, cover: 1000, plant: 8000,  lod0: 1200, lod1: 4800, crit: 1.5, fog: 0.50, folMax: 140000, shadow: 2, ao: 1, bloom: 1, rays: 1, gore: 1 },
+  ultra:  { res: 1.15, cover: 1700, plant: 18000, lod0: 2300, lod1: 9500, crit: 2.8, fog: 0.26, folMax: 200000, shadow: 3, ao: 1, bloom: 1, rays: 1, gore: 1 },
 };
 const GFX_ORDER = ['low', 'medium', 'high', 'ultra'];
 const GFX = Object.assign({ name: 'high' }, GFX_PRESETS.high);
 function gfxLoad() {
   let n = null;
   try { n = localStorage.getItem('g3d_gfx'); } catch (e) { n = null; }
-  gfxSet(GFX_PRESETS[n] ? n : 'high', true);
+  // A machine nobody has measured starts in the middle and is allowed to
+  // climb. Starting at high and falling means the first thing a new player
+  // sees is a slideshow, and first impressions of a frame rate are permanent.
+  const known = !!GFX_PRESETS[n];
+  GFX.userSet = known;
+  gfxSet(known ? n : 'medium', true);
 }
 function gfxSet(name, silent) {
   if (!GFX_PRESETS[name]) return;
+  // Anything the player picks is final. A setting that quietly undoes what
+  // you just chose is worse than having no setting at all.
+  if (!silent) { GFX.userSet = true; GFX.autoQ = false; }
   Object.assign(GFX, GFX_PRESETS[name], { name });
   COVER_R = GFX.cover; TREE_LOD0 = GFX.lod0; TREE_LOD1 = GFX.lod1;
   if (typeof FOL !== 'undefined') FOL.key = '';                 // rebuild the foliage set now
@@ -15019,7 +15149,7 @@ const WGSL_POST_FINAL = WGSL_POST_COMMON + `
 // frame rate up by lowering the render scale when frames run long.
 // =====================================================================
 const R2 = {
-  descOf: new Map(), ok: false,
+  descOf: new Map(), ok: false, ftSlow: 16,
   shadowTex: null, shadowArr: null, shadowViews: [], shadowSize: 0, shadowSmp: null,
   gL: [], lightArr: [new Float32Array(68), new Float32Array(68)], lvp: [new Float32Array(16), new Float32Array(16)],
   p: {}, bL: [{}, {}],
@@ -15280,22 +15410,77 @@ function r2PostPass(enc, fog) {
   }
   run(R2.post.final, R2.bg.final, ctx.getCurrentTexture().createView());
 }
-// automatic resolution: keep frames under ~20 ms by trading render scale
+// Automatic quality. Resolution alone could never fix a machine that is half
+// a second a frame: at that point the cost is the world, not the pixels, so
+// the PRESET moves first and the resolution trim is the fine adjustment
+// underneath it.
+const AQ = {
+  on: true,            // off the moment the player picks a level themselves
+  warm: 0,             // seconds of frames seen, so a cold start is not judged
+  last: 0,             // when the preset last moved
+  said: 0,             // when we last told the player
+  up: 0,               // how long frames have been comfortably fast
+};
+const AQ_BUDGET = 22;         // ms a frame we are aiming to stay under
+const AQ_DIRE = 55;           // ms a frame that means drop two levels at once
+const AQ_UP = 11;             // ms a frame under which climbing is safe
+const AQ_COOL = 4;            // seconds between steps down
+const AQ_UP_HOLD = 12;        // seconds of fast frames before stepping up
+function gfxStep(d, why) {
+  const i = GFX_ORDER.indexOf(GFX.name);
+  const j = clamp(i + d, 0, GFX_ORDER.length - 1);
+  if (j === i) return false;
+  gfxSet(GFX_ORDER[j], true);          // silent: the message below is better
+  AQ.last = performance.now() / 1000;
+  const now = AQ.last;
+  if (now - AQ.said > 6) {
+    AQ.said = now;
+    toast('Graphics set to ' + GFX_ORDER[j] + (why ? ' · ' + why : '') +
+          '. Pick a level yourself to stop this.', 4000);
+  }
+  return true;
+}
 function r2AutoRes() {
   const now = performance.now();
+  let ft = 0;
   if (R2.lastT) {
-    const ft = Math.min(100, now - R2.lastT);
+    ft = Math.min(500, now - R2.lastT);
+    // A long average is what stops one stalled frame from changing anything,
+    // and a short one is what makes a genuinely bad machine felt quickly.
     R2.ftAvg += (ft - R2.ftAvg) * 0.05;
+    R2.ftSlow += (ft - R2.ftSlow) * 0.012;
     R2.fps = 1000 / Math.max(1, R2.ftAvg);
   }
   R2.lastT = now;
+  const t = now / 1000;
+
+  // ---- the preset -----------------------------------------------------------
+  if (AQ.on && !GFX.userSet) {
+    AQ.warm += Math.min(0.5, ft / 1000);
+    if (AQ.warm > 1.5) {
+      const cool = t - AQ.last;
+      if (R2.ftSlow > AQ_DIRE && cool > 1.5) {
+        // dire: do not walk down one level at a time while it is unplayable
+        AQ.up = 0; gfxStep(-2, 'this machine could not keep up');
+      } else if (R2.ftSlow > AQ_BUDGET && cool > AQ_COOL) {
+        AQ.up = 0; gfxStep(-1, Math.round(1000 / Math.max(1, R2.ftSlow)) + ' fps');
+      } else if (R2.ftSlow < AQ_UP && R2.dyn >= 0.999) {
+        // Climbing needs a long stretch of genuinely fast frames AND the
+        // resolution already back at full, so it can never fight the trim.
+        AQ.up += Math.min(0.5, ft / 1000);
+        if (AQ.up > AQ_UP_HOLD && cool > AQ_UP_HOLD) { AQ.up = 0; gfxStep(1, 'there is room for more'); }
+      } else AQ.up = 0;
+    }
+  }
+
+  // ---- the resolution trim underneath it ------------------------------------
   if (!R2.auto || now - R2.lastChange < 1500) return;
   if (R2.ftAvg > 21 && R2.dyn > 0.6) { R2.dyn = Math.max(0.6, R2.dyn - 0.08); R2.lastChange = now; }
   else if (R2.ftAvg < 15.5 && R2.dyn < 1) { R2.dyn = Math.min(1, R2.dyn + 0.05); R2.lastChange = now; }
 }
 function r2Hud() {
   const el = document.getElementById('gfxfps');
-  if (el) el.textContent = Math.round(R2.fps) + ' fps · ' + Math.round(r2SceneScale() * 100) + '%';
+  if (el) el.textContent = Math.round(R2.fps) + ' fps · ' + GFX.name + ' · ' + Math.round(r2SceneScale() * 100) + '%';
 }
 
 // ---------------------------------------------------------------- sun, moon, sky
@@ -21228,7 +21413,32 @@ window.__G3D = {
   begin: () => { started = true; const st = document.getElementById('start'); if (st) st.style.display = 'none'; }, showDeath: (c) => showDeath(c),
   get REMAINS() { return REMAINS; }, remainsAdd: (c) => remainsAdd(c),
   get R2() { return R2; },
-  get GFX() { return GFX; }, gfxSet: (n) => gfxSet(n), feedGrowth: (c, m) => feedGrowth(c, m),
+  get GFX() { return GFX; }, gfxSet: (n) => gfxSet(n),
+  VIS,
+  gfx: {
+    name: () => GFX.name, gore: () => !!GFX.gore, userSet: () => !!GFX.userSet,
+    order: () => GFX_ORDER.slice(),
+    // drive the automatic stepper with a pretend frame time, so the rule can
+    // be checked without needing a slow machine
+    feed: (ms, secs) => {
+      const n = Math.max(1, Math.round((secs || 1) * 60));
+      for (let i = 0; i < n; i++) {
+        R2.ftSlow += (ms - R2.ftSlow) * 0.012;
+        R2.ftAvg += (ms - R2.ftAvg) * 0.05;
+        AQ.warm += 1 / 60;
+        AQ.last -= 1 / 60; AQ.said -= 1 / 60;
+        if (ms < 11 && R2.dyn >= 0.999) AQ.up += 1 / 60; else AQ.up = 0;
+        const t2 = performance.now() / 1000, cool = t2 - AQ.last;
+        if (!AQ.on || GFX.userSet || AQ.warm <= 1.5) continue;
+        if (R2.ftSlow > 55 && cool > 1.5) { AQ.up = 0; gfxStep(-2, 'test'); }
+        else if (R2.ftSlow > 22 && cool > 4) { AQ.up = 0; gfxStep(-1, 'test'); }
+        else if (R2.ftSlow < 11 && R2.dyn >= 0.999 && AQ.up > 12 && cool > 12) { AQ.up = 0; gfxStep(1, 'test'); }
+      }
+      return GFX.name;
+    },
+    reset: (n) => { GFX.userSet = false; AQ.on = true; AQ.warm = 99; AQ.up = 0; AQ.last = 0; AQ.said = -99;
+                    R2.ftSlow = 16; R2.ftAvg = 16; R2.dyn = 1; gfxSet(n || 'ultra', true); return GFX.name; },
+  }, feedGrowth: (c, m) => feedGrowth(c, m),
   spat: { stepInterval, stepSurface, proxDraw, sndPlacer: (p) => SND.ctx && sndPlacer(SND.ctx, p, SND.master), get ok() { return SPAT.ok; } },
   get FL() { return FL; }, thermalAt: (x, z) => thermalAt(x, z),
   get FIGHT() { return FIGHT; }, get simT() { return simT; },

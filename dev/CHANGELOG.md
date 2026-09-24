@@ -1,5 +1,87 @@
 # 3DGenesis dev log
 
+## 2026-09-24 (evening): The loadout screen, the horror pass, and a machine that could not keep up
+
+All of this came in from Finn while playing.
+
+### The builder is a loadout screen now
+It was a bright blue box with green buttons and rounded frames round everything: a settings dialog with an animal in it. The read is a weapon loadout now. Near black, hairline rules instead of boxed frames, nothing rounded, no gradients pretending to be glass, flat stencil type with wide letter-spacing, and one hot accent (dried blood) against bone. Panels have no edges at all: they bleed off into the dark and are separated by single-pixel rules, which is what stops it reading as a web form. Over the top, a vignette, a fine grain and a slow scan line, all three pure CSS.
+
+It is one override block appended after the editor's stylesheet rather than forty separate edits to it, so the original rules stay readable underneath as the structure this is a skin over.
+
+**The body shapes are bone-white silhouettes on black rather than black on light.** Finn asked for black outlines; on a near-black screen a black silhouette is an empty square, so it is the same idea the right way round, and it is how a loadout screen renders a weapon.
+
+### KIT and SHOP
+"Right now it's so hard to see what you have or not." It was: every category tab showed every part in the game, owned and unowned mixed together, told apart by a small padlock and a line of grey text.
+
+- **KIT** is the first tab and the one the builder opens on. Every part you own, all categories at once, one row each: how many you have, how many are on the body, how many are spare, rarest first, drag straight out of it onto the creature.
+- **SHOP** is everything you do not own, cheapest first, grouped by rarity with its price.
+- **The category tabs now list only what you own.** Nothing is shown anywhere that you cannot use, except in the shop, where being unable to use it is the point.
+
+The body you walked in with counts as kit whether or not you own copies of its parts, which is the existing rule that stops an inherited animal being locked out of its own anatomy.
+
+### V was two keys
+`if (k === 'v')` appeared twice in the same keydown handler and both ran: one detached the camera, the other searched the body at your feet. Pressing V over a corpse did both.
+
+Searching is a pick-up and E was already the pick-up key, so the body joined that list rather than getting a key of its own. **E now takes whatever is in front of you**, in the order you cannot come back for: the cage pile, then a body, then a mushroom. V is the camera and nothing else.
+
+The handler also **reads its own source at load** and warns if any key is ever handled twice again. It scans the code rather than a list somebody has to remember to update, so it cannot go stale.
+
+### Mushrooms: a third the size, a ninth as dense
+The cap was wider than the animal picking it up and there was one every 760 units. Cell is 1900 now and the odds are 0.30, which is about a ninth of the first cut; the cap is 5.6 by 4.6 against 15 by 13. Pick-up reach came down with it, or you hoover one up from a body length away.
+
+**The whole screen carries the colour of what is running.** One layer per spell, so two at once reads as two colours rather than being averaged into a third that means nothing. It breathes slowly and flashes faster in the last few seconds.
+
+**All four pouch slots are always on the HUD**, dark and empty-looking when you hold none. Stacking always worked -- POWER plus RAGE is x3 and the test has asserted it since it was built -- but the only way to find out you were not holding a WARD was a toast you missed.
+
+### Health comes back
+Ten seconds after the last thing that hurts you, then 10 a second, for everyone in a match rather than just the player. The delay is a countdown on the body rather than a timestamp against a clock, because there are three clocks in this page and a regeneration rule that reads the wrong one behaves differently at different sim speeds.
+
+The first cut dropped the leftover fraction of the frame at the boundary, which made the heal rate depend on the frame rate (69.90 against 70.00 over the same fifteen seconds) and let a float residue silently eat a tick. The remainder is carried through now, and the test asserts the same result from 10 ms steps and from 1 s steps.
+
+### No fish in a deathmatch
+The zone closes onto dry land, so a body that cannot leave the water is not a competitor, it is a slow drowning.
+
+The rule is anatomical rather than a list of banned shapes, because a list goes stale the moment a plan is added: **a match body must have legs**, checked by building it and asking `classifyLimbs` -- the same function the walking physics uses -- how many came out. Eight of the thirty plans genuinely cannot walk; each is swapped for the nearest walking plan, keeping your colours and proportions, and you are told in the cage. Bots **re-roll** rather than swap, so a lobby stays a spread of real land shapes instead of collapsing onto one substitute. The picker hides water shapes while a match is armed.
+
+### The horror pass: what a mouth does when it is not biting
+Reference: xeno sculpts and arthropod horror. What makes those read as frightening is almost never polygon count. It is that the mouth is alive when nothing is happening.
+
+- **Drool.** Strands off the tooth line, each on its own phase, thinning as they fall and ending in a bead, with a slow stretch-and-snap cycle -- plus one bead per mouth that has already let go and is falling. Saliva that never parts is a rubber band and the eye notices.
+- **A tongue that lolls**, in segments, further out the wider the gape, dragging sideways as it goes, and wet at the tip.
+- **An inner jaw**: a second, smaller set of jaws deep in the throat that thrusts forward as the first set closes, so a bite reads as two bites. You only see it when the mouth opens, which is exactly what makes it land.
+- **Lip tendrils**: cilia at the corners, each on its own phase so they never move as a block.
+
+Grinding beaks and duck bills get none of it. A duck bill with a lolling tongue and an inner jaw is a comedy, not a horror.
+
+The first cut reached for `g.tube()`, which exists on the ordinary part builder and **not** on the wrapper the jaws draw through -- so it worked in the palette icon and threw in the game. Everything is cones and balls now, which every builder has.
+
+Measured on a crushing jaw: 92 pieces without the wet detail, **139 with**, 48 at distance, 154 in the palette icon.
+
+### The quality setting drops itself
+"My computer basically can't run ultra at all, every frame takes like half a second."
+
+There was an automatic system and it was solving the wrong problem: it scaled the render **resolution** between 100% and 60% and nothing else. At half a second a frame the cost is eighteen thousand plants, three shadow cascades and a two-hundred-thousand instance budget -- rendering all of that at 60% of the pixels is still all of that.
+
+The automatic system moves the **preset** now, with the resolution trim as the fine adjustment underneath it.
+
+- **Down fast, up slow.** Two levels at once if the first seconds are dire (over 55 ms), one at a time above the 22 ms budget with a four-second cooldown, and a wide dead band so it cannot oscillate. Climbing needs twelve unbroken seconds under 11 ms *and* the resolution already back at full, so it can never fight the trim.
+- **It never overrules you.** Touching the quality buttons turns automatic stepping off for the session. Measured: a player who picks ultra keeps ultra through eight seconds of 500 ms frames.
+- **A machine nobody has measured starts at medium, not high.** First impressions of a frame rate are permanent.
+- It says what it did, once, naming the level and how to stop it, and the readout carries the level beside the fps.
+- **The horror geometry rides the same setting**: drool, tendrils, tongues and inner jaws are high and ultra only. Palette icons keep them at every level, because a still image costs nothing and it is the one place anybody looks at a mouth closely.
+
+### Tested
+- `test_loadout_steps.js` (browser, new, 18 checks): the builder opens on the kit, no key is double-bound, nothing is rounded, the play button is not green, grain and vignette and scan are present, the shop lists only what you do not own and none of it is draggable, what you buy moves from one list to the other, a kit row states its count and its spares, and a category tab shows only what you own.
+- `test_perf_steps.js` (browser, new, 12 checks): four levels, an unmeasured machine starts at medium, 500 ms frames drop two levels at once, 30 ms frames drop exactly one, 18 ms frames change nothing, a few fast seconds do not climb but forty do, and a player's own choice survives eight seconds of dire frames.
+- `test_horror_steps.js` (browser, new, 7 checks): the new geometry throws nothing, the creature still draws, and the piece count goes 92 -> 139 with the wet detail on, 48 at distance, 154 in the icon.
+- `test_hp.js` extended with six regeneration checks including frame-rate independence.
+- `test_brstart_steps.js` extended with seven checks that no body without legs can enter a match, that the swap keeps your colours, and that not one bot in the lobby is a fish.
+- Replayed green: `test_core`, `test_fight_core`, `test_combat`, `test_bones`, `test_plans`, `test_spell_steps`, `test_brstart_steps`, `test_loadout_steps`.
+
+### Still not in this build
+Stealth, sneaking and tall grass you can hide in; Fortnite-style rarity-glow loot beacons floating over bodies; ruined concrete buildings and cover walls; the leg-intersection bug; 50 players; the wet-hide shader work (object-space triplanar detail, clear-coat, translucency); and the rest of the horror pass on the BODY rather than the mouth -- exposed ribs, muscle striation, blood that stays on the hide after a fight.
+
 ## 2026-09-24 (pivot): It is a fighting game
 
 Finn called it mid-session: the food was the problem, not the food's art. "Having to constantly eat food is super annoying and dumb. It should be a fighting game." Everything below follows from that.
