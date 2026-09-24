@@ -121,6 +121,11 @@
   /* bad food, in the same shape as the drowning overlay: a tint at the edges
      that never covers what you are trying to look at. Opacity is driven per
      frame by sickTick, so no transition here -- it would fight the easing. */
+  /* One layer per running spell, so two at once reads as two colours rather
+     than as a third colour that means nothing. */
+  #spellfx{position:fixed;inset:0;z-index:5;pointer-events:none}
+  #spellfx i{position:absolute;inset:0;display:block;opacity:0;mix-blend-mode:screen;
+    transition:opacity .18s linear}
   #sickfx{position:fixed;inset:0;z-index:4;pointer-events:none;opacity:0;
     background:radial-gradient(ellipse at center,rgba(70,90,20,0) 38%,rgba(96,120,26,.34) 76%,rgba(38,52,10,.80) 100%)}
   #err{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:30;
@@ -237,6 +242,8 @@
     font:600 11px/1.3 system-ui,sans-serif;letter-spacing:.03em;background:rgba(0,0,0,.30)}
   .spells .sp b{font-weight:800;opacity:.85;margin-right:3px}
   .spells .sp i{font-style:normal;opacity:.75}
+  .spells .sp.off{border-color:rgba(190,205,210,.16)!important;color:rgba(190,205,210,.30)!important}
+  .spells .sp.live{background:rgba(255,255,255,.10);box-shadow:0 0 10px -2px currentColor}
   #brChoice{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);display:none;padding:26px 34px;border-radius:16px;
     background:linear-gradient(180deg,rgba(14,26,24,.98),rgba(6,14,14,.98));border:1px solid #4a7a6c;color:#eafaf4;z-index:60;text-align:center;max-width:460px}
   #brChoice h3{margin:0 0 10px;font-size:19px;letter-spacing:.12em}
@@ -426,12 +433,208 @@
   #picker .popt2 b { position: absolute; left: 6px; top: 6px; }
   #picker .pskip { cursor: pointer; }
   #picker { pointer-events: auto; }
+
+  /* a row: thumbnail, name and numbers, one action on the right */
+  .edlist { display: flex; flex-direction: column; }
+  .edrowi { display: flex; align-items: center; gap: 11px; padding: 7px 2px;
+    border-bottom: 1px solid rgba(196,186,166,.07); cursor: grab; }
+  .edrowi.shopr { cursor: default; }
+  .edrowi:hover { background: rgba(255,255,255,.035); }
+  .edrowi .edtile { width: 46px; height: 46px; flex: 0 0 46px; aspect-ratio: auto; }
+  .edrowt { flex: 1; min-width: 0; }
+  .edrown { font-size: 12.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+    display: flex; align-items: baseline; gap: 7px; }
+  .edrowq { font-size: 13px; font-weight: 700; letter-spacing: .02em; }
+  .edrowm { font-size: 10.5px; letter-spacing: .04em; margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .edrowm b.none { opacity: .45; }
+  .edrowlk { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+  .edempty { padding: 26px 8px; text-align: center; font-size: 12px; letter-spacing: .10em;
+    text-transform: uppercase; line-height: 1.9; }
+  .edempty span { font-size: 10.5px; letter-spacing: .06em; text-transform: none; }
+  /* ================= LOADOUT SKIN =================================== */
+  /* Everything below re-skins the editor. Structure is unchanged: this is
+     colour, weight, edges and type. */
+  #edRoot {
+    --bone:    #d3cbba;          /* type, and the silhouettes */
+    --bone-d:  #8b8474;          /* secondary type */
+    --bone-f:  #5d5850;          /* disabled / hairlines on dark */
+    --ink:     #08080a;          /* the dark everything sits on */
+    --ink-2:   #0e0e11;
+    --rule:    rgba(196,186,166,.13);
+    --rule-2:  rgba(196,186,166,.26);
+    --blood:   #8e2318;          /* the one hot accent */
+    --blood-l: #c2402c;
+    --amber:   #c8912f;
+    color: var(--bone);
+    letter-spacing: .02em;
+  }
+  /* grain + vignette + a slow scan, over the whole screen, under the cursor */
+  #edVig { position: absolute; inset: 0; pointer-events: none; z-index: 5; mix-blend-mode: multiply;
+    background:
+      radial-gradient(ellipse 120% 92% at 50% 44%, rgba(255,255,255,0) 38%, rgba(0,0,0,.55) 82%, rgba(0,0,0,.86) 100%); }
+  #edGrain { position: absolute; inset: 0; pointer-events: none; z-index: 6; opacity: .055; mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
+    background-size: 160px 160px; }
+  #edScan { position: absolute; inset: 0; pointer-events: none; z-index: 7; opacity: .30;
+    background: repeating-linear-gradient(180deg, rgba(0,0,0,.30) 0 1px, rgba(0,0,0,0) 1px 3px); }
+
+  /* ---- type and buttons ---- */
+  #edRoot button {
+    font-size: 11.5px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--bone-d); background: rgba(255,255,255,.022);
+    border: 1px solid var(--rule); border-radius: 0; padding: 8px 14px;
+    transition: color .12s, border-color .12s, background .12s;
+  }
+  #edRoot button:hover { color: var(--bone); background: rgba(255,255,255,.055); border-color: var(--rule-2); }
+  #edRoot button:active { background: rgba(0,0,0,.4); }
+  #edRoot button:disabled { color: var(--bone-f); background: none; border-color: rgba(196,186,166,.07); opacity: 1; }
+  #edRoot button.warn { color: #c98a7c; border-color: rgba(190,70,50,.34); background: rgba(120,28,18,.16); }
+  #edRoot button.warn:hover { color: #f0c0b4; border-color: var(--blood-l); background: rgba(150,36,22,.30); }
+  /* a toggle reads as a lit tally on the left edge, not as a green pill */
+  #edRoot button.on { color: var(--bone); background: rgba(255,255,255,.06);
+    border-color: var(--rule-2); box-shadow: inset 3px 0 0 var(--blood-l); }
+
+  /* ---- the top strip: a rule under it, not a box round it ---- */
+  #edTop { top: 0; left: 0; right: 0; max-width: none; border-radius: 0; border: 0;
+    border-bottom: 1px solid var(--rule); box-shadow: none;
+    padding: 9px 14px; gap: 7px;
+    background: linear-gradient(180deg, rgba(6,6,8,.92) 0%, rgba(6,6,8,.72) 70%, rgba(6,6,8,0) 100%); }
+  #edTop button.go { font-size: 13px; letter-spacing: .34em; padding: 9px 30px 9px 34px;
+    color: var(--bone); background: rgba(142,35,24,.20);
+    border: 1px solid rgba(194,64,44,.55); box-shadow: inset 0 0 22px rgba(142,35,24,.28); }
+  #edTop button.go:hover { color: #fff; background: rgba(170,42,28,.45); border-color: var(--blood-l);
+    box-shadow: inset 0 0 26px rgba(194,64,44,.5), 0 0 22px rgba(142,35,24,.28); }
+  #edTop button.go.blocked { filter: none; color: var(--bone-f); background: none; border-color: rgba(196,186,166,.10); box-shadow: none; }
+  #edTop input, #edRoot input[type=text] { background: rgba(0,0,0,.35); border: 1px solid var(--rule); border-radius: 0;
+    color: var(--bone); font-family: inherit; font-size: 12px; letter-spacing: .08em; padding: 7px 10px; }
+  #edTop input::placeholder { color: var(--bone-f); letter-spacing: .12em; text-transform: uppercase; font-size: 11px; }
+
+  /* ---- the right column: an edge, not a frame ---- */
+  #edPal { top: 0; right: 0; bottom: 0; width: 396px; border-radius: 0; border: 0;
+    border-left: 1px solid var(--rule); box-shadow: none; padding: 14px 16px 12px;
+    background: linear-gradient(270deg, rgba(8,8,10,.95) 0%, rgba(8,8,10,.90) 62%, rgba(8,8,10,.74) 100%); }
+  #edTabTitle { margin: 14px 2px 2px; font-size: 12px; letter-spacing: .34em; color: var(--bone);
+    font-weight: 600; text-align: center; }
+  #edTabHint { color: var(--bone-f) !important; font-size: 10.5px; letter-spacing: .10em; text-transform: uppercase; text-align: center; }
+  #edPal > div:first-child { border-bottom: 1px solid var(--rule); padding-bottom: 10px; }
+  #edGrid::-webkit-scrollbar { width: 6px } #edGrid::-webkit-scrollbar-thumb { background: rgba(196,186,166,.18); border-radius: 0 }
+  .edgrid { gap: 1px; }
+  /* group headers: a rule with a word sitting on it */
+  .edpl { font-size: 10.5px; letter-spacing: .30em; color: var(--bone-d); margin: 20px 0 2px;
+    padding-bottom: 5px; border-bottom: 1px solid var(--rule); }
+  .edgnote { color: var(--bone-f); font-size: 10.5px; letter-spacing: .06em; margin: 4px 0 8px; }
+
+  /* ---- tiles ---- */
+  .edtile { border-radius: 0; background: #0b0b0e; border: 1px solid rgba(196,186,166,.08);
+    box-shadow: none; transition: background .10s, border-color .10s; }
+  .edtile:hover { border-color: var(--rule-2); background: #131317; transform: none; }
+  .edtile.cur { border: 1px solid rgba(194,64,44,.75); background: #16100f;
+    box-shadow: inset 0 0 0 1px rgba(142,35,24,.28), inset 0 -26px 34px -20px rgba(194,64,44,.45); }
+  .edtile.locked img { filter: grayscale(1) brightness(.45); opacity: .5; }
+  .edlock { border-radius: 0; background: rgba(0,0,0,.72); color: var(--bone-d); left: 0; top: 0; padding: 4px; }
+  .edcost { border-radius: 0; height: 17px; font-size: 10px; font-weight: 700; letter-spacing: .06em;
+    color: var(--bone); background: rgba(0,0,0,.7); border: 1px solid var(--rule); right: 0; bottom: 0; }
+  .edcname2 { background: linear-gradient(180deg, rgba(0,0,0,0), rgba(0,0,0,.85)) !important;
+    color: var(--bone-d) !important; letter-spacing: .10em; text-transform: uppercase; font-size: 9.5px; }
+  /* body shapes: bone-white silhouettes on black. A black silhouette on a
+     black screen is an empty square, so the shape is shown the way a loadout
+     screen shows a weapon -- lit against the dark. */
+  .edtile.silho { background: #060608; }
+  .edtile.silho img { filter: brightness(0) invert(.86) sepia(.42) saturate(.55) contrast(1.05); opacity: .80; }
+  .edtile.silho:hover { background: #0d0d10; }
+  .edtile.silho:hover img { opacity: 1; }
+  .edtile.silho.cur { background: #120c0b; }
+  .edtile.silho.cur img { filter: brightness(0) invert(.92) sepia(.55) saturate(1.1) contrast(1.05); opacity: 1; }
+  .edtile.silho.locked img { filter: brightness(0) invert(.48); opacity: .30; }
+
+  /* ---- the stat block, bottom left: a readout, not a card ---- */
+  #edStats { left: 0; bottom: 0; width: 352px; border-radius: 0; border: 0;
+    border-top: 1px solid var(--rule); border-right: 1px solid var(--rule);
+    padding: 14px 18px 16px; font-size: 12px;
+    background: linear-gradient(0deg, rgba(8,8,10,.95) 0%, rgba(8,8,10,.86) 70%, rgba(8,8,10,.62) 100%); }
+  .edcapl { font-size: 10.5px; letter-spacing: .30em; color: var(--bone-d); }
+  .edcapl b { font-size: 20px; color: var(--bone); font-weight: 600; letter-spacing: .02em; }
+  .edcapl b.over { color: var(--blood-l); }
+  .edbar { height: 2px; border-radius: 0; background: rgba(196,186,166,.12); border: 0; margin: 8px 0 6px; }
+  .edbar i { background: var(--bone-d); }
+  .edbar i.over { background: var(--blood-l); }
+  .edkills { font-size: 10px; letter-spacing: .10em; text-transform: uppercase; color: var(--bone-f); }
+  .edst { border-bottom: 1px solid rgba(196,186,166,.07); color: var(--bone-d); padding: 4px 0;
+    font-size: 11.5px; letter-spacing: .06em; }
+  .edst b { color: var(--bone); font-weight: 600; }
+  .edst.big { color: var(--bone); font-size: 11px; letter-spacing: .20em; text-transform: uppercase;
+    border-bottom: 1px solid var(--rule); }
+  .edst i.up { color: #9db07a; } .edst i.dn { color: var(--blood-l); }
+  .edmoves span { color: var(--bone-f); font-size: 10px; letter-spacing: .26em; }
+  .edmoves button { border-radius: 0; font-size: 10.5px; letter-spacing: .14em; padding: 5px 11px;
+    color: var(--bone-d); background: rgba(255,255,255,.03); border: 1px solid var(--rule); }
+  .edmoves button:hover { color: var(--bone); background: rgba(255,255,255,.07); border-color: var(--rule-2); }
+  .edwarn { color: var(--amber); font-size: 11px; letter-spacing: .04em; }
+
+  /* ---- the rest of the furniture ---- */
+  #edInsp, #edSavedBox, #edTip { border-radius: 0; border: 1px solid var(--rule);
+    background: rgba(8,8,10,.96); box-shadow: 0 0 0 1px rgba(0,0,0,.6); }
+  #edInsp { left: 0; top: 0; border-left: 0; border-top: 0; }
+  .edih b { color: var(--bone); font-weight: 600; letter-spacing: .10em; text-transform: uppercase; font-size: 13px; }
+  .edih span, .edhint, .edsl, .edchk { color: var(--bone-d); }
+  .edhint { font-size: 11px; letter-spacing: .05em; color: var(--bone-f); }
+  .edsl input[type=range] { accent-color: var(--bone-d); }
+  .edsw .sw { border-radius: 0; border: 1px solid rgba(196,186,166,.30); box-shadow: none; }
+  .edsw .sw:hover { border-color: var(--bone); transform: none; outline: 1px solid var(--bone); }
+  .edsw input[type=color], .edrow input[type=color] { border-radius: 0; border: 1px solid var(--rule); background: #0b0b0e; }
+  .edsvi { border-radius: 0; background: #0b0b0e; }
+  #edHelp { border-radius: 0; background: linear-gradient(180deg, rgba(8,8,10,0), rgba(8,8,10,.82));
+    color: var(--bone-f); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;
+    padding: 10px 18px 12px; max-width: 60vw; }
+  #edFlash { border-radius: 0; background: rgba(18,6,4,.96); border: 1px solid rgba(194,64,44,.55);
+    color: #e8cdc4; font-size: 12px; letter-spacing: .08em; }
+  #edTip b { color: var(--bone); letter-spacing: .08em; text-transform: uppercase; font-size: 12px; }
+  #edTip .c { color: var(--bone-f); letter-spacing: .10em; }
+  #edTip .lk { color: var(--amber); }
+  #edOpenBtn { border-radius: 0; color: var(--bone); background: rgba(8,8,10,.86);
+    border: 1px solid var(--rule); font: 600 11px/1 'IBM Plex Mono', monospace; letter-spacing: .18em;
+    text-transform: uppercase; padding: 9px 14px; }
+  #edOpenBtn:hover { border-color: var(--rule-2); background: rgba(20,20,24,.9); }
+  /* the two lists, in the skin's own palette */
+  .edrowi { border-bottom-color: rgba(196,186,166,.08); }
+  .edrowi:hover { background: rgba(255,255,255,.04); }
+  .edrown { color: var(--bone); }
+  .edrowq { color: var(--bone); }
+  .edrowm { color: var(--bone-f); }
+  .edrowm b { color: var(--bone-d); font-weight: 600; }
+  .edrowlk { color: var(--bone-f); }
+  .edempty { color: var(--bone-d); }
+  .edempty span { color: var(--bone-f); }
+  .edrowi .edtile { background: #0b0b0e; border-color: rgba(196,186,166,.10); }
+  .edbuy, .edsell { border-radius: 0; font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
+    padding: 7px 11px; background: rgba(255,255,255,.03); border: 1px solid var(--rule); color: var(--bone-d);
+    width: auto; margin-top: 0; flex: 0 0 auto; }
+  .edbuy { gap: 9px; }
+  .edbuy b { font-size: 11.5px; letter-spacing: .02em; }
+  .edbuy:hover { background: rgba(255,255,255,.075); color: var(--bone); }
+  .edbuy.poor { opacity: .32; }
+  .edsell:hover { border-color: rgba(194,64,44,.55); color: #e0b4a8; background: rgba(120,28,18,.20); }
+  .edsell.arm { border-color: var(--blood-l); color: #f0c8bc; background: rgba(150,36,22,.32); }
+  .edcard .edcname { color: var(--bone); font-size: 11.5px; letter-spacing: .10em; text-transform: uppercase; font-weight: 600; }
+  .edcuse { color: var(--bone-f); }
+  .edccost { color: var(--bone-f); letter-spacing: .05em; }
+  .edstock { color: var(--bone-d); letter-spacing: .05em; }
+  .edstock.none { color: var(--bone-f); }
+  .edhave { background: rgba(0,0,0,.72); color: var(--bone); border: 1px solid var(--rule); border-radius: 0; }
+  .edowned { color: var(--bone-f); }
+  /* the loot picker that appears over a kill */
+  #picker .popt2 { border-radius: 0; background: #0b0b0e; border: 1px solid rgba(196,186,166,.10); }
+  #picker .popt2:hover { border-color: var(--rule-2); background: #131317; }
+  #picker .popt2 span { color: var(--bone-d); letter-spacing: .08em; text-transform: uppercase; font-size: 10px; }
+  #picker .popt2 em { color: var(--amber); } #picker .popt2.own em { color: var(--bone-f); }
+
 </style>
 </head>
 <body>
 <canvas id="gpu"></canvas>
 <div id="drownfx"></div>
-<div id="sickfx"></div>
+<div id="sickfx"></div><div id="spellfx"></div>
 <div id="deathfx"><div class="big">YOU DIED</div><div class="sub"></div></div>
 <button id="resetbtn" type="button">Reset World</button>
 <div id="gfxsel"><span id="gfxfps" title="frame rate and render scale">-</span><button data-q="auto" id="gfxauto" class="on" title="lower the render scale automatically to keep the frame rate up">auto res</button><span>graphics</span><button data-q="low">low</button><button data-q="medium">medium</button><button data-q="high">high</button><button data-q="ultra">ultra</button></div>
@@ -2957,6 +3160,7 @@
       updateGrowth(world, c, bdt); // v9.1: advance/refresh c.ph BEFORE p captures it below, so this tick sees live growth
       const p = c.ph; c.cooldown = Math.max(0, c.cooldown - dt); c.reproCD = Math.max(0, c.reproCD - bdt); c.age += bdt;
       if (c.hurtT > 0) c.hurtT = Math.max(0, c.hurtT - dt);
+      hpTick(c, dt);
       if (c.bleedT > 0) {
         c.bleedT = Math.max(0, c.bleedT - dt);
         c.energy -= (c.bleedR || 0) * dt;
@@ -3883,9 +4087,34 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
   // can read it as "is it dead" without guarding for negatives.
   function hpHurt(c, dmg) {
     hpOf(c);
-    c.hp -= Math.max(0, dmg || 0);
+    const d = Math.max(0, dmg || 0);
+    if (d > 0) c._healWait = HEAL_DELAY;      // the clock restarts on every wound
+    c.hp -= d;
     if (!(c.hp > 0)) c.hp = 0;
     return c.hp;
+  }
+  // ---- regeneration --------------------------------------------------------
+  const HEAL_DELAY = 10;        // seconds after the last hit before it starts
+  const HEAL_RATE = 10;         // health a second once it does
+  // Every path that takes health off a body goes through hpHurt, so arming
+  // the delay here means nothing can wound you without resetting it -- a fall,
+  // the fog, drowning, a spike, a bite. One place, no exceptions to forget.
+  function hpTick(c, dt) {
+    if (!c || !c.alive || !(dt > 0)) return;
+    if (c._healWait > 0) {
+      // Spend the delay out of THIS frame's dt and heal with whatever is
+      // left over, rather than throwing the remainder away. Dropping it made
+      // the rate depend on the frame rate, and left a float residue on the
+      // boundary that silently ate an extra tick.
+      const use = Math.min(c._healWait, dt);
+      c._healWait -= use;
+      if (c._healWait < 1e-9) c._healWait = 0;
+      dt -= use;
+      if (!(dt > 0)) return;
+    }
+    const max = hpMaxC(c);
+    if (hpOf(c) >= max) return;
+    c.hp = Math.min(max, c.hp + HEAL_RATE * dt);
   }
   function hpHeal(c, amt) {
     const max = hpMaxC(c);
@@ -4873,7 +5102,8 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
     onHit, HURT_TIME,
     ITEM_TIER, TIER_W, itemTier, tierWeight,
     HP_BASE, HP_REF_MASS, DMG_STOCK, DMG_MAX, DMG_REF_MASS, TTK_CEIL,
-    hpMaxOf, hpMaxC, hpOf, hpFrac, hpHurt, hpHeal, weaponQ, strikeDamage, counterDamage,
+    hpMaxOf, hpMaxC, hpOf, hpFrac, hpHurt, hpHeal, hpTick, HEAL_DELAY, HEAL_RATE,
+    weaponQ, strikeDamage, counterDamage,
     makeRNG, gauss, clamp, PART, PART_TYPES, MOUTH_MODES, SINGLETON, CAPS, IN, OUT, MAX_SEGS, MAX_RADIAL,
     O_GAIT, O_GRAB, GAIT_BOOST, GAIT_COST, GRAB_GAIN, GRAB_COST, gaitFrac, grabFrac,
     seedHerbivore, mutate, crossover, cloneGenome, countNodes, collectNodes, develop,
@@ -7090,7 +7320,9 @@ function brPutPile(put, camX, camZ) {
 }
 function buildShroomMesh() {
   const m = folMB();
-  const H = 15, CAP = 13;
+  // Sized against the animal that picks it up, not against the terrain: the
+  // first cut had a cap wider than the creature standing next to it.
+  const H = 5.6, CAP = 4.6;
   // stem: a slightly bellied tube, tapering into the cap
   const pts = [], rad = [];
   for (let i = 0; i <= 5; i++) {
@@ -9389,6 +9621,7 @@ const PLAN_GROUPS = [
   { label: 'sea', note: 'no legs: breathes water, starts in the sea and cannot come ashore without lungs.', plans: [29, 6, 19, 20, 21] },
 ];
 const VIS_CATS = [
+  { id: 'kit', label: 'your kit', hint: 'every part you own. drag one onto the body' },
   { id: 'body', label: 'body shape', hint: 'the skeleton everything else hangs on' },
   { id: 'shape', label: 'proportions', hint: 'stretch the body, neck and tail' },
   { id: 'paint', label: 'colour & skin', hint: 'hide colour, pattern and covering' },
@@ -9400,6 +9633,7 @@ const VIS_CATS = [
   { id: 'fins', label: 'fins', hint: 'swimming, and steering in water' },
   { id: 'wings', label: 'wings', hint: 'flight, once the wings beat your weight' },
   { id: 'details', label: 'details', hint: 'crests, frills and display pieces' },
+  { id: 'shop', label: 'the shop', hint: 'what you do not have yet, and what it costs' },
 ];
 // Nothing is unlocked at the start: every part is earned by killing an animal
 // that has one. Your current body's own parts stay usable while you edit it.
@@ -12292,6 +12526,18 @@ function absorbPartFrom(prey) {
 // always current and safe to query.
 // Search a body. You get ONE part off it, and then it is picked clean: a
 // carcass is a find, not a vending machine.
+// E takes whatever is in front of you. One key, one meaning, and an order of
+// preference that puts the thing you cannot come back for first.
+function tryTake() {
+  let r = brTakePile();                     // your cage pile: thirty seconds, once
+  if (r.ok) return r;
+  if (carcEatTarget && carcNearest(player.c ? player.c.x : 0, player.c ? player.c.y : 0,
+      player.c ? interactRange(player.c.ph) * 1.45 : 0)) { tryInspect(); return { ok: true, why: 'body' }; }
+  r = shroomTake();                         // a mushroom, which regrows
+  if (r.ok) return r;
+  toast('Nothing to pick up here.', 900);
+  return { ok: false, why: 'none' };
+}
 function tryInspect() {
   const c = player.c;
   if (!c || !c.alive || player.spectator) return;
@@ -13257,6 +13503,34 @@ function spellGlow() {
   const amt = (0.55 + 0.45 * (0.5 + 0.5 * Math.sin(simT * urg))) * (t < 1 ? t : 1);
   return { col: SPELL_DEF[best].col, amt, id: best };
 }
+// The whole screen takes the colour of everything running. One <i> per spell,
+// created once and then only ever changed in opacity, so this costs nothing
+// per frame and cannot leak elements.
+function spellFxTick() {
+  const host = document.getElementById('spellfx');
+  if (!host) return;
+  if (!host.childElementCount) {
+    for (const k of SPELL_IDS) {
+      const el = document.createElement('i');
+      const c = SPELL_DEF[k].col;
+      const rgb = (a) => 'rgba(' + Math.round(c[0] * 255) + ',' + Math.round(c[1] * 255) + ',' + Math.round(c[2] * 255) + ',' + a + ')';
+      // an edge wash, heaviest in the corners, so the middle of the screen
+      // stays readable while the colour is unmistakable
+      el.style.background = 'radial-gradient(ellipse 96% 88% at 50% 50%, ' +
+        rgb(0) + ' 34%, ' + rgb(0.20) + ' 72%, ' + rgb(0.52) + ' 100%)';
+      el.dataset.spell = k;
+      host.appendChild(el);
+    }
+  }
+  for (const el of host.children) {
+    const k = el.dataset.spell, t = spellLeft(k);
+    if (!(t > 0)) { if (el.style.opacity !== '0') el.style.opacity = '0'; continue; }
+    // breathe slowly, then hurry as it runs out
+    const urg = t < 4 ? 6.5 : 1.9;
+    const pulse = 0.72 + 0.28 * (0.5 + 0.5 * Math.sin(simT * urg));
+    el.style.opacity = (pulse * (t < 0.8 ? t / 0.8 : 1)).toFixed(3);
+  }
+}
 // Push the buffs that live on the creature itself onto the creature.
 function spellApply() {
   const c = player.c;
@@ -13302,18 +13576,20 @@ function spellTick(dt) {
   }
   if (changed) spellApply();
   else if (player.c && player.c.hpMul !== spellHpMul()) spellApply();
+  spellFxTick();
 }
 function spellHudHtml() {
   const rows = [];
   for (const k of SPELL_IDS) {
-    const D = SPELL_DEF[k], t = spellLeft(k), n = SPELL.bag[k];
-    if (!n && !(t > 0)) continue;
+    const D = SPELL_DEF[k], t = spellLeft(k), n = SPELL.bag[k] | 0;
     const c = D.col, css = 'rgb(' + Math.round(c[0] * 255) + ',' + Math.round(c[1] * 255) + ',' + Math.round(c[2] * 255) + ')';
-    rows.push('<span class="sp" style="border-color:' + css + ';color:' + css + '">' +
+    const live = t > 0, have = n > 0;
+    const cls = 'sp' + (live ? ' live' : '') + (!have && !live ? ' off' : '');
+    rows.push('<span class="' + cls + '" style="' + (have || live ? 'border-color:' + css + ';color:' + css : '') + '">' +
       '<b>' + D.n + '</b> ' + D.name + (n ? ' ×' + n : '') +
-      (t > 0 ? ' <i>' + Math.ceil(t) + 's</i>' : '') + '</span>');
+      (live ? ' <i>' + Math.ceil(t) + 's</i>' : '') + '</span>');
   }
-  return rows.length ? '<div class="spells">' + rows.join('') + '</div>' : '';
+  return '<div class="spells">' + rows.join('') + '</div>';
 }
 
 // ---------------------------------------------------------------- your swing
@@ -14006,8 +14282,8 @@ const CARC = { cells: new Map(), live: [], q: [], seed: 0, t: 0 };
 // the world seed. Nothing is stored for a cell until you are near it, so the
 // whole island costs what the handful in front of you costs, and two players
 // in the same match walk onto the same mushrooms.
-const SHROOM_CELL = 760;        // one candidate per cell
-const SHROOM_ODDS = 0.42;       // ...and this many cells actually hold one
+const SHROOM_CELL = 1900;       // one candidate per cell
+const SHROOM_ODDS = 0.30;       // ...and this many cells actually hold one. Together: about a ninth of the first cut.
 const SHROOM_R = 2600;          // built out to here, dropped again beyond it
 const SHROOM_REGROW = 150;      // seconds before a picked cap comes back
 const SHROOM = { cells: new Map(), live: [], seed: 0, t: 0 };
@@ -14024,7 +14300,7 @@ function shroomCell(ix, iz) {
     // never in the sea, never on a cliff: it has to be somewhere you can stand
     if (x > 60 && z > 60 && x < WORLD_W - 60 && z < WORLD_H - 60 && !terrain.isWater(x, z)) {
       const id = SHROOM_IDS[(h >>> 11) % SHROOM_IDS.length];
-      ent = { x, z, id, y: 0, taken: 0, rot: r() * 6.283, s: 0.85 + r() * 0.45, built: false };
+      ent = { x, z, id, y: 0, taken: 0, rot: r() * 6.283, s: 0.88 + r() * 0.40, built: false };
     }
   }
   SHROOM.cells.set(key, ent);
@@ -14055,7 +14331,7 @@ function shroomUpdate(dt) {
 function shroomAt() {
   const c = player.c;
   if (!c || !c.alive || player.spectator) return null;
-  const rr = Math.max(26, interactRange(c.ph) * 0.9);
+  const rr = Math.max(14, interactRange(c.ph) * 0.65);
   let best = null, bd = Infinity;
   for (const e of SHROOM.live) {
     if (e.taken) continue;
@@ -15836,7 +16112,11 @@ function updateHUD() {
       `<span class="k">age</span> <span class="v">${c.age.toFixed(0)}/${c.maxAge.toFixed(0)}</span> · ` +
       `<span class="k">cells</span> <span class="v">${(p.parts || []).length}</span>` +
       (tags.length ? ` · <span class="v">${tags.join(' ')}</span>` : '') +
-      (p.canFly ? flightHud() : '') + swimHud() + spellHudHtml() +
+      (p.canFly ? flightHud() : '') + swimHud() +
+      (c._healWait > 0 && C.hpFrac(c) < 0.999
+        ? `<br><span style="color:#c98a7c">wounded &middot; healing in ${Math.ceil(c._healWait)}s</span>`
+        : (C.hpFrac(c) < 0.999 ? '<br><span style="color:#8fbf7a">healing</span>' : '')) +
+      spellHudHtml() +
       ((player.rear || 0) > 0.05 ? `<br><span style="color:#7ee787">reared up: reach x${rearReach(p).toFixed(2)}</span>` : '') +
       '';
   } else {
@@ -15887,7 +16167,7 @@ function updateHUD() {
              : '<span class="ok">M</span> ' + (mateDistance(me, tgt) > 9 ? 'mate (hybrid)' : 'mate')) +
         (fp ? '</div>' : ' <span>E</span> eat</div>');
       const body0 = inspectTarget();
-      const carcLine = body0 ? '<div class="keys"><span class="ok">V</span> search the body at your feet &middot; ' + ((body0.parts || []).length) + ' parts</div>' : '';
+      const carcLine = body0 ? '<div class="keys"><span class="ok">E</span> search the body at your feet &middot; ' + ((body0.parts || []).length) + ' parts</div>' : '';
       act.innerHTML = (mayHit
         ? '<b>' + diet + '</b> mass ' + d.mass.toFixed(1) +
           ' &middot; def ' + d.defense.toFixed(0) + ' &middot; ~' + hits + ' hits to kill' +
@@ -15906,7 +16186,7 @@ function updateHUD() {
       const fp2 = eatPrompt();
       if (body) {
         act.innerHTML = '<b class="pk">CARCASS</b> &middot; ' + ((body.parts || []).length) + ' parts on it' +
-          '<div class="keys"><span class="ok">V</span> search it</div>' + (fp2 ? fp2.html : '');
+          '<div class="keys"><span class="ok">E</span> search it</div>' + (fp2 ? fp2.html : '');
         act.style.display = 'block';
       } else if (fp2) {
         act.innerHTML = '<b>' + fp2.title + '</b>' + fp2.html;
@@ -16196,7 +16476,7 @@ function drawMinimap() {
 // ================================================================= input
 function bindInput() {
   gfxBind();
-  addEventListener('keydown', (e) => {
+  function onPlayKey(e) {
     if (ED.open) return;
     // Only a field you are actually TYPING into may swallow keys. Previously any
     // focused control did, so after touching one slider every action key was
@@ -16235,13 +16515,8 @@ function bindInput() {
     if (k === 'n') sndToggle();
     if (k === 'r') playerRoar();
     if (k === 'm') tryMate();
-    if (k === 'e') {
-      let r = brTakePile();
-      if (!r.ok) r = shroomTake();
-      if (!r.ok && r.why === 'none') toast('Nothing to pick up here.', 900);
-    }
+    if (k === 'e') tryTake();
     if (k >= '1' && k <= '4' && started && !player.picker) { spellUse(SPELL_BY_N[k]); e.preventDefault(); }
-    if (k === 'v') tryInspect();
     if (k === ' ' && !player.spectator) {
       // one press, one wingbeat: the browser's key repeat is not a wing
       if (!e.repeat && player.c && player.c.alive && player.c.ph.canFly) FL.want = true;
@@ -16255,7 +16530,15 @@ function bindInput() {
       toast(player.dist > 0 ? 'Third person. Scroll to zoom.' : 'First person.', 2000);
     }
     if ([' ', 'w', 'a', 's', 'd'].includes(k)) e.preventDefault();
-  });
+  }
+  addEventListener('keydown', onPlayKey);
+  (function () {
+    const seen = {}, dup = [];
+    for (const m of String(onPlayKey).match(/k === '(?:[^']|\\')+'/g) || []) {
+      if (seen[m]) { if (dup.indexOf(m) < 0) dup.push(m); } else seen[m] = 1;
+    }
+    if (dup.length) console.warn('input: these keys are handled more than once in onPlayKey:', dup.join(', '));
+  })();
   addEventListener('keyup', (e) => {
     const k = e.key.toLowerCase();
     // shift tapped (not held) is a dodge roll
@@ -17709,6 +17992,7 @@ function edBuildUI() {
   const root = document.createElement('div');
   root.id = 'edRoot';
   root.innerHTML = `
+  <div id="edVig" aria-hidden="true"></div><div id="edGrain" aria-hidden="true"></div><div id="edScan" aria-hidden="true"></div>
   <div id="edTop" class="edp">
     <button id="edUndo" title="undo (ctrl+z)">undo</button><button id="edRedo" title="redo (ctrl+y)">redo</button>
     <button id="edMirror" title="mirror parts left and right (M)">mirror: on</button>
@@ -17800,7 +18084,10 @@ function edRefreshUI() {
     // the body plan is chosen once per world; only a reset lets you pick another
     const planLocked = ED.mode === 'game';
     for (const grp of PLAN_GROUPS) {
-      const list = grp.plans.filter(p => p < C.PLANS.length);
+      let list = grp.plans.filter(p => p < C.PLANS.length);
+      // A match will not take a body that cannot walk, so it is not offered.
+      if (brLocked()) list = list.filter(p => brWalkingPlans().indexOf(p) >= 0);
+      if (!list.length) continue;
       if (!list.length) continue;
       html += `<div class="edpl">${grp.label}</div><div class="edgnote">${grp.note}</div><div class="edgrid">`;
       for (const p of list) html += `<div class="edtile plan silho${ED.des.plan === p ? ' cur' : ''}${planLocked && ED.des.plan !== p ? ' locked' : ''}" data-plan="${p}" title="${PLAN_NAMES[p] || ''}">${tileHTML('plan' + p, !planLocked || ED.des.plan === p)}</div>`;
@@ -17825,8 +18112,66 @@ function edRefreshUI() {
       return `<div class="edtile item${skinOf(ED.des) === i ? ' cur' : ''}${av ? '' : ' locked'}" data-skin="${i}" title="${SKIN_NAMES[i]}">${tileHTML(id, av)}</div>`;
     }).join('') + '</div>';
     html += '<div class="edhint">to colour a single part, click it on the creature. new skins are earned by killing animals that wear them</div>';
+  } else if (ED.tab === 'kit' || ED.tab === 'shop') {
+    // One row per part. The kit is what you own; the shop is the rest.
+    const kit = ED.tab === 'kit';
+    const all = Object.keys(VIS).filter((id) => C.ITEM_SIM[id]);
+    const held = (id) => (SANDBOX ? 1 : Math.max(0, PROG.owned[id] | 0) + (ED.des ? countItem(ED.des, id) : 0));
+    let ids = all.filter((id) => (held(id) > 0) === kit);
+    if (kit) {
+      // heaviest kit first: what you are proudest of is at the top
+      ids.sort((x, y) => (boneTierIdx(boneTier(y)) - boneTierIdx(boneTier(x))) ||
+                         ((PROG.owned[y] | 0) - (PROG.owned[x] | 0)) || (VIS[x].name < VIS[y].name ? -1 : 1));
+    } else {
+      // cheapest first, so the next thing you can afford is at the top
+      ids.sort((x, y) => (bonePrice(x) - bonePrice(y)) || (VIS[x].name < VIS[y].name ? -1 : 1));
+    }
+    const bal = boneBalance();
+    if (!ids.length) {
+      html += '<div class="edempty">' + (kit
+        ? 'You own nothing yet.<br><span>Kill something and take a part off it, or buy one in the shop.</span>'
+        : 'You own every part in the game.<br><span>There is nothing left to buy.</span>') + '</div>';
+    }
+    html += '<div class="edlist">';
+    let lastTier = null;
+    for (const id of ids) {
+      const v = VIS[id], tier = boneTier(id), col = BONE_TIER_COL[tier];
+      const nOwn = SANDBOX ? Infinity : Math.max(0, PROG.owned[id] | 0);
+      const worn = ED.des ? countItem(ED.des, id) : 0;
+      const sp = spareOf(id);
+      const price = bonePrice(id);
+      if (!kit && tier !== lastTier) { lastTier = tier; html += `<div class="edpl" style="color:${col}">${BONE_TIER_LABEL[tier]} &middot; ${price} bones</div>`; }
+      const cat = (VIS_CATS.find((c2) => c2.id === v.cat) || { label: v.cat });
+      html += `<div class="edrowi${kit ? ' edcard' : ' shopr'}" data-item="${id}">` +
+        `<div class="edtile item" data-item="${id}">${tileHTML(id, kit || SANDBOX)}</div>` +
+        `<div class="edrowt">` +
+          `<div class="edrown">${v.name}` +
+            (kit && nOwn !== Infinity ? `<span class="edrowq">&times;${nOwn}</span>` : '') +
+            `<span class="edtierb" style="color:${col}">${BONE_TIER_LABEL[tier]}</span></div>` +
+          `<div class="edrowm">` +
+            (kit
+              ? (SANDBOX ? 'sandbox &middot; unlimited'
+                 : `${worn} on the body &middot; <b class="${sp ? '' : 'none'}">${sp} to place</b> &middot; ${itemCost(id)} space each`)
+              : `${cat.label} &middot; ${itemCost(id)} space &middot; ${v.use || effectText(id) || ''}`) +
+          `</div>` +
+        `</div>` +
+        (kit
+          ? (!SANDBOX && !brLocked() && sp > 0 ? `<button class="edsell" data-sell="${id}">sell one &middot; ${boneRefund(id)}</button>` : '')
+          : (!brLocked() ? `<button class="edbuy${bal >= price ? '' : ' poor'}" data-buy="${id}" style="border-color:${col}"><span>buy</span><b style="color:${col}">${price}</b></button>`
+                         : '<span class="edrowlk">shut in a match</span>')) +
+        `</div>`;
+    }
+    html += '</div>';
+    html += kit
+      ? '<div class="edhint">drag a row onto the creature to wear it. a part you are wearing cannot be sold: take it off first</div>'
+      : '<div class="edhint">bones come from kills. anything you buy lands in your kit and stays there between matches</div>';
   } else {
-    const ids = Object.keys(VIS).filter(id => VIS[id].cat === ED.tab);
+    // A category tab lists only what you own. Everything else is in the shop.
+    const ids = Object.keys(VIS).filter(id => VIS[id].cat === ED.tab &&
+      (SANDBOX || (PROG.owned[id] | 0) > 0 || (ED.des ? countItem(ED.des, id) : 0) > 0));
+    if (!ids.length) {
+      html += '<div class="edempty">Nothing of this kind in your kit.<br><span>The shop has them. Last tab.</span></div>';
+    }
     html += '<div class="edgrid cards">';
     for (const id of ids) {
       const av = itemAvailable(id);
@@ -18298,7 +18643,7 @@ function openEditor(mode) {
     if (!g0.design) { g0.design = C.cloneDesign(ED.des); C.compileDesign(g0); }
     ED.origPh = C.develop(c.genome);
     ED.statBrain = c.genome.brain; ED.statScale = c.genome.scale || 1;
-    ED.tab = 'mouth';
+    ED.tab = 'kit';
   } else {
     ED.mode = 'start';
     ED.des = PROG.last ? C.cloneDesign(PROG.last) : C.defaultDesign(0);
@@ -18322,7 +18667,13 @@ function closeEditor(apply) {
   if (!ED.open) return;
   if (apply) {
     const hasMouth = ED.des.parts.some(p => C.ITEM_SIM[p.id] && C.ITEM_SIM[p.id].t === 'MOUTH');
-    if (!hasMouth) { edFlash('Your creature needs a mouth to eat. Add one from the mouths tab.'); ED.tab = 'mouth'; edRefreshUI(); return; }
+    if (!hasMouth) {
+      const own = Object.keys(VIS).some((id) => VIS[id].cat === 'mouth' && ((PROG.owned[id] | 0) > 0));
+      edFlash(own ? 'Your creature needs a mouth. There is one in your kit.'
+                  : 'Your creature needs a mouth. You do not own one: take one off a body, or buy one in the shop.');
+      ED.tab = own ? 'kit' : 'shop';
+      edRefreshUI(); return;
+    }
     const used = C.designCost(ED.des), cap = edCapacity(ED.des);
     if (used > cap) { edFlash('Over genome space by ' + (used - cap) + '. Remove something first.'); return; }
     if (!ED.des.name) ED.des.name = speciesName(ED.des);
@@ -18622,8 +18973,49 @@ function brCarveBays(n) {
 // Eyes stay, because being blind is not a fair start. Everything that does
 // damage or soaks it comes off.
 const BR_BARE_TIP = { LIMB: 't_paw' };
+// Which body plans walk, worked out from the plans themselves rather than
+// written down: build each one's default body and count the legs the game's
+// own limb classifier finds on it. Computed once, on first use.
+let BR_WALKERS = null;
+function brWalkingPlans() {
+  if (BR_WALKERS) return BR_WALKERS;
+  const out = [];
+  for (let pi = 0; pi < C.PLANS.length; pi++) {
+    try {
+      const d = C.defaultDesign(pi);
+      if (C.classifyLimbs(d, C.buildDesignSkeleton(d)).legs > 0) out.push(pi);
+    } catch (e) { /* a plan that will not build is not one to offer */ }
+  }
+  BR_WALKERS = out.length ? out : [1];
+  return BR_WALKERS;
+}
+function brCanWalk(des) {
+  if (!des) return false;
+  try { return C.classifyLimbs(des, C.buildDesignSkeleton(des)).legs > 0; }
+  catch (e) { return false; }
+}
+// The land shape nearest the one you picked: same list, closest index, so a
+// serpent becomes something serpentine rather than something arbitrary.
+function brNearestWalker(plan) {
+  const w = brWalkingPlans();
+  let best = w[0], bd = Infinity;
+  for (const pi of w) { const d = Math.abs(pi - (plan | 0)); if (d < bd) { bd = d; best = pi; } }
+  return best;
+}
 function brBareDesign(des) {
-  const src = des && des.plan != null ? des : C.defaultDesign(0);
+  let src = des && des.plan != null ? des : C.defaultDesign(0);
+  // No fish in a deathmatch. The zone closes onto dry land, so a body that
+  // cannot leave the water is not a competitor, it is a slow drowning.
+  if (!brCanWalk(src)) {
+    const pi = brNearestWalker(src.plan);
+    const swap = C.defaultDesign(pi);
+    if (src.col) swap.col = JSON.parse(JSON.stringify(src.col));
+    if (src.body) swap.body = Object.assign({}, swap.body, src.body);
+    C.reseatDesign(swap);
+    swap.stem = src.stem;
+    BR._swapped = { from: src.plan, to: pi };
+    src = swap;
+  } else BR._swapped = null;
   const d = C.cloneDesign(src);
   // keep only the eyes: they are how you see, not how you fight
   d.parts = (d.parts || []).filter((pt) => {
@@ -18724,7 +19116,10 @@ function brBegin() {
   spellReset();          // nothing carries into a match
   BR.net.ready();
   brSyncPanel();
-  brSay('BAY ' + bay.n + '. The gate opens in ' + BR_CAGE_SECS + ' seconds.', 5000);
+  if (BR._swapped) {
+    brSay('A body with no legs cannot fight a match on dry land. You have been given the nearest shape that walks.', 8000);
+    BR._swapped = null;
+  } else brSay('BAY ' + bay.n + '. The gate opens in ' + BR_CAGE_SECS + ' seconds.', 5000);
   return true;
 }
 // The whole entry: arm, rebuild the island from the match seed, take the
@@ -18772,7 +19167,13 @@ function brSpawnBots() {
     try {
       const g = C.seedHerbivore(world, rng);
       // Bare, exactly like you: the shape is random, the kit is not there.
-      g.design = brBareDesign(C.randomDesign(rng, { diversity: 0.85, diet: rng() < 0.55 ? 'carn' : 'herb', rarityCap: world.rarityCap }));
+      let rd = C.randomDesign(rng, { diversity: 0.85, diet: rng() < 0.55 ? 'carn' : 'herb', rarityCap: world.rarityCap });
+      // Roll again rather than swapping, so a lobby is a spread of real land
+      // shapes instead of everything collapsing onto the same substitute.
+      for (let tries = 0; tries < 8 && !brCanWalk(rd); tries++) {
+        rd = C.randomDesign(rng, { diversity: 0.85, diet: rng() < 0.55 ? 'carn' : 'herb', rarityCap: world.rarityCap });
+      }
+      g.design = brBareDesign(rd);
       C.compileDesign(g);
       c = C.makeCreature(g, bay.x, bay.z, 400);
       // start full: a player would not spawn one bite from starving
@@ -20503,6 +20904,10 @@ window.__G3D = {
     renderHud: () => brRenderHud(),
     wildSecs: BR_WILD_SECS,
     get gateY() { return BR.gateY; },
+    walkers: () => brWalkingPlans().slice(),
+    canWalk: (d) => brCanWalk(d),
+    bareOf: (d) => brBareDesign(d),
+    legsOf: (d) => { try { return C.classifyLimbs(d, C.buildDesignSkeleton(d)).legs; } catch (e) { return -1; } },
     // everything alive that is not a player: must be zero, always
     wildAlive: () => (world && world.creatures ? world.creatures.filter((c) => c.alive && c._br == null && c !== player.c).length : -1),
     bare: (slot) => {
@@ -20576,6 +20981,17 @@ window.__G3D = {
     wornCount: (id) => (ED.des ? countItem(ED.des, id) : 0),
     // the palette IS the shop now
     tab: (t) => { ED.tab = t; edRefreshUI(); },
+    get curTab() { return ED.tab; },
+    // what each of the two lists is showing right now
+    rows: () => [...document.querySelectorAll('#edGrid .edrowi')].map((e) => ({
+      id: e.getAttribute('data-item'),
+      name: (e.querySelector('.edrown') || {}).textContent || '',
+      meta: (e.querySelector('.edrowm') || {}).textContent || '',
+      buy: !!e.querySelector('[data-buy]'), sell: !!e.querySelector('[data-sell]'),
+      drag: e.classList.contains('edcard'),
+    })),
+    cards: () => [...document.querySelectorAll('#edGrid .edgrid.cards .edcard')].map((e) => e.getAttribute('data-item')),
+    empty: () => { const e = document.querySelector('#edGrid .edempty'); return e ? e.textContent : null; },
     buyButtons: () => [...document.querySelectorAll('#edGrid [data-buy]')].map(b => b.getAttribute('data-buy')),
     sellButtons: () => [...document.querySelectorAll('#edGrid [data-sell]')].map(b => b.getAttribute('data-sell')),
     clickBuy: (id) => { const b = document.querySelector('#edGrid [data-buy="' + id + '"]'); if (b) b.click(); return !!b; },
