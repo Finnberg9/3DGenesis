@@ -1,5 +1,75 @@
 # 3DGenesis dev log
 
+## 2026-09-25 (later): The skeleton learns to hunch, and I start looking at what I build
+
+Finn, on the fourteen shapes I shipped this morning: "these all read as little insect, not scary creatures", and "they look nothing like the reference images I sent you". Both true.
+
+### The mistake worth writing down
+My distinctness test compared **plan parameters** -- body length-to-width, stand height, leg count, neck and tail length, wingspan. Fourteen sets of numbers, all different, test green, ship. It never looked at the rendered shape, and a test that cannot see the picture cannot tell you the picture is wrong.
+
+There is now a **thumbnail dump**: the palette renders every plan to a data URL, so those can be pulled out of the running page, written as PNGs and put on one contact sheet. Everything below was decided by looking at that sheet.
+
+### Three things the skeleton could not say
+The real reason no amount of tuning helped: every body was one smooth sausage with a neck on top, because that is all `buildDesignSkeleton` could describe.
+
+- **`hump`** -- `arch` was a symmetric sine, so the high point of the back was always the middle of the animal. Skewing the sine moves the peak over the shoulders and lets the hips fall away behind it. Every one of Finn's references is built on that silhouette. A plan with no hump is byte-identical to what it was.
+- **`waist`** -- one girth curve means one mass. A thorax and an abdomen with a pinch between them, which is most of the reference sheet, could not be expressed at all. A gaussian notch in the profile gives two lobes.
+- **A head that hangs.** `ny` -- the neck's vertical direction -- was **positive in all thirty plans**, because I had never once written a negative one. Nothing in the code required it. A negative `ny` slings the skull low and forward off the shoulder mass, which is the difference between a grazing animal and something that hunts you. Eleven of the fourteen are negative now. This needed no code change at all and was the single biggest cause of the problem.
+
+Long necks also had to get **thicker**: neck radius was a flat `0.34 - 0.10u` regardless of body size, so on a big animal a long neck tapered to a thread and read as a snout stuck on a log. It scales off the body now.
+
+### Too many spiders
+Six of the ten land shapes stood on thin splayed legs, so the set read as a bag of insects. Thin legs only mean something if most things do not have them.
+
+Three keep them because they are arthropods and it is their whole silhouette -- **scorpion, centipede, stilt-walker** -- and **hollow** stays gaunt because gaunt is the point. The other six went heavy: thick limbs, fewer of them, planted under the body rather than splayed beside it. The crab is an armoured tank on stumps. The mantis stands on one heavy digitigrade pair with its blades up. The thing carrying a head twice its size has legs that could carry it.
+
+### The ribcage closes
+The ribs arced up but never came back: `z = w * (1 - cos(th))` only ever grows, so every rib swept outward for its whole length and a carcass read as a row of spokes off a stick. A rib now bows out at the middle of its arc and comes back in at the tip -- `z = w sin(th)`, `y = h (1 - cos(th))/2` -- so the two sides reach toward each other over the spine, stopping just short of meeting. Seven segments instead of four, so the sweep is a curve rather than four faceted tubes.
+
+### The picker was hiding the creature
+The single biggest thing wrong with the shape tiles was not the shapes. It was this line in the thumbnail renderer:
+
+```js
+d.parts = d.parts.filter(q => sim.t === 'FIN' || sim.t === 'WING')
+```
+
+Every plan tile threw away all its parts except wings and fins. No eyes, no jaws, no horns, no spikes, no crests, no tendrils -- fourteen bare torsos. That is why they read as blobs and sticks, and why all four fliers looked identical: the one part any of them was allowed to keep was the wing. The tile draws the whole animal now, still flat grey so it reads as a silhouette rather than a painted creature.
+
+**And the wings were being looked at edge-on.** A wing is a flat membrane; from the side it is a line, which is exactly what all four fliers showed -- one long needle and a lump. Winged plans are now viewed from above and in front, so the wing shows its area.
+
+### Four rebuilt off the references rather than off my own names
+Lurker, maw, hollow and hydra all failed for one shared structural reason, obvious once the contact sheet existed: **the head was inside the body.** The skin is a smooth union of capsules, so a head whose centre sits within a body radius of the torso is not a head, it is a bulge. The lurker had a skull 80% of its body radius parked 0.28 units past the end of a body 0.82 long -- there was never going to be a face on it.
+
+- **LURKER** is the horned ape now: heavy, hunched, thick arms, a blunt head carried clear and low, and a beard of tendrils under the jaw.
+- **MAW** is the white xeno: a back that peaks hard over the shoulders, a small skull slung down and forward well clear of the chest, a long bent hind leg and a long spiked tail.
+- **HOLLOW** is the horned brute: upright, enormous shoulders over small hips, long heavy arms reaching past the feet, tusks.
+- **HYDRA became STALKER**, the spider-xeno: a low hunched thorax with a pinched waist, the head tucked under its leading edge, bladed forelimbs held up in front.
+
+### Still wrong, and named rather than hidden
+**The four fliers are still too close to each other.** With the parts restored and the camera moved they are now visibly four different animals -- the flit is round and crested, the moth carries two wing pairs on a fat pinched body, the skimmer has the long beak, the drake has the neck and the tail -- but at thumbnail size they still read as variations on one bird. The drake in particular does not read as a dragon: its neck and tail are long in the numbers and short on screen. That is the next job.
+
+### The creepy pass: joints, eyes and bone through the back
+Finn's art brief, worked through. Three of these apply to every creature at once, which is why they beat any amount of per-plan tuning.
+
+**Knobby joints, starved limbs.** A limb was a smooth pipe. It is knuckles with bone between them now: the joints swell well past the shaft, the shafts are two-thirds the old thickness, the knee is an ellipsoid squashed along the bone so it reads as a knee CAP rather than a ball, a spur rides on it, and what little flesh there is sits high near the joint.
+
+**There are TWO limb renderers and I had only fixed one.** `drawLimbTube` is the instanced path; the fused creature mesh -- which is what the game actually draws -- builds its own, and that one had **no knee joint at all**: a root ball and two smooth cones straight to the foot. That is why in-game limbs stayed plastic however much the other path was sharpened. It has a knee, an ankle and a tight blend at each now.
+
+**The body stops melting.** Spine capsules were unioned with a smooth minimum of 0.32 of the body radius, which is a very molten join: every segment rounded away into the next and the result was one bean. At 0.20 the segments meet with a visible crease.
+
+**Eyes.** Large round side-facing eyes are what prey has -- rabbits, birds -- and were most of why these read as friendly. The set is blind, hooded or beaded now: clusters of small irregular beads on ten of the fourteen, slits on the rest, nothing large and round anywhere.
+
+**Bone through the back.** The heavy classes had a smooth curved spine. Their vertebrae break the skin as a row of spurs that grows over the hump and dies away toward the hips, so the hunch has an edge on it.
+
+One tuning pass was needed after looking: the first cut swelled the joints to 1.85 and 2.05 times the shaft, which turned the thick-limbed classes into strings of beads. 1.38 and 1.52 reads as a knuckle.
+
+### Still owed from the brief
+Not done yet, and named rather than buried: the split mandible snout for the lurker, tattered translucent wing membranes, claw hooks at the wing bend, whip-segmented stinger tails, crooked uneven leg lengths on the stilt-walker, and angular chiselled limb planes. The drake still does not read as a dragon.
+
+### Tested
+- `HP_REF_MASS` raised twice in one session as the shapes got heavier (28 -> 32 -> 36): the guard asserting that it still covers the heaviest startable body caught both, which is exactly what it is for.
+- Replayed green: `test_bodies`, `test_plans`, `test_hp`, `test_core`, `test_combat`.
+
 ## 2026-09-25: Three tabs, fourteen shapes, and a kill worth a quarter
 
 ### The builder has three tabs
