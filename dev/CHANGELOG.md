@@ -1,5 +1,69 @@
 # 3DGenesis dev log
 
+## 2026-09-24: Caps not balls, and a hard rule against limbs welding together
+
+Finn, on yesterday's creepy pass: "way too much of knuckles, it looks like a bunch of round balls", "some creatures the arms are embedded into their bodies", "some limbs are too skinny to create", and then, with a picture of a creature standing on one fused trunk with a single foot pad on it: "you also need to add a hard definition which doesn't allow limbs to merge to one limb".
+
+Four complaints. None of them was a matter of taste; each had one specific cause.
+
+### 1. A sphere next to a sphere is a bead, whatever size you make it
+
+I had been tuning the wrong number. Joints were spheres -- hip, knee, ankle, three per limb -- and a sphere threaded onto a shaft reads as a bead at 1.38x as surely as at 1.85x. Shrinking them only makes smaller beads.
+
+Joints are **ellipsoids squashed hard along the bone** now: 0.54 of their width at the hip, 0.44 at the knee. Across the limb a joint still swells, so it reads as a knuckle; along the limb it is flat, so it reads as a crease. The **ankle ball is gone entirely** -- a third bead per limb doing nothing the taper was not already doing.
+
+Swell is also divided down as the limb thickens:
+
+```js
+const cap = (amt) => 1 + (amt - 1) / (0.55 + 0.45 * clamp(th, 0.5, 2.2));
+```
+
+The ratio that looks skeletal on a thin leg looks like a boulder on a thick one, which is exactly what happened to the heavy classes.
+
+### 2. The arms were not embedded. The body had grown over them.
+
+A limb anchor is stored against **one** skeleton ball, at that ball's nominal surface. The skin the game draws is the smooth union of the whole chain, and a smooth union **bulges outward wherever two balls overlap**, by roughly the blend radius. So an anchor that is exactly on the surface by the editor's arithmetic is buried under the surface in the mesh, and the top of the limb is inside the torso.
+
+The drawn hip now slides out along its own normal until it clears that bulge. Only the drawn hip moves: knee, foot and every bone pivot stay put, so gait, reach and stance are untouched.
+
+### 3. "Too skinny to create" was literal
+
+The mesher sizes its grid from the model's overall bounding span. A shaft thinner than about one cell does not survive surface extraction at all -- it comes out as disconnected lumps, or as nothing.
+
+Yesterday's shafts were 0.55 and 0.66 of their old radius, which put the thin classes under that floor. That is why the stilt-walker's legs were threads with gaps in them and the centipede had no legs at all.
+
+Shafts are back to 0.82 with a hard floor, measured against the **whole animal** and not the torso:
+
+```js
+G._limbScale = Math.max(1.2, 2 * sk.a, 2 * sk.b, 1.6 * reach);
+const RMIN = 0.030 * G._limbScale;
+```
+
+Measuring off the torso was the first thing I tried and it does not work: a stilt-walker is mostly leg, so the span the grid comes from is set by the legs, not the body. The centipede went from a bare worm to a twelve-legged thing on this change alone.
+
+### 4. The hard rule: no limb may merge into another
+
+Finn is right that this needs to be a rule and not a tuning value, because the merge is **geometric**. The skin is one smooth union over every primitive in the animal, so two legs whose shafts pass within a shaft's width of each other are not two legs any more. They are one trunk with one foot on the end of it, and no blend setting fixes that.
+
+So it is now enforced before anything is drawn. Every pair of limbs is measured along its whole length, at its **drawn** radius -- including the grid floor above and the foot pad, which is much wider than the shaft it sits on -- and pairs are pushed apart until there is real air between them. A pair that cannot be separated far enough, because the body is not wide enough to put them anywhere else, is **thinned** until it clears instead. A thin leg is a worse leg than a fat one, but a leg is better than half of a fused trunk.
+
+Two things this got wrong on the way, both caught by the new test rather than by my eye:
+
+- It measured the limbs at their *plan* radius while the renderer drew them at the grid floor, which is fatter. Legs were parted correctly and drawn touching.
+- It measured from the original anchor, then the hip-clearing step above moved the limbs afterwards -- sometimes straight back into each other.
+
+Both are now the same number in both places.
+
+**`test_nomerge_steps.js`** is the guard. It builds every offered shape, reads the primitives the renderer actually emits, groups them by which limb's bones they are bound to, and measures surface-to-surface clearance between every pair of shafts from different limbs. It reports in shaft radii, so the number means something: 0 is touching. The tightest pair in the offered set is now **0.43 shaft radii of clear air**; before this pass, two shapes were at **-0.26 and -0.19**, i.e. interpenetrating.
+
+### The torso was a pile of boulders too
+
+Not something Finn named, but visible in the shot he sent. The spine is a chain of cones and those crease nicely. But **six satellite spheres** -- shoulder and hip masses -- were bolted onto that chain with a tight blend, and spheres bolted onto a tube with a tight blend look like rocks glued to an animal. They are blended hard now (`kb * 3.0`) so they read as muscle over the ribcage, while the creases between chain segments, the ones that make a body look sectioned rather than moulded, stay.
+
+### Still owed from the art brief
+
+Untouched today: the split mandible snout on the lurker, tattered translucent wing membranes, claw hooks at the wing bend, whip-segmented stinger tails, crooked uneven leg lengths on the stilt-walker, angular chiselled limb planes. **The four fliers still read as one bird**, and the drake still does not read as a dragon.
+
 ## 2026-09-25 (later): The skeleton learns to hunch, and I start looking at what I build
 
 Finn, on the fourteen shapes I shipped this morning: "these all read as little insect, not scary creatures", and "they look nothing like the reference images I sent you". Both true.

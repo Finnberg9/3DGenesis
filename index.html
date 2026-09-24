@@ -4317,14 +4317,16 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
       out.push({ t: 'c', ax: B[i].x, ay: B[i].y, az: B[i].z, bx: B[j].x, by: B[j].y, bz: B[j].z, ra: vr(i), rb: vr(j), k, i, j });
     };
     const sph = (i, out, k) => { if (live(i)) out.push({ t: 's', ax: B[i].x, ay: B[i].y, az: B[i].z, ra: vr(i), k, i, j: i }); };
-    const kb = 0.20 * sk.b;
+    const kb = 0.26 * sk.b;
     for (let i = 0; i + 1 < P.seg; i++) cone(i, i + 1, body, kb);
     const nearestSpine = (x, y, z) => {
       let bi = 0, bd = Infinity;
       for (let i = 0; i < P.seg; i++) { const d = Math.hypot(B[i].x - x, B[i].y - y, B[i].z - z); if (d < bd) { bd = d; bi = i; } }
       return bi;
     };
-    for (let i = P.seg; i < P.seg + 6; i++) if (live(i)) { sph(i, body, kb * 1.4); cone(i, nearestSpine(B[i].x, B[i].y, B[i].z), body, kb * 1.4); }
+    // These are shoulder and hip masses, not separate animals. Blended hard so
+    // they read as muscle over the ribcage instead of boulders glued on.
+    for (let i = P.seg; i < P.seg + 6; i++) if (live(i)) { sph(i, body, kb * 3.0); cone(i, nearestSpine(B[i].x, B[i].y, B[i].z), body, kb * 3.0); }
     const chain = [];
     for (let i = P.seg + 6; i < sk.headIdx; i++) if (live(i)) chain.push(i);
     chain.push(sk.headIdx);
@@ -10151,8 +10153,8 @@ function drawDesignOld(des, X) {
 // A limb is knuckles with bone between them, not a pipe. The joints are much
 // larger than the shaft and the shaft is thin, which is what makes a leg look
 // starved rather than moulded.
-const LIMB_SHAFT = 0.55;     // how much of the old thickness the bone keeps
-const LIMB_HIP = 1.55, LIMB_KNEE = 1.70, LIMB_ANKLE = 1.35;   // joint swell
+const LIMB_SHAFT = 0.78;     // how much of the old thickness the bone keeps
+const LIMB_HIP = 1.26, LIMB_KNEE = 1.34, LIMB_ANKLE = 1.10;   // joint swell
 function drawLimbTube(a, b, c, th, R, col, fine) {
   const t0 = 0.17 * th * R, t1 = 0.122 * th * R, t2 = 0.092 * th * R;
   const r0 = t0 * LIMB_SHAFT, r1 = t1 * LIMB_SHAFT, r2 = t2 * LIMB_SHAFT;
@@ -10921,30 +10923,148 @@ function creaturePrims(des, G) {
   const sk = G.sk, B = sk.balls, L = boneLayout(G);
   const cols = des.col || { base: [0.5, 0.6, 0.5], coat: [0.9, 0.9, 0.8], detail: [0.2, 0.3, 0.2], pat: 0 };
   const out = [];
+  if (!(G._limbScale > 0)) {
+    let reach = 0;
+    for (const o of G.cls.limbs) { const f = o.lb.f || [0, -1, 0]; reach = Math.max(reach, Math.hypot(f[0], f[1], f[2])); }
+    G._limbScale = Math.max(1.2, 2 * sk.a, 2 * sk.b, 1.6 * reach);
+  }
   for (const q of sk.prims) out.push(Object.assign({}, q, { bone: isHeadBall(B, q.j) ? L.head : 0, col: null }));
   sk.tailPrims.forEach((q, j) => out.push(Object.assign({}, q, { bone: L.tail0 + j, col: null })));
+  // -- no two limbs may merge into one --------------------------------------
+  const SEP = [], THIN = [], HIP = [];
+  {
+    const LG = 1.26;                 // clear space wanted, in combined shaft radii
+    const NL = G.cls.limbs.length;
+    const PP = [], RR = [];
+    for (const o of G.cls.limbs) {
+      const lb = o.lb, rq = limbRadii(lb), rt = o.root;
+      // a foot pad is much wider than the shaft it sits on, and two pads
+      // touching read as one foot, so the pad sets the clearance at that end
+      // measure the radius the limb is actually DRAWN at, including the grid
+      // floor below -- a thin leg is fattened to survive surface extraction, and
+      // separating it as if it were still thin is how two of them ended up
+      // welded together after this pass had already run and passed
+      let rad = Math.max(rq.r0 * 0.95, 0.030 * G._limbScale);
+      const tv = lb.tip && VIS[lb.tip.id];
+      if (tv) rad = Math.max(rad, tv.size * clamp(lb.tip.s || 1, 0.4, 2.5) * rq.th * 0.45);
+      // The hip is slid out of the torso before anything else (see below). That
+      // move is part of the drawn limb, so it has to be part of what the
+      // separation pass measures -- otherwise two limbs are parted correctly
+      // and then pushed back into each other on the way out of the body.
+      const hb = B[clamp(lb.b | 0, 0, B.length - 1)];
+      let nOut = [0, 1, 0];
+      if (hb) { const dd = v3.sub(rt, [hb.x, hb.y, hb.z]); if (v3.len(dd) > 1e-4) nOut = v3.norm(dd); }
+      const br = hb ? Math.max(0.05, hb.r) : 0.5;
+      const hip = v3.add(rt, v3.mul(nOut, Math.min(br * 0.62, br * 0.30 + rq.r0 * 0.85)));
+      HIP.push(hip);
+      PP.push([hip, v3.add(rt, lb.k), v3.add(rt, lb.f)]);
+      RR.push(rad); SEP.push([0, 0, 0]); THIN.push(1);
+    }
+    const SN = 7;
+    const ptAt = (P, u) => (u <= 1 ? v3.lerp(P[0], P[1], u) : v3.lerp(P[1], P[2], u - 1));
+    const gap = (i, j) => {                       // closest approach, and which way to part
+      let best = Infinity, bv = null;
+      for (let a = 0; a <= SN; a++) {
+        const pa = v3.add(ptAt(PP[i], (a / SN) * 2), SEP[i]);
+        for (let b = 0; b <= SN; b++) {
+          const pb = v3.add(ptAt(PP[j], (b / SN) * 2), SEP[j]);
+          const d = v3.sub(pa, pb), L = v3.len(d);
+          if (L < best) { best = L; bv = d; }
+        }
+      }
+      return { best, bv };
+    };
+    // Room to move is set by the whole animal, not the torso: a stilt-walker is
+    // mostly leg, and a cap measured off its small body left its legs with
+    // nowhere to go and welded together anyway.
+    const capL = 0.26 * G._limbScale;
+    for (let pass = 0; pass < 8; pass++) {
+      for (let i = 0; i < NL; i++) for (let j = i + 1; j < NL; j++) {
+        const { best, bv } = gap(i, j);
+        const need = (RR[i] + RR[j]) * LG;
+        if (!bv || best >= need) continue;
+        // part along the line between the closest points; if they are exactly
+        // coincident, part left and right, which is where a pair belongs
+        let dir = best > 1e-4 ? v3.mul(bv, 1 / best)
+                              : [0, 0, PP[i][0][2] >= PP[j][0][2] ? 1 : -1];
+        dir = [dir[0] * 0.55, dir[1] * 0.18, dir[2]];   // sideways first, never up the leg
+        const dl = v3.len(dir); if (dl < 1e-4) continue;
+        dir = v3.mul(dir, 1 / dl);
+        const push = (need - best) * 0.5;
+        SEP[i] = v3.add(SEP[i], v3.mul(dir, push));
+        SEP[j] = v3.sub(SEP[j], v3.mul(dir, push));
+      }
+      for (let i = 0; i < NL; i++) {
+        const L = v3.len(SEP[i]);
+        if (L > capL) SEP[i] = v3.mul(SEP[i], capL / L);
+      }
+    }
+    // Anything that still touches after it has been moved as far as it may go
+    // is thinned until it clears. A thin leg is a worse leg than a fat one, but
+    // a leg is better than half of a fused trunk.
+    for (let pass = 0; pass < 3; pass++) {
+      for (let i = 0; i < NL; i++) for (let j = i + 1; j < NL; j++) {
+        const { best } = gap(i, j);
+        const need = (RR[i] * THIN[i] + RR[j] * THIN[j]) * LG;
+        if (best >= need || need <= 1e-6) continue;
+        const f = Math.max(0.42, best / need);
+        THIN[i] = Math.min(THIN[i], f); THIN[j] = Math.min(THIN[j], f);
+      }
+    }
+  }
+
   // limbs
   G.cls.limbs.forEach((o, li) => {
     const lb = o.lb, up = L.limb0 + 2 * li, lo = up + 1;
     const { th, r0, r1, r2 } = limbRadii(lb);
     const col = lb.c || null;
-    const root = o.root, knee = v3.add(root, lb.k), foot = v3.add(root, lb.f);
-    // Knuckles with bone between them. The shafts are thin, the joints swell
-    // well past them, and the blend at each joint is tight so it creases
-    // rather than melting into the bone.
-    // Swell enough to read as a knuckle, not so much that a thick leg becomes a
-    // string of beads -- which is exactly what 1.85/2.05 did to the heavy classes.
-    const SH = 0.66;
-    out.push({ t: 's', ax: root[0], ay: root[1], az: root[2], ra: r0 * 1.38, k: 0.09 * th, bone: up, col });
-    out.push({ t: 'c', ax: root[0], ay: root[1], az: root[2], bx: knee[0], by: knee[1], bz: knee[2], ra: r0 * SH, rb: r1 * SH, k: 0.03, bone: up, col });
-    // the knee itself, which did not exist before
-    out.push({ t: 's', ax: knee[0], ay: knee[1], az: knee[2], ra: r1 * 1.52, k: 0.05 * th, bone: up, col });
-    out.push({ t: 'c', ax: knee[0], ay: knee[1], az: knee[2], bx: foot[0], by: foot[1], bz: foot[2], ra: r1 * SH, rb: r2 * SH, k: 0.03, bone: lo, col });
-    out.push({ t: 's', ax: foot[0], ay: foot[1], az: foot[2], ra: r2 * 1.35, k: 0.05 * th, bone: lo, col });
+    const sep = SEP[li], thin = THIN[li];
+    (G._limbBones || (G._limbBones = []))[li] = [up, lo];   // so a test can check the drawn result
+    const root0 = o.root;
+    const knee = v3.add(v3.add(root0, lb.k), sep), foot = v3.add(v3.add(root0, lb.f), sep);
+
+    // -- clear the torso ------------------------------------------------------
+    // The anchor is on one skeleton ball's nominal surface. The skin is the
+    // smooth union of the whole chain and bulges past that wherever balls
+    // overlap, so the anchor is usually INSIDE the visible body and the top of
+    // the limb disappears into it. The hip was slid out along its own normal in
+    // the pass above, which is also where it was measured for separation. Only
+    // the drawn hip moves: the knee, the foot and every bone pivot stay where
+    // they were, so gait and stance are untouched.
+    const root = v3.add(HIP[li], sep);
+
+    // -- caps, not balls ------------------------------------------------------
+    // A sphere at every joint is a string of beads. These are ellipsoids
+    // squashed along the bone, so a joint reads as a knuckle crossways and a
+    // crease lengthways. The swell is divided down as the limb gets thicker:
+    // the ratio that looks skeletal on a thin leg looks like a boulder on a
+    // thick one. The ankle ball is gone; the taper does that job.
+    const cap = (amt) => 1 + (amt - 1) / (0.55 + 0.45 * clamp(th, 0.5, 2.2));
+    const HIPW = cap(1.34), KNEEW = cap(1.42);
+    // and no shaft may be thinner than the mesher's grid can carry, or the limb
+    // is simply not extracted -- which is what "too skinny to create" was
+    // The floor has to be measured against the WHOLE model, not the torso: the
+    // mesher sizes its grid from the overall bounding span, so a stilt-walker
+    // with a small body and enormous legs gets a coarse grid and loses any
+    // shaft thinner than a cell. That is why the thin classes came out as
+    // threads of beads with the bone missing between them.
+    const SH = 0.82 * thin, RMIN = 0.030 * G._limbScale * thin;
+    const s0 = Math.max(r0 * SH, RMIN), s1 = Math.max(r1 * SH, RMIN * 0.88), s2 = Math.max(r2 * SH, RMIN * 0.76);
+    const dU = v3.norm(v3.sub(knee, root)), dL = v3.norm(v3.sub(foot, knee));
+    const perp = (d) => { let e = v3.norm(v3.cross(d, [0, 0, 1])); if (!isFinite(e[0]) || v3.len(e) < 0.5) e = [1, 0, 0]; return e; };
+    const ex0 = perp(dU), ex1 = perp(dL);
+    out.push({ t: 'e', ax: root[0], ay: root[1], az: root[2], ex: ex0, ey: dU, ez: v3.cross(ex0, dU),
+               rx: r0 * HIPW * thin, ry: r0 * HIPW * thin * 0.54, rz: r0 * HIPW * thin, k: 0.14 * th, bone: up, col });
+    out.push({ t: 'c', ax: root[0], ay: root[1], az: root[2], bx: knee[0], by: knee[1], bz: knee[2], ra: s0, rb: s1, k: 0.03, bone: up, col });
+    // the knee: a cap across the bone, not a marble threaded onto it
+    out.push({ t: 'e', ax: knee[0], ay: knee[1], az: knee[2], ex: ex0, ey: dU, ez: v3.cross(ex0, dU),
+               rx: r1 * KNEEW * thin, ry: r1 * KNEEW * thin * 0.44, rz: r1 * KNEEW * thin * 0.86, k: 0.04 * th, bone: up, col });
+    out.push({ t: 'c', ax: knee[0], ay: knee[1], az: knee[2], bx: foot[0], by: foot[1], bz: foot[2], ra: s1, rb: s2, k: 0.03, bone: lo, col });
+    void ex1; void dL;
     // muscle swell on the upper segment
     const ud = v3.sub(knee, root), L1 = v3.len(ud);
     if (L1 > 0.2) {
-      const m = v3.lerp(root, knee, 0.26), ey = v3.norm(ud);
+      const m = v3.lerp(root, knee, 0.30), ey = v3.norm(ud);
       let ex = v3.norm(v3.cross(ey, [0, 0, 1])); if (!isFinite(ex[0]) || v3.len(ex) < 0.5) ex = [1, 0, 0];
       const bulk = lb.id === 'l_spring' ? 1.55 : 1;   // springing legs carry a huge thigh
       out.push({ t: 'e', ax: m[0], ay: m[1], az: m[2], ex, ey, ez: v3.cross(ex, ey), rx: r0 * 0.92 * bulk, ry: L1 * 0.22 * (bulk > 1 ? 1.2 : 1), rz: r0 * 0.88 * bulk, k: 0.04, bone: up, col });
