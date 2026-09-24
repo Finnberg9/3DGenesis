@@ -2,6 +2,11 @@
 
 Recorded so every daily run knows where the game is headed and keeps the code compatible with it.
 
+## STATUS (2026-09-24)
+- **Food overhaul: built.** Plants have a kind (grass, berry bush, fungus, tuber, cactus, kelp), a crop that is bitten down and regrows lazily on read, poison on fungus and rare berries, and height that needs reach. Animals graze rather than delete, herds move off cropped ground, carrion rots on its own clock with yields that favour scavengers as it goes, and eating poison or rot makes you ill. Old carcasses are food as well as loot. See the changelog for the measured numbers.
+- **Pickups pair** (2026-09-24, later). Every looted part arrives as two copies through the one `choosePicked` funnel; buying still adds one per purchase so prices stay meaningful.
+- **Still to do from today:** no wildlife at all in a match, 50 players instead of 24, a hits-to-kill ceiling of 30 with most fights near 10, and the food-plant art (real berry bushes, mushroom caps, cactus fruit) to replace the ellipsoid tufts food still renders as. All four are first up next run.
+
 ## STATUS (2026-09-23)
 - **Packs are protected, visibly** (evening). `packFriend()` and `canAttackTarget()` gate the attack prompt, the marker, the reticle and the minimap dot on the same filter the damage uses. Still to do: the plate should carry the pack badge and kill count once packs are used in earnest.
 - **Carcass field: built** (evening). Streamed, deterministic old bodies over the whole island, each with a real design at the world's rarity, searched with V for one part. Fresh remains carry their design too, which closes the roadmap's `REMAINS` hook. Still to do: carcasses should also feed you, and rot on their own clock rather than being frozen old.

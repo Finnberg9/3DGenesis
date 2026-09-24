@@ -118,6 +118,11 @@
   #deathfx .sub{margin-top:14px;color:#caa;font-size:15px;letter-spacing:.06em}
   #drownfx{position:fixed;inset:0;z-index:4;pointer-events:none;opacity:0;transition:opacity .3s;
     background:radial-gradient(ellipse at center,rgba(10,60,90,.25),rgba(0,20,40,.8))}
+  /* bad food, in the same shape as the drowning overlay: a tint at the edges
+     that never covers what you are trying to look at. Opacity is driven per
+     frame by sickTick, so no transition here -- it would fight the easing. */
+  #sickfx{position:fixed;inset:0;z-index:4;pointer-events:none;opacity:0;
+    background:radial-gradient(ellipse at center,rgba(70,90,20,0) 38%,rgba(96,120,26,.34) 76%,rgba(38,52,10,.80) 100%)}
   #err{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:30;
     background:#04100e;padding:40px;text-align:center;font-size:14px;line-height:1.7}
   #err code{color:var(--warn)}
@@ -415,6 +420,7 @@
 <body>
 <canvas id="gpu"></canvas>
 <div id="drownfx"></div>
+<div id="sickfx"></div>
 <div id="deathfx"><div class="big">YOU DIED</div><div class="sub"></div></div>
 <button id="resetbtn" type="button">Reset World</button>
 <div id="gfxsel"><span id="gfxfps" title="frame rate and render scale">-</span><button data-q="auto" id="gfxauto" class="on" title="lower the render scale automatically to keep the frame rate up">auto res</button><span>graphics</span><button data-q="low">low</button><button data-q="medium">medium</button><button data-q="high">high</button><button data-q="ultra">ultra</button></div>
@@ -1328,10 +1334,12 @@
       // also carry gut mass; a dedicated scav mouth pushes this to 1.8 --
       // real payoff for real specialization. See the carrion-eating code.
       carrionDigest: clamp(0.65 + stat.mouthScav * 0.55 + stat.gut * 0.12, 0.65, 1.8),
+      gut: stat.gut,
       upkeep: (stat.upkeep + 0.1) * Math.pow(mass, 0.55),         // bigger = more food, but sub-linearly
       toxin: clamp(stat.toxin * 0.6, 0, 4),
       hue: genome.hue,
       sLegs: stat.legs, sFins: stat.fins, sWings: stat.wings, sHorn: stat.horn, sTail: stat.tail, sMouthCarn: stat.mouthCarn, sMouthScav: stat.mouthScav, sEye: stat.eye,
+      sGut: stat.gut,
     };
     // ---- body plan applied: every gain below is paid for somewhere else
     const EL = planOf(genome, 'elong'), NK = planOf(genome, 'neck'), LL = planOf(genome, 'legLen');
@@ -2533,6 +2541,125 @@
   // Sea-floor growth is worth ~2.4x a land plant but is only reachable by a
   // creature with real fins: an entire food supply that stays untouched until
   // the lineage evolves into it.
+  // What grows where. Weights per biome; the first entry that the hash roll
+  // falls into wins, so this is deterministic per position.
+  const FOOD_BY_BIOME = {
+    forest:  [['bush', 0.34], ['fungus', 0.22], ['tuber', 0.16], ['grass', 0.28]],
+    plains:  [['grass', 0.58], ['tuber', 0.24], ['bush', 0.18]],
+    savanna: [['grass', 0.62], ['bush', 0.24], ['tuber', 0.14]],
+    taiga:   [['fungus', 0.30], ['bush', 0.26], ['grass', 0.44]],
+    tundra:  [['grass', 0.52], ['fungus', 0.18], ['tuber', 0.30]],
+    marsh:   [['kelp', 0.34], ['fungus', 0.26], ['grass', 0.40]],
+    shallow: [['kelp', 0.82], ['grass', 0.18]],
+    deep:    [['kelp', 1.0]],
+    beach:   [['grass', 0.62], ['bush', 0.38]],
+    desert:  [['cactus', 0.68], ['grass', 0.32]],
+    scree:   [['grass', 0.58], ['fungus', 0.42]],
+    rock:    [['grass', 0.54], ['fungus', 0.46]],
+    snow:    [['grass', 0.70], ['fungus', 0.30]],
+  };
+  // bites, how high the food sits, and how fast the crop comes back. A berry
+  // bush is several mouthfuls held up off the ground and slow to refill; grass
+  // is one quick crop at your feet that grows back fast.
+  const FOOD_KIND = {
+    grass:  { bites: 2, high: 0.02, regrow: 2.2, toxOdds: 0 },
+    bush:   { bites: 4, high: 0.55, regrow: 1.0, toxOdds: 6 },
+    fungus: { bites: 3, high: 0.06, regrow: 1.6, toxOdds: 46 },
+    tuber:  { bites: 3, high: 0.00, regrow: 1.4, toxOdds: 0 },
+    cactus: { bites: 3, high: 0.42, regrow: 0.7, toxOdds: 0 },
+    kelp:   { bites: 3, high: 0.30, regrow: 1.2, toxOdds: 0 },
+  };
+  // The crop standing on a plant right now, 0..1. Regrowth is resolved on
+  // read from the time of the last bite, so no per-tick loop over plants
+  // exists and a map with 2400 of them costs the same as one with 20.
+  function plantCrop(world, pl) {
+    if (!pl || pl.gone) return 0;
+    if (pl.c0 == null) return 1;
+    if (pl.c0 >= 1) return 1;
+    const season = (world.flags && world.flags.seasons === false) ? 1 : (world.season != null ? world.season : 1);
+    const mul = 0.30 + 1.4 * season;            // winter growth is slow, not stopped
+    const el = Math.max(0, (world.bt || 0) - (pl.gt || 0));
+    const v = pl.c0 + el * (pl.regrow || 0) * mul;
+    return v < 0 ? 0 : v > 1 ? 1 : v;
+  }
+  // Take one mouthful. Returns the energy in it (0 if the plant is bare).
+  // Bites are a fraction of the whole crop, so a full plant is worth exactly
+  // what it always was -- just not in one swallow.
+  function plantBite(world, pl) {
+    const crop = plantCrop(world, pl);
+    if (crop <= 0.02) { pl.c0 = crop; pl.gt = world.bt || 0; return 0; }
+    const frac = Math.min(crop, 1 / Math.max(1, pl.bites || 1));
+    pl.c0 = crop - frac;
+    pl.gt = world.bt || 0;
+    if (pl.deep && pl.c0 <= 0.02) { /* deep stock stays counted: the plant lives */ }
+    return (pl.e || 0) * frac;
+  }
+  // Can this body get at it? Food held up in a bush or a cactus needs height
+  // or reach; anything on the ground does not. rear/flight multipliers are
+  // applied by the caller (the player rears with G).
+  function plantReachOK(ph, pl, mul) {
+    const high = pl.high || 0;
+    if (high <= 0.05) return true;
+    const rr = (ph.reach || 0) + (ph.radius || 0) * 0.5 + (ph.neck || 0) * 20;
+    return rr * (mul || 1) >= high * 34;
+  }
+  // How far gone a corpse is, 0 fresh .. 1 putrid. Read off the decay counter
+  // the carcass already ticks down, so rot costs nothing and cannot drift out
+  // of step with when the body disappears. Bodies made before this existed, or
+  // by a caller that skipped life, fall back to the world's carrionLife rather
+  // than dividing by zero.
+  function carrionRot(world, cz) {
+    if (!cz) return 1;
+    let life = cz.life;
+    if (!(life > 0)) {
+      const P = world && world.params;
+      life = (P && P.carrionLife > 0) ? P.carrionLife : 12;
+    }
+    const left = cz.decay != null ? cz.decay : life;
+    const v = 1 - left / life;
+    return v < 0 ? 0 : v > 1 ? 1 : v;
+  }
+  // 0..1: how scavenger-tuned a mouth is. Both halves matter -- the mouth mode
+  // says what it is for, the carrion gut says whether it can actually hold the
+  // meal down -- so a scav mouth bolted onto no gut is only half a scavenger.
+  function scavTune(ph) {
+    if (!ph) return 0;
+    const cd = Math.max(0, (ph.carrionDigest || 0.65) - 0.65) / 1.15;
+    const v = (ph.scavenger || 0) * 0.5 + cd * 0.5;
+    return v < 0 ? 0 : v > 1 ? 1 : v;
+  }
+  // Energy a mouthful of poison costs. Resistance rides gut mass and the
+  // carrion mouth, since clearing rot and clearing plant toxins are the same
+  // problem. Capped well short of 1: nothing is ever immune, so a fungus field
+  // stays a gamble rather than becoming free food for one lineage.
+  function plantToxinCost(ph, tox) {
+    if (!(tox > 0) || !ph) return 0;
+    const cd = Math.max(0, (ph.carrionDigest || 0.65) - 0.65);
+    let res = 0.25 + (ph.gut || 0) * 0.30 + (ph.scavenger || 0) * 0.35 + cd * 0.25;
+    if (res > 0.95) res = 0.95;
+    return tox * 18 * (1 - res);
+  }
+  // What a body is worth to this mouth right now, plus what it costs to keep
+  // down. rotMul is 1.0 for a generalist on a fresh kill -- exactly the old
+  // flat behaviour -- and falls to a quarter of that when the body is putrid;
+  // a scavenger starts at 0.30 and climbs past 1.4, so on a fresh corpse the
+  // generalist wins outright even after carrionDigest and on a rotten one the
+  // scavenger wins by a mile. Both directions are a loss for the wrong animal,
+  // which is what makes the niche worth specializing into.
+  function carrionYield(world, cz, ph) {
+    const e = (cz && cz.e > 0) ? cz.e : 0;
+    if (e <= 0) return { gain: 0, ill: 0, rot: cz ? carrionRot(world, cz) : 1 };
+    const rot = carrionRot(world, cz);
+    const sv = scavTune(ph);
+    const rotMul = Math.max(0.05, (1 - 0.70 * sv) + rot * (1.90 * sv - 0.75));
+    const gain = e * (ph && ph.carrionDigest > 0 ? ph.carrionDigest : 0.9) * rotMul;
+    // Illness only past the halfway mark, which is roughly where a body stops
+    // being meat. Scaled on carcass size so a rotten whale is not a free meal
+    // with a token cost attached.
+    const ill = Math.max(0, rot - 0.5) * 2 * Math.max(0, 1 - sv * 1.8) * (10 + e * 0.10);
+    return { gain, ill, rot };
+  }
+
   function makePlant(world, x, y, biome) {
     const deep = biome === 'deep';
     if (deep) world.deepPlants++;
@@ -2548,6 +2675,19 @@
     const roll = (hs >>> 20) % 100, j = (hs % 1000) / 1000;
     const isTree = world.forest ? false : roll < (TREE_ODDS[biome] || 6) * (world.params.treeDensity || 1);
     const eScale = clamp(e / Math.max(1, world.params.plantEnergy), 0.6, 3.2);
+    // kind, and whether this one is poisonous, from the same position hash the
+    // tree roll came out of -- different bits, so they do not correlate.
+    // hs's top bits are not random at world coordinates (x*7919 ^ y*104729 is
+    // about 1e8 for any point on the map, so bits 27+ never move). Mix it
+    // properly before taking new fields out of it, or every fungus on the
+    // island comes out poisonous.
+    let hm = Math.imul(hs ^ 0x9e3779b9, 2246822519) >>> 0; hm = (hm ^ (hm >>> 15)) >>> 0;
+    hm = Math.imul(hm, 3266489917) >>> 0; hm = (hm ^ (hm >>> 16)) >>> 0;
+    const opts = FOOD_BY_BIOME[biome] || FOOD_BY_BIOME.plains;
+    let r = (hm % 1000) / 1000, kind = opts[opts.length - 1][0];
+    for (const [k, wgt] of opts) { if (r < wgt) { kind = k; break; } r -= wgt; }
+    const K = FOOD_KIND[kind] || FOOD_KIND.grass;
+    const toxic = ((((hm >>> 10) % 100)) < K.toxOdds) ? (0.45 + ((hm >>> 17) % 100) / 180) : 0;
     return {
       x, y, deep,
       // Hard-to-reach larders are worth more: the sea floor needs fins, the
@@ -2560,6 +2700,15 @@
       // block movement; ground cover/grass never does. Bounded so a dense
       // forest is hard to move through, not impassable.
       trunkR: isTree ? (2.2 + j * 2.0) * clamp(eScale, 0.7, 1.6) : 0,
+      kind, toxic, bites: K.bites, high: K.high,
+      // full when it grows, and regrowing from the moment anything bites it
+      c0: 1, gt: world.bt || 0,
+      // PLAY_MUL: strict energy parity (PLAY_MUL 1) makes a grazed plant take
+      // about twenty minutes of wall time to come back, which reads to a
+      // player as "the food is gone for good" rather than as grazing. 3x puts
+      // recovery inside a play session at the cost of a richer island, and is
+      // the balance knob to turn if the ecosystem runs hot.
+      regrow: (world.params.plantRate || 20) / CAPS.PLANTS * K.regrow * 3,
     };
   }
 
@@ -2832,6 +2981,13 @@
         if (pl.deep && !p.canSwim) return;   // on the sea floor: divers only
         const dx = wrapDelta(c.x, pl.x, w), dy = wrapDelta(c.y, pl.y, h), d2 = dx * dx + dy * dy;
         if (d2 >= senseSq || d2 >= bestFoodD) return;
+        // A cropped patch stops advertising itself, so a herd that has grazed
+        // a bush down walks off it instead of standing there taking crumbs.
+        // A starving animal drops the bar to near-bare: this is a rule about
+        // where herds go, and it must never become a way to starve on top of
+        // food. Plants made before pl.c0 existed read as full, so old saves
+        // and hand-built test worlds behave as they always did.
+        if (plantCrop(world, pl) < (c.hunger > 0.6 ? 0.03 : 0.15)) return;
         if (!reachable(pl.x, pl.y)) return;  // visible up a cliff is not food
         bestFoodD = d2; bestFood = pl; bestFoodCarrion = false;
       });
@@ -3001,8 +3157,34 @@
           // flat 0.9 for everyone -- generalists (0.65 floor) do WORSE than
           // the old flat rate, dedicated scavengers (up to 1.8) do much
           // better, so the niche is a real trade rather than a free bonus.
-          if (bestFoodCarrion) { if (!bestFood.dead) { bestFood.dead = true; c.energy = Math.min(p.storage, c.energy + bestFood.e * p.carrionDigest); } }
-          else if (!eaten.has(bestFood)) { eaten.add(bestFood); c.energy = Math.min(p.storage, c.energy + bestFood.e * p.digest); }
+          if (bestFoodCarrion) {
+            if (!bestFood.dead) {
+              bestFood.dead = true;
+              const cy = carrionYield(world, bestFood, p);
+              c.energy = Math.min(p.storage, c.energy + cy.gain);
+              // Rot sickness is a poison effect, so it answers to the same
+              // switch the rest of the toxin model does.
+              if (flags.toxins && cy.ill > 0) {
+                c.energy -= cy.ill;
+                if (c.energy <= 0) c.deathCause = 'toxin';
+              }
+            }
+          } else if (!eaten.has(bestFood)) {
+            // One mouthful per plant per tick. The plant is NOT removed: a
+            // herd crops it down over several ticks and it regrows in place,
+            // which is the whole grazing loop. The set is per-tick only, so it
+            // is a herd-rate limiter, not a claim on the plant.
+            eaten.add(bestFood);
+            const bite = plantBite(world, bestFood);
+            if (bite > 0) c.energy = Math.min(p.storage, c.energy + bite * p.digest);
+            const tox = bestFood.toxic || 0;
+            if (flags.toxins && tox > 0 && bite > 0) {
+              c.energy -= plantToxinCost(p, tox);
+              // the death sweep below reads this back; it is set only on the
+              // tick the animal actually dies, so it cannot go stale.
+              if (c.energy <= 0) c.deathCause = 'toxin';
+            }
+          }
           c.fx = bestFood.x; c.fy = bestFood.y;   // remember where food was found
         }
       }
@@ -3153,7 +3335,7 @@
 
       if (c.energy <= 0 || c.age >= c.maxAge) {
         c.alive = false;
-        c.deathCause = c.age >= c.maxAge ? 'oldage' : c._drown === 1 ? 'drowned' : c._drown === 2 ? 'suffocated' : (inHazard ? 'toxin' : 'starvation');
+        c.deathCause = c.age >= c.maxAge ? 'oldage' : c._drown === 1 ? 'drowned' : c._drown === 2 ? 'suffocated' : ((inHazard || c.deathCause === 'toxin') ? 'toxin' : 'starvation');
         recordDeath(world, c); dropCarrion(world, c);
         continue;
       }
@@ -3201,11 +3383,10 @@
       }
     }
 
-    if (eaten.size) {
-      for (const pl of eaten) { pl.gone = true; if (pl.deep) world.deepPlants--; }
-      world.plants = world.plants.filter(pl => !pl.gone);
-      world._pgDirty = true;
-    }
+    // Eating no longer removes anything. `eaten` was a kill list; it is now
+    // only a per-tick one-bite-each limiter, built above and dropped here, so
+    // there is nothing to sweep, the plant grid stays valid, and the deep
+    // stock is untouched by grazing (the plant is still standing there).
     // decay carrion (rots) & hazards (dissipate); remove consumed/expired
     for (const cz of world.carrion) { cz.decay -= bdt; cz.e -= (cz.life ? cz.e / (cz.life * 3) : 0.5) * bdt; }
     world.carrion = world.carrion.filter(cz => !cz.dead && cz.decay > 0 && cz.e > 0.5);
@@ -4397,6 +4578,8 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
     O_GAIT, O_GRAB, GAIT_BOOST, GAIT_COST, GRAB_GAIN, GRAB_COST, gaitFrac, grabFrac,
     seedHerbivore, mutate, crossover, cloneGenome, countNodes, collectNodes, develop,
     signature, geneticDistance, speciesColor, hueToRGB, brainForward,
+    plantCrop, plantBite, plantReachOK, FOOD_KIND, FOOD_BY_BIOME,
+    carrionRot, carrionYield, scavTune, plantToxinCost,
     makeWorld, makeCreature, makeTerrain, maturity, reproThreshold, separate, speciesNode, pedNode, prunePhylo, prunePed,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
@@ -11337,6 +11520,7 @@ function becomeArchetype(kind) {
   // the founder you replaced keeps living; you simply are not it any more
   player.c = me;
   player.absorbed = 0;
+  sickClear();
   player.camX = me.x; player.camZ = me.y;
   player.camY = groundAt(me.x, me.y) + 20;
   player.dist = camDefaultDist(player.c && player.c.ph);
@@ -11730,43 +11914,391 @@ function inspectTarget() {
   if (!c || !c.alive || player.spectator) return null;
   return carcNearest(c.x, c.y, interactRange(c.ph) * 1.45);
 }
+// =====================================================================
+// FOOD, POISON AND ILLNESS
+// A plant is a standing crop, not a pickup: you take mouthfuls out of it and
+// it grows back. Some of what grows here is poisonous, and some of it is held
+// up out of a short animal's reach. That only reads as a decision if the game
+// says what E will do BEFORE you press it, so the action panel and the key run
+// one scan (foodScan) and one prompt builder (eatPrompt) between them.
+// =====================================================================
+
+// Plain words for the thing in front of you. The data model calls it 'bush';
+// what you are putting in your mouth is berries.
+const FOOD_NAME = { grass: 'grass', bush: 'a berry bush', fungus: 'a mushroom cluster',
+                    tuber: 'a root', cactus: 'a cactus', kelp: 'kelp' };
+const BARE_CROP = 0.02;          // the floor plantBite itself refuses at
+
+// Gut mass on its own. digest folds it together with the mouth terms and
+// cannot be read back out, so the phenotype reports sGut; the fallback covers
+// a body developed before that field existed (or a stub in a test).
+function gutOf(p) {
+  if (!p) return 0;
+  if (p.sGut != null && isFinite(p.sGut)) return Math.max(0, p.sGut);
+  return clamp(((p.digest || 0.55) - 0.55) / 0.2, 0, 4);
+}
+// Can you tell it is wrong before you swallow it? Gut tissue and a carrion
+// mouth are what pay for that sense. A plain grazer finds out the hard way,
+// which is the whole reason the warning is worth evolving towards.
+function foodSense(p) { return gutOf(p) * 0.7 + ((p && p.scavenger) || 0) * 0.9; }
+function canSmellToxin(p) { return foodSense(p) >= 0.85; }
+// Rearing lifts your mouth; in the air you just hold station beside the food.
+// interactRange already carries the rear for the horizontal reach, this is the
+// vertical half of the same thing.
+function eatReachMul(p) { return rearReach(p) * (flightAirborne() ? 2.4 : 1); }
+// the same test rearTick uses, so the prompt never tells you to press G on a
+// body that cannot rear
+function canRearFor(p) { return !!p && !p.canFly && (p.dLegs || 0) >= 2; }
+
+// A plant made before the food model has no crop fields at all. Read it as one
+// full mouthful rather than as bare: an old save is still food.
+function cropOf(pl) {
+  if (!pl) return 0;
+  if (C.plantCrop) { const v = C.plantCrop(world, pl); return isFinite(v) ? clamp(v, 0, 1) : 0; }
+  return pl.c0 == null ? 1 : clamp(pl.c0, 0, 1);
+}
+function bitesOf(pl) { const n = pl && pl.bites; return (n > 0 && isFinite(n)) ? Math.round(n) : 1; }
+function kindOf(pl) { return (pl && FOOD_NAME[pl.kind]) ? pl.kind : 'grass'; }
+function nameOf(pl) { return FOOD_NAME[kindOf(pl)]; }
+// Roughly how long until it is worth a mouthful again, in the seconds you
+// actually wait. The crop clock runs on biological time, so the wall-clock
+// answer depends on the world's time scale. -1 when it cannot be known.
+function regrowWait(pl) {
+  const want = 1 / Math.max(1, bitesOf(pl));
+  const have = cropOf(pl);
+  if (have >= want) return 0;
+  const rg = pl && pl.regrow;
+  if (!(rg > 0)) return -1;
+  const season = (world.flags && world.flags.seasons === false) ? 1 : (world.season != null ? world.season : 1);
+  const per = rg * (0.30 + 1.4 * season);
+  const ts = (world.params && world.params.timeScale != null) ? world.params.timeScale : 0.12;
+  if (!(per > 0) || !(ts > 0)) return -1;
+  const secs = (want - have) / per / ts;
+  return isFinite(secs) ? secs : -1;
+}
+
+// ONE scan, for both the prompt and the key. Ranked: something you can
+// actually eat, then something in reach that is bare, then something out of
+// reach -- whichever comes back, the player is told the real reason.
+function foodScan() {
+  const c = player.c;
+  if (!c || !c.alive || player.spectator) return null;
+  const p = c.ph;
+  if (!p || !world || !world.pGrid) return null;
+  const rr = interactRange(p), rr2 = rr * rr;
+  const mul = eatReachMul(p);
+  let best = null, bestScore = -Infinity, bestD2 = 0;
+  world.pGrid.around(c.x, c.y, (pl) => {
+    if (!pl || pl.isTree || pl.gone) return;      // trees are scenery, not food
+    if (pl.deep && !p.canSwim) return;            // the sea floor is for divers
+    const dx = pl.x - c.x, dy = pl.y - c.y, d2 = dx * dx + dy * dy;
+    if (!(d2 < rr2)) return;
+    const reach = C.plantReachOK ? !!C.plantReachOK(p, pl, mul) : true;
+    const crop = cropOf(pl);
+    const tier = (reach && crop > BARE_CROP) ? 2 : reach ? 0 : 1;
+    const score = tier * 1e9 - d2;                // tier first, nearest within it
+    if (score > bestScore) { bestScore = score; best = pl; bestD2 = d2; }
+  });
+  if (!best) return null;
+  const crop = cropOf(best);
+  const bites = bitesOf(best);
+  return {
+    pl: best, crop, kind: kindOf(best), name: nameOf(best),
+    left: Math.max(0, Math.ceil(crop * bites - 1e-6)),
+    toxic: best.toxic || 0, high: best.high || 0,
+    reach: C.plantReachOK ? !!C.plantReachOK(p, best, mul) : true,
+    bare: crop <= BARE_CROP,
+    dist: Math.sqrt(bestD2),
+    gain: (best.e || 0) * Math.min(crop, 1 / bites) * (p.digest || 1),
+  };
+}
+
+// How far gone a corpse is, 0 fresh, 1 putrid. The carrion work in the AI
+// patch owns this number; until it lands, decay against its own lifespan says
+// exactly the same thing.
+function rotOf(cz) {
+  if (!cz) return 0;
+  if (C.carrionRot) { const v = C.carrionRot(world, cz); if (isFinite(v)) return clamp(v, 0, 1); }
+  const life = cz.life > 0 ? cz.life : 0;
+  if (!life) return 0;
+  return clamp(1 - (cz.decay || 0) / life, 0, 1);
+}
+// The old bodies lying about the island. carcNearest stops offering one the
+// moment it has been searched, which is right for V and wrong for E: a
+// picked-over body still has meat on it. So the feed scan runs its own pass,
+// and its own flag beside looted, because stripping and searching are two
+// different things you can do to the same body in either order.
+function carcEatTarget() {
+  const c = player.c;
+  if (!c || !c.alive || player.spectator) return null;
+  const rr = interactRange(c.ph) * 1.45, rr2 = rr * rr;
+  let best = null, bd = rr2;
+  try {
+    for (const e of CARC.live) {
+      if (!e || e.eaten || e.dead || !e.G) continue;
+      const d2 = (e.x - c.x) * (e.x - c.x) + (e.z - c.y) * (e.z - c.y);
+      if (d2 < bd) { bd = d2; best = e; }
+    }
+  } catch (err) { /* the bone field is not up yet */ }
+  // Deliberately NOT the REMAINS skeletons. Those are this session's own
+  // kills, and the flesh that was on them is already a world.carrion entry
+  // standing in the same spot -- eat both and one death feeds you twice. The
+  // streamed field has no carrion entry behind it, which is exactly why it
+  // needed a way to be eaten at all.
+  return best;
+}
+// Age measured against the same rot span the bones are drawn on.
+function carcFieldRot(e) {
+  if (!e) return 1;
+  const span = REMAINS_ROT > 0 ? REMAINS_ROT : 45;
+  const age = e.age != null ? e.age : (e.t0 != null ? Math.max(0, simT - e.t0) : span);
+  return isFinite(age) ? clamp(age / span, 0, 1) : 1;
+}
+// How big the animal was. ent.R is the DRAWN radius and is a constant for
+// every body in the field, so it says nothing; the design it was built from
+// says everything, put through the same develop() the living animals use.
+// Cached on the entry: it is a genome compile, and the answer never changes.
+function carcFieldMass(e) {
+  if (!e) return 0.5;
+  if (e._eatMass != null) return e._eatMass;
+  let m = 0;
+  try {
+    if (e.design && world) {
+      const g = C.seedHerbivore(world, () => 0.5);
+      g.design = C.cloneDesign(e.design);
+      C.compileDesign(g);
+      m = C.develop(g).mass || 0;
+    }
+  } catch (err) { m = 0; }
+  // nothing to compile: fall back on the drawn size, which is at least finite
+  if (!(m > 0)) m = ((e.R > 0 ? e.R : 4 * BODY_SCALE) / Math.max(0.001, BODY_SCALE)) * 0.6;
+  e._eatMass = clamp(m, 0.5, 60);
+  return e._eatMass;
+}
+// What a fresh corpse of that size is worth, minus what has rotted out of it.
+function carcFieldEnergy(e) {
+  const P = (world && world.params) || {};
+  const y = P.carrionYield != null ? P.carrionYield : 1;
+  return Math.max(4, (20 + carcFieldMass(e) * 14) * y * (1 - 0.55 * carcFieldRot(e)));
+}
+
+// ---------------------------------------------------------------- sickness
+// Bad food is a status, not a damage number: it drains you for as long as it
+// lasts and it holds your stamina down while it does, which is what makes a
+// poisonous mushroom a decision rather than a tax. owner is the body that ate
+// it -- the same ownership test the fight state uses -- so every way the player
+// is replaced (mating, respawn, a match, a redesign) ends the illness without
+// each of those paths having to remember to.
+const SICK = { t: 0, dur: 0, sev: 0, src: '', owner: null, msgT: 0, fx: 0 };
+const SICK_MAX = 48;             // no one meal can put you down longer than this
+function sickClear() {
+  SICK.t = 0; SICK.dur = 0; SICK.sev = 0; SICK.src = '';
+  SICK.owner = player.c || null; SICK.msgT = 0;
+}
+function sickSeverity() { return SICK.t > 0 ? SICK.sev : 0; }
+// stamina comes back slower while you are ill, the same way starving slows it
+function sickStamMul() { return 1 - 0.55 * sickSeverity(); }
+// How well this body takes what it just swallowed. Gut tissue is general
+// tolerance; a carrion mouth is built specifically for rot, so it counts for
+// far more against a bad carcass than against a poisonous plant.
+function sickResist(p, rot) {
+  const g = gutOf(p), sc = (p && p.scavenger) || 0;
+  // A fully committed carrion mouth clears the ceiling on its own: rot is what
+  // that body is FOR, and it should be able to eat the worst thing on the
+  // island. Nothing gets there on gut tissue alone.
+  return rot ? clamp(0.22 * g + 0.86 * sc, 0, 0.95) : clamp(0.26 * g + 0.22 * sc, 0, 0.90);
+}
+// Start or deepen an illness. Returns the severity actually taken; 0 means the
+// body handled it and nothing happens.
+function sickStart(sev0, src, rot) {
+  const c = player.c;
+  if (!c || !c.alive || player.spectator) return 0;
+  const sev = clamp((sev0 || 0) * (1 - sickResist(c.ph, rot)), 0, 1);
+  if (!(sev >= 0.08)) return 0;                  // a gut that can take it, takes it
+  const dur = clamp(6 + SICK_MAX * sev * 0.8, 0, SICK_MAX);
+  SICK.owner = c;
+  // a second bad meal on top of the first is worse, not a reset
+  const had = SICK.t > 0;
+  SICK.sev = Math.max(SICK.sev, sev);
+  SICK.t = Math.min(SICK_MAX * 1.5, Math.max(SICK.t, dur) + (had ? dur * 0.4 : 0));
+  SICK.dur = Math.max(SICK.dur, SICK.t);
+  SICK.src = src || 'something you ate';
+  SICK.msgT = 3;
+  return sev;
+}
+function sickTick(dt) {
+  const c = player.c;
+  if (SICK.owner !== c) {                        // a new body is a new stomach
+    SICK.owner = c; SICK.t = 0; SICK.sev = 0; SICK.dur = 0; SICK.src = ''; SICK.msgT = 0;
+  }
+  if (!c || !c.alive || player.spectator) { SICK.t = 0; SICK.sev = 0; SICK.src = ''; }
+  if (SICK.t > 0) {
+    SICK.t = Math.max(0, SICK.t - dt);
+    if (SICK.t <= 0) {
+      SICK.sev = 0; SICK.src = ''; SICK.dur = 0;
+      toast('The sickness passes. You can keep food down again.', 2200);
+    } else {
+      // a steady drain, proportional to the body so it bites the same at any size
+      const st = Math.max(1, c.ph.storage || 100);
+      c.energy = Math.max(0, c.energy - st * 0.016 * SICK.sev * dt);
+      SICK.msgT -= dt;
+      if (SICK.msgT <= 0) {
+        SICK.msgT = 7;
+        toast('Ill from ' + SICK.src + '. About ' + Math.ceil(SICK.t) + ' s to go.', 2000);
+      }
+    }
+  }
+  // eased so the tint fades in and out instead of snapping on
+  const el = document.getElementById('sickfx');
+  const want = SICK.t > 0 ? clamp(0.20 + 0.45 * SICK.sev, 0, 0.72) * (0.84 + 0.16 * Math.sin(simT * 2.1)) : 0;
+  SICK.fx += (want - SICK.fx) * Math.min(1, Math.max(0, dt) * 3);
+  if (el) el.style.opacity = SICK.fx.toFixed(3);
+}
+// player.sick reads as seconds remaining, and player.sickOf as what did it.
+// Accessors rather than copies, so there is one truth and it cannot drift.
+Object.defineProperty(player, 'sick', { get: () => SICK.t, set: (v) => { SICK.t = Math.max(0, +v || 0); if (SICK.t <= 0) { SICK.sev = 0; SICK.src = ''; } }, configurable: true });
+Object.defineProperty(player, 'sickOf', { get: () => SICK.src, configurable: true });
+
+// ---------------------------------------------------------------- eating
+// Eating is automatic inside stepWorld, but as a player you need a deliberate
+// action with feedback -- otherwise there is no way to tell whether anything
+// happened. Every path returns a result object as well as raising the toast,
+// so the test harness reads exactly what the player was told.
+function eatPlant(c, f) {
+  const p = c.ph, pl = f.pl;
+  const bite = C.plantBite ? C.plantBite(world, pl) : 0;
+  const gain = (bite || 0) * (p.digest || 1);
+  // plantBite went bare between the scan and the swallow: treat it as bare
+  if (!(gain > 0)) return refuseFood(c, f, true);
+  c.energy = Math.min(p.storage, c.energy + gain);
+  objOnEat();
+  const left = Math.max(0, Math.ceil(cropOf(pl) * bitesOf(pl) - 1e-6));
+  let msg = 'Ate from ' + f.name + '. +' + gain.toFixed(0) + ' health' +
+    (left > 0 ? ', ' + left + ' bite' + (left === 1 ? '' : 's') + ' left.' : '. Grazed down to nothing.');
+  let sick = 0;
+  if ((pl.toxic || 0) > 0) {
+    const src = f.kind === 'fungus' ? 'a poisonous mushroom' : 'poison in ' + f.name;
+    sick = sickStart(clamp(pl.toxic, 0, 1), src, false);
+    msg += sick > 0 ? ' It tastes wrong. You are going to be ill.' : ' It tastes wrong, but your gut takes it.';
+  }
+  toast(msg, 2000);
+  return { ok: true, why: 'plant', gain, kind: f.kind, name: f.name, left, sick, msg };
+}
+// Something edible is right there and this body cannot have it. Say which of
+// the two reasons it is, and say what to do about it.
+function refuseFood(c, f, forceBare) {
+  const p = c.ph;
+  if (!forceBare && !f.reach) {
+    // Would standing up do it? Then that is the answer. If it would not, this
+    // body is simply not built tall enough and no key press will change that.
+    const reared = C.plantReachOK ? !!C.plantReachOK(p, f.pl, 1.85 * (flightAirborne() ? 2.4 : 1)) : true;
+    const msg = (canRearFor(p) && reared && (player.rear || 0) < 0.6)
+      ? 'Too high to reach: rear up with G.'
+      : 'You are not tall enough to reach ' + f.name + '. More reach, or a longer neck.';
+    toast(msg, 1800);
+    return { ok: false, why: 'high', msg, kind: f.kind, name: f.name };
+  }
+  const w = regrowWait(f.pl);
+  const msg = 'Grazed down to nothing. ' + (w > 0.5 ? 'Worth eating again in about ' + Math.ceil(w) + ' s.'
+            : w >= 0 ? 'It is coming back now.' : 'Give it time to grow back.');
+  toast(msg, 1800);
+  return { ok: false, why: 'bare', msg, kind: f.kind, name: f.name, wait: w };
+}
+function eatCarrion(c, cz) {
+  const p = c.ph;
+  const rot = rotOf(cz);
+  const gain = (cz.e || 0) * (p.carrionDigest || 0.9);
+  cz.dead = true;
+  c.energy = Math.min(p.storage, c.energy + gain);
+  objOnEat();
+  // a mouth built for rot eats rot; anything else pays for it. Decided BEFORE
+  // feedGrowth, which re-develops the phenotype: what made you ill is the body
+  // that swallowed it, not the slightly larger one you are a moment later.
+  const sick = rot > 0.25 ? sickStart(clamp((rot - 0.25) * 1.34, 0, 1), 'rotten meat', true) : 0;
+  feedGrowth(c, Math.max(0.3, ((cz.e || 0) - 20) / 14) * 0.6, 'Ate carrion');
+  const msg = 'Ate carrion. +' + gain.toFixed(0) + ' health.' + (sick > 0 ? ' It was well off; your stomach turns.' : '');
+  toast(msg, 1800);
+  return { ok: true, why: 'carrion', gain, rot, sick, msg };
+}
+// An old body out of the bone field. It has been lying there a long time, so
+// it is a scavenger's meal and a gamble for anything else. Once only: strip it
+// and there is nothing but bone left.
+function eatCarcassField(c, e) {
+  const p = c.ph;
+  const rot = carcFieldRot(e);
+  const gain = carcFieldEnergy(e) * (p.carrionDigest || 0.9);
+  e.eaten = true;
+  c.energy = Math.min(p.storage, c.energy + gain);
+  objOnEat();
+  const sick = rot > 0.2 ? sickStart(clamp((rot - 0.2) * 1.25, 0, 1), 'rotten meat off an old kill', true) : 0;
+  feedGrowth(c, Math.max(0.3, carcFieldMass(e) * 0.5), 'Stripped an old carcass');
+  const msg = 'You strip what is left off the old body. +' + gain.toFixed(0) + ' health.' +
+    (sick > 0 ? ' It was long dead, and you can feel it.' : '');
+  toast(msg, 2200);
+  return { ok: true, why: 'carcass', gain, rot, sick, msg };
+}
 function tryEat() {
   const c = player.c;
-  if (!c || !c.alive) return;
-  if (c.hurtT > 0) { toast('Under attack: you cannot eat for another ' + c.hurtT.toFixed(1) + ' s.', 1400); return; }
+  if (!c || !c.alive || player.spectator) return { ok: false, why: 'nobody' };
+  // Being hit still stops you eating for five seconds. Unchanged.
+  if (c.hurtT > 0) {
+    const msg = 'Under attack: you cannot eat for another ' + c.hurtT.toFixed(1) + ' s.';
+    toast(msg, 1400);
+    return { ok: false, why: 'hurt', msg };
+  }
+  if (!world) return { ok: false, why: 'noworld' };
   const p = c.ph;
   const rr = interactRange(p), rr2 = rr * rr;
-  let bestP = null, bestPD = Infinity, bestC = null, bestCD = Infinity;
-  if (world.pGrid) world.pGrid.around(c.x, c.y, (pl) => {
-    if (pl.eaten || pl.isTree) return;  // trees are scenery/obstacles, not food
-    const d2 = (pl.x - c.x) ** 2 + (pl.y - c.y) ** 2;
-    if (d2 < rr2 && d2 < bestPD) { bestPD = d2; bestP = pl; }
-  });
+  let bestC = null, bestCD = Infinity;
   if (world.carGrid) world.carGrid.around(c.x, c.y, (cz) => {
     if (cz.dead) return;
     const d2 = (cz.x - c.x) ** 2 + (cz.y - c.y) ** 2;
     if (d2 < rr2 && d2 < bestCD) { bestCD = d2; bestC = cz; }
   });
-  // a corpse is worth more than a shrub, so prefer it when both are in reach
-  if (bestC && (!bestP || bestCD <= bestPD * 2)) {
-    const gain = bestC.e * (p.carrionDigest || 0.9);
-    bestC.dead = true;
-    c.energy = Math.min(p.storage, c.energy + gain);
-    toast('Ate carrion. +' + gain.toFixed(0) + ' health.', 1800); objOnEat();
-    feedGrowth(c, Math.max(0.3, (bestC.e - 20) / 14) * 0.6, 'Ate carrion');
-    return;
+  const f = foodScan();
+  const edible = !!(f && f.reach && !f.bare);
+  // a fresh corpse is worth more than a shrub, so prefer it when both are in reach
+  if (bestC && (!edible || bestCD <= f.dist * f.dist * 2)) return eatCarrion(c, bestC);
+  if (edible) return eatPlant(c, f);
+  // nothing you can swallow: an old body on the ground is still a meal
+  const body = carcEatTarget();
+  if (body) return eatCarcassField(c, body);
+  if (f) return refuseFood(c, f, false);
+  const msg = 'Nothing to eat in reach.';
+  toast(msg, 1100);
+  return { ok: false, why: 'none', msg };
+}
+// The food half of the action panel: what is in reach, how much of it is left,
+// what one mouthful is worth, and -- only for a body that can tell -- that it
+// smells wrong before you swallow it.
+function eatPrompt() {
+  const c = player.c;
+  if (!c || !c.alive || player.spectator) return null;
+  const p = c.ph;
+  const f = foodScan();
+  if (f) {
+    if (!f.reach) {
+      const how = canRearFor(p) ? '<span class="ok">G</span> rear up' : 'you are not tall enough';
+      return { title: 'FOOD', html: '<div class="keys"><span class="pkno">' + f.name + ' is out of reach</span> ' + how + '</div>' };
+    }
+    if (f.bare) {
+      const w = regrowWait(f.pl);
+      return { title: 'FOOD', html: '<div class="keys"><span class="pkno">' + f.name + ' is grazed down</span> ' +
+        (w > 0.5 ? 'back in ~' + Math.ceil(w) + ' s' : 'growing back') + '</div>' };
+    }
+    const warn = (f.toxic > 0 && canSmellToxin(p)) ? ' <span class="hit">it smells wrong</span>' : '';
+    return { title: 'FOOD', html: '<div class="keys"><span class="ok">E</span> eat ' + f.name + ' &middot; ' +
+      f.left + ' bite' + (f.left === 1 ? '' : 's') + ' left &middot; +' + f.gain.toFixed(0) + ' energy' + warn + '</div>' };
   }
-  if (bestP) {
-    const gain = bestP.e * (p.digest || 1);
-    bestP.eaten = true;
-    const i = world.plants.indexOf(bestP);
-    if (i >= 0) world.plants.splice(i, 1);
-    if (bestP.deep) world.deepPlants = Math.max(0, world.deepPlants - 1);
-    c.energy = Math.min(p.storage, c.energy + gain);
-    toast('Ate. +' + gain.toFixed(0) + ' health.', 1400); objOnEat();
-    return;
+  const body = carcEatTarget();
+  if (body) {
+    const rot = carcFieldRot(body);
+    const gain = carcFieldEnergy(body) * (p.carrionDigest || 0.9);
+    const warn = (rot > 0.2 && canSmellToxin(p)) ? ' <span class="hit">it is rotten</span>' : '';
+    return { title: 'CARCASS', html: '<div class="keys"><span class="ok">E</span> strip the old carcass &middot; +' +
+      gain.toFixed(0) + ' energy' + warn + '</div>' };
   }
-  toast('Nothing to eat in reach.', 1100);
+  return null;
 }
 
 function tryAttack() { fightStartSwing(); }
@@ -12370,6 +12902,7 @@ function fightTick(dt) {
   world.params.bodyScale = BODY_SCALE;
   world.playerRef = player.c;    // the one animal allowed to make its own bad decisions
   drownFx(dt);
+  sickTick(dt);
   world.onDeath = onWorldDeath;
   const c = player.c;
   FIGHT.hurtFx = Math.max(0, FIGHT.hurtFx - dt * 1.4);
@@ -12406,7 +12939,7 @@ function fightTick(dt) {
   if (FIGHT.sprinting) fightSpend(STAM_SPRINT * dt);
   else if (FIGHT.stamDelay <= 0 && !fightBlocking()) {
     const ef = clamp(c.energy / Math.max(1, c.ph.storage), 0, 1);
-    FIGHT.stam = Math.min(STAM_MAX, FIGHT.stam + STAM_REGEN * (0.35 + 0.65 * ef) * dt);
+    FIGHT.stam = Math.min(STAM_MAX, FIGHT.stam + STAM_REGEN * (0.35 + 0.65 * ef) * sickStamMul() * dt);
   }
   if (FIGHT.exhausted && FIGHT.stam >= STAM_RECOVER) FIGHT.exhausted = false;
   // lock-on: keep facing the target, drop it when it dies or escapes
@@ -14664,7 +15197,8 @@ function updateHUD() {
       `<span class="k">cells</span> <span class="v">${(p.parts || []).length}</span>` +
       (tags.length ? ` · <span class="v">${tags.join(' ')}</span>` : '') +
       (p.canFly ? flightHud() : '') + swimHud() +
-      ((player.rear || 0) > 0.05 ? `<br><span style="color:#7ee787">reared up: reach x${rearReach(p).toFixed(2)}</span>` : '');
+      ((player.rear || 0) > 0.05 ? `<br><span style="color:#7ee787">reared up: reach x${rearReach(p).toFixed(2)}</span>` : '') +
+      (SICK.t > 0 ? `<br><span style="color:#c9d64a">ill from ${SICK.src} &middot; ${Math.ceil(SICK.t)} s &middot; stamina -${Math.round((1 - sickStamMul()) * 100)}%</span>` : '');
   } else {
     $('v-name').textContent = player.spectator ? 'DETACHED CAMERA' : '-';
     $('v-stats').textContent = '';
@@ -14692,10 +15226,11 @@ function updateHUD() {
       const hits = Math.ceil(Math.max(0, tgt.energy) / Math.max(0.01, dmg));
       const mayHit = canAttackTarget(tgt);
       const friend = packFriend(tgt);
+      const fp = eatPrompt();
       const rest = '<span>Q</span> guard <span>Z</span> dodge <span>T</span> ' + (FIGHT.lock === tgt ? 'unlock ' : 'lock ') +
         (why ? '<span style="opacity:.55">M mate: ' + why + '</span>'
              : '<span class="ok">M</span> ' + (mateDistance(me, tgt) > 9 ? 'mate (hybrid)' : 'mate')) +
-        ' <span>E</span> eat</div>';
+        (fp ? '</div>' : ' <span>E</span> eat</div>');
       const body0 = inspectTarget();
       const carcLine = body0 ? '<div class="keys"><span class="ok">V</span> search the body at your feet &middot; ' + ((body0.parts || []).length) + ' parts</div>' : '';
       act.innerHTML = (mayHit
@@ -14706,14 +15241,20 @@ function updateHUD() {
         : '<b class="' + (friend ? 'pk' : '') + '">' + (friend ? 'YOUR PACK' : noAttackReason(tgt).toUpperCase()) + '</b>' +
           (friend && brNameOf(tgt) ? ' <span class="pkn">' + brNameOf(tgt) + '</span>' : '') +
           ' &middot; ' + diet + ' &middot; mass ' + d.mass.toFixed(1) +
-          '<div class="keys"><span class="pkno">' + (friend ? 'you cannot hurt your own' : 'you cannot hurt this yet') + '</span> ' + rest) + carcLine;
+          '<div class="keys"><span class="pkno">' + (friend ? 'you cannot hurt your own' : 'you cannot hurt this yet') + '</span> ' + rest) + carcLine + (fp ? fp.html : '');
       act.style.display = 'block';
     } else {
-      // Nothing alive in front of you, but maybe something dead at your feet.
+      // Nothing alive in front of you, but maybe something to eat, or a body
+      // at your feet, or both. E belongs to the food line so the two prompts
+      // cannot disagree about what the key does.
       const body = inspectTarget();
+      const fp2 = eatPrompt();
       if (body) {
         act.innerHTML = '<b class="pk">CARCASS</b> &middot; ' + ((body.parts || []).length) + ' parts on it' +
-          '<div class="keys"><span class="ok">V</span> search it <span>E</span> eat</div>';
+          '<div class="keys"><span class="ok">V</span> search it</div>' + (fp2 ? fp2.html : '');
+        act.style.display = 'block';
+      } else if (fp2) {
+        act.innerHTML = '<b>' + fp2.title + '</b>' + fp2.html;
         act.style.display = 'block';
       } else act.style.display = 'none';
     }
@@ -18780,6 +19321,7 @@ function becomeDesigned(des, opts) {
   }
   player.c = me;
   player.absorbed = 0; player.fly = 0;
+  sickClear();
   player.camX = me.x; player.camZ = me.y;
   player.camY = groundAt(me.x, me.y) + 20;
   player.dist = camDefaultDist(me.ph || (me.genome && C.develop(me.genome)));
@@ -19328,6 +19870,92 @@ window.__G3D = {
   pick: (i) => choosePicked(i),
   offer: (g, l) => offerTraits(g, l),
   eat: () => tryEat(),
+  food: {
+    // what the scan sees, as plain numbers -- the same object the prompt and
+    // the E key both act on
+    near: () => {
+      const f = foodScan();
+      return f ? { kind: f.kind, name: f.name, crop: +f.crop.toFixed(4), left: f.left,
+                   bites: (f.pl.bites | 0), toxic: +(f.toxic || 0).toFixed(3), high: f.high,
+                   reach: f.reach, bare: f.bare, dist: Math.round(f.dist), gain: +f.gain.toFixed(2) } : null;
+    },
+    eat: () => tryEat(),
+    prompt: () => { updateHUD(); const el = document.getElementById('act'); return el && el.style.display !== 'none' ? el.innerHTML : ''; },
+    get sick() { return { t: +SICK.t.toFixed(2), sev: +SICK.sev.toFixed(3), src: SICK.src, dur: +SICK.dur.toFixed(2), fx: +SICK.fx.toFixed(3) }; },
+    clearSick: () => { sickClear(); return SICK.t; },
+    // run the illness forward without waiting out the real seconds
+    tickSick: (secs, step) => {
+      const st = step > 0 ? step : 0.25;
+      for (let t = 0, n = 0; t < secs && n < 20000; t += st, n++) sickTick(st);
+      return +SICK.t.toFixed(2);
+    },
+    stamMul: () => +sickStamMul().toFixed(3),
+    gut: () => +gutOf(player.c && player.c.ph).toFixed(3),
+    smell: () => canSmellToxin(player.c && player.c.ph),
+    // hold the body up as if G were down, so the reach maths can be checked
+    // without driving the key through a frame loop
+    rear: (v) => { player.rear = clamp(v == null ? 1 : v, 0, 1); return player.rear; },
+    wait: () => { const f = foodScan(); return f ? Math.round(regrowWait(f.pl)) : null; },
+    // wipe the ground around you so a placed plant is the only food in reach
+    clear: (r) => {
+      const c = player.c;
+      if (!c || !world) return 0;
+      const rad = r > 0 ? r : interactRange(c.ph) * 6;
+      let n = 0;
+      world.plants = world.plants.filter((pl) => {
+        if (pl.isTree) return true;
+        if (Math.hypot(pl.x - c.x, pl.y - c.y) >= rad) return true;
+        if (pl.deep) world.deepPlants = Math.max(0, world.deepPlants - 1);
+        n++; return false;
+      });
+      world.pGrid.clear(); for (const pl of world.plants) if (!pl.gone) world.pGrid.insert(pl);
+      return n;
+    },
+    // a plant of a chosen kind directly in front of you, built with exactly
+    // the fields makePlant gives one
+    place: (o) => {
+      const c = player.c;
+      if (!c || !world) return null;
+      o = o || {};
+      const KT = C.FOOD_KIND || {};
+      const K = KT[o.kind] || KT.grass || { bites: 2, high: 0.02, regrow: 2.2 };
+      const d = o.dist != null ? o.dist : interactRange(c.ph) * 0.45;
+      const pl = {
+        x: clamp(c.x + Math.cos(player.yaw) * d, 1, WORLD_W - 1),
+        y: clamp(c.y + Math.sin(player.yaw) * d, 1, WORLD_H - 1),
+        deep: false, e: o.e != null ? o.e : (world.params.plantEnergy || 30),
+        alpine: false, water: false, isTree: false, trunkR: 0,
+        kind: o.kind || 'grass', toxic: o.toxic || 0,
+        bites: o.bites != null ? o.bites : K.bites,
+        high: o.high != null ? o.high : K.high,
+        c0: o.crop != null ? o.crop : 1, gt: world.bt || 0,
+        regrow: o.regrow != null ? o.regrow : ((world.params.plantRate || 20) / 2400 * K.regrow),
+      };
+      world.plants.push(pl); world.pGrid.insert(pl);
+      return { x: Math.round(pl.x), y: Math.round(pl.y), kind: pl.kind, high: pl.high, toxic: pl.toxic };
+    },
+    // rewrite the nearest plant in place, for the bare/toxic/high cases
+    set: (o) => {
+      const f = foodScan();
+      if (!f) return null;
+      const pl = f.pl;
+      o = o || {};
+      if (o.kind) pl.kind = o.kind;
+      if (o.toxic != null) pl.toxic = o.toxic;
+      if (o.high != null) pl.high = o.high;
+      if (o.bites != null) pl.bites = o.bites;
+      if (o.e != null) pl.e = o.e;
+      if (o.regrow != null) pl.regrow = o.regrow;
+      if (o.crop != null) { pl.c0 = o.crop; pl.gt = world.bt || 0; }
+      return { kind: pl.kind, crop: +cropOf(pl).toFixed(4), toxic: pl.toxic, high: pl.high };
+    },
+    // the old body E would strip, if any
+    carcass: () => {
+      const e = carcEatTarget();
+      return e ? { rot: +carcFieldRot(e).toFixed(3), energy: Math.round(carcFieldEnergy(e)),
+                   mass: +carcFieldMass(e).toFixed(2), eaten: !!e.eaten, looted: !!e.looted } : null;
+    },
+  },
   jump: () => tryJump(),
   get fly() { return player.fly; },
   setFly: (v) => { player.fly = v; },

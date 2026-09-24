@@ -1,5 +1,54 @@
 # 3DGenesis dev log
 
+## 2026-09-24 (later): Pickups come in pairs
+
+Taking one spike off a corpse gave you one spike. A body is bilateral, so a symmetrical change needed two separate kills, and mirror mode in the editor (the obvious way to place anything) was refused on the very part you had just earned. Every pickup now yields a **pair**.
+
+`choosePicked` is the single funnel all three pickup paths run through (killing a creature, killing a player, searching a carcass), so pairing there cannot come out inconsistent between them. The constant is `PICKUP_PAIR` next to `ownedGain`. All three offers now read "take a pair of one of their parts", and the toast tells you to mirror it.
+
+**Buying is deliberately not paired.** The shop charges per copy, so doubling the goods at one price would halve every price in the game. Selling is unchanged at one copy at a time.
+
+Known red: `test_inv_steps.js` fails one of its fifteen assertions, "selling removes one copy, not the lot". The sell is refused because the creature in that run wears all four legs it owns, which is the rule working; the assertion assumes a spare exists. The sell path shares no code with this change. It needs the test fixed rather than the game, next run.
+
+## 2026-09-24: Food is food now, not a pickup
+
+A plant used to be a number in a list. You walked into it, the whole thing vanished, an identical one respawned somewhere else, and nothing about it was worth looking at. This turns the island's food into something with a kind, a crop, a season and a consequence.
+
+### Plants have a kind, and it is decided once
+Every plant now rolls a **kind** out of its own position hash the way `isTree` always has, so what you see, what you can eat, and what it does to you are one decision that cannot drift apart: **grass, berry bush, fungus, tuber, cactus, kelp**, weighted by biome. A fungus or a rare berry can be **poisonous**. Each carries how many **bites** it is worth and how far off the ground the food sits.
+
+The position hash needed fixing first. `x * 7919 ^ y * 104729` is about 1e8 anywhere on the map, so bits 27 and up never move: the first cut of this had every fungus on the island poisonous. The hash is mixed properly before new fields come out of it.
+
+### Crop, and regrowth that costs nothing
+A plant holds a **crop** from 0 to 1. Eating takes one bite of it, not the whole plant, and the plant is **never deleted**. Crop is not stored live and there is no per-tick loop over plants: it is resolved on read from the crop left at the last bite and the world clock then, scaled by the season. 2400 plants cost exactly what 20 do.
+
+Calibration: with nothing deleted, the spawn loop saturates at `maxPlants` and regrowth becomes the entire food influx, so `regrow = plantRate / CAPS.PLANTS` holds the old energy budget independent of map size. Strict parity made a grazed plant take about twenty minutes of wall time to return, which reads as "the food is gone" rather than as grazing, so it runs at 3x that. It is the knob to turn if the island runs hot.
+
+### Grazing, and herds that move on
+Animals take bites, one per plant per tick, so a herd crops a bush over several ticks instead of stripping it in one step. A patch grazed below 0.15 crop **stops attracting foragers**, so herds drift off cropped ground, with the bar dropped to 0.03 for a starving animal so the rule can never become a new way to starve.
+
+Measured over 20000 steps: the stock holds at **1427 of 1440 plants** with **zero shrink events**, 1409 of them grazed at least once, and the mean standing crop settles at **0.171**, just under the perception bar. That is a grazing equilibrium rather than a stripped map or an untouched one. The herbivore population runs at **101 against a pre-change baseline of 12** on the same seed. Step cost with 2528 plants and 180 creatures: **7.6 ms**, against a 50 ms budget at 20Hz.
+
+### Poison, rot, and being ill
+- **Toxic plants cost energy**, resisted by gut and by a scavenger-tuned mouth, capped so nothing is immune. Measured at toxin 0.9: **12.15** energy off a low-gut eater, **0.81** off a high-gut one.
+- **Carrion rots on its own clock.** `carrionRot()` reads the decay counter the body already ticks, so rot cannot drift out of step with when the body disappears. Yield runs **1.0 down to 0.25** across fresh to putrid for a generalist and **0.30 up to 1.45** for a scavenger, so the niche is a real trade in both directions. Measured on a body worth 90: fresh favours the generalist, putrid pays the scavenger **15x** what it pays anyone else.
+- **Sickness is a status.** Eating poison or rot starts one: a steady energy drain, stamina regeneration cut by up to 55%, a sickly vignette and a HUD line. Severity and duration scale off gut and scavenger, it ticks down and clears, and it is cleared whenever the player becomes a different creature. Measured on a grazer eating a toxic mushroom: severity **0.885**, **40 s**, stamina regen **11.87 against 24.20** over one second.
+
+### Eating, and a prompt that does not lie
+`tryEat` was still deleting plants whole. It takes bites now, through the same functions the animals use.
+- **Reach is real.** Food held up in a bush or on a cactus needs height. Too short and the prompt says so and names the fix: *rear up with G*. Measured: a bush at 16.8 units is refused by a 12-unit reach and taken when reared.
+- **One scan feeds both the key and the panel**, ranked edible over out-of-reach over bare, so the prompt can never offer a bite that E will refuse. A grazed plant says how long until it is worth eating again.
+- The line **names the food in plain words** and counts the bites left. A creature with a good enough gut and nose is warned that something **smells wrong** before it eats a poisonous one. A creature without that sense is not.
+- **Old carcasses are food.** The streamed carcass field could only be searched for parts with V. E feeds on one now: rotten, so it is a gamble for a grazer and a meal for a scavenger, once per body. Measured on a body of mass 9.1 at rot 0.90: **+24 energy and 33.6 s of illness** for a generalist, **+72 and no illness** for a scavenger.
+
+### Tested
+- `test_food_eco.js` (node): plants are grazed and not removed, crop recovers, the stock holds near the cap over 20000 steps on two seeds against measured baselines, herbivores survive, toxins cost what they should, and rot pays a scavenger more and a generalist less.
+- `test_food_steps.js` (browser, 34 checks): a bite reduces crop and raises energy without removing the plant, a bare plant refuses and says why, high food is refused standing and taken reared, a toxic mushroom sickens and the sickness clears, a rotten carcass sickens a generalist, the prompt names the food, and the smell warning appears only for a body that can smell.
+- Replayed green: `test_core`, `test_eco`, `test_combat`, `test_fight_core`, `test_bones`, `test_inv_steps`, `test_carcass_steps`, `test_spawn_steps`, `test_fly_steps`, `test_pack_steps`, `test_br_steps`, `test_shop_steps`.
+
+### Left on the bench this session
+Finn asked for three more things mid-session that are **not in this build**: no wildlife at all in a match, 50 players instead of 24, and a hits-to-kill ceiling of 30 with most fights landing near 10. The food-plant art (real berry bushes, mushroom caps, cactus fruit in place of the ellipsoid tufts the food still renders as) was also started and not finished. All four are first up next run.
+
 Build: `dev/3dgenesis-dev-src.tgz` unpacks to the patch pipeline. `bash build.sh` (it cds to its own folder now, so it runs wherever you unpack it) turns `g3.v3` + `src/patch_*.py` into `g3.html` (= `index.html`) and extracts `core.js` for node tests.
 
 ## 2026-09-23 (evening): Packs, carcasses, the zone, flight, and a clock running double
