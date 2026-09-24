@@ -12,10 +12,11 @@ Finn, mid-session: **"remove all the food eating mechanics, it is kind of stupid
 - **Four mushroom spells** (POWER / WARD / VEIL / RAGE), streamed deterministically from the world seed, carried and spent, glowing on you, wiped every round.
 - **A match starts everyone at nothing**: bare body, a pile in your cage with a mouth and one weapon, your own parts stashed safely aside, zero wildlife, and a cage that actually holds you.
 - **The front screen is CAMPAIGN / ONLINE.**
+- **Eight mythical body plans** (scorpion, stilt-walker, hydra, mantis, crab, brute, drifter, wyrm), appended at 22-29 so nothing already saved is renumbered, with a new `tailUp` skeleton parameter for the scorpion's arched tail. The body picker is black silhouettes with no names.
 
 ### Next up, in Finn's own priority order
 1. **Creature horror pass.** Reference: Grounded-style arthropods and xeno sculpts. Drool strings off the jaw, long lolling tongues, inner secondary jaws, tendril beards, eyeless plated skulls, wet slick hide. This is the thing he has asked for most.
-2. **New body plans: mythical, not dinosaur.** Stilt-walker, hydra, crab/arachnid, **scorpion** (segmented tail, stinger, pincers, low carapace), serpent, hunched brute, mantis, drifter. The body picker shows **black silhouettes with no names**.
+2. **More mythical plans**, and a pass over the eight that exist: the scorpion's tail should curl *forward* over the head rather than just rising, the crab wants a proper carapace shell over the whole body, and the drifter wants tendrils that hang and sway rather than antennae.
 3. **Stealth.** Tall grass in some regions that genuinely hides you, moving silently, and sneak attacks. VEIL already carries the visibility multiplier (`spellSeenMul`) that the AI's senses should read.
 4. **Fortnite-style loot.** Rarity-coloured glow on dropped parts, floating visibly above the body that holds them, searchable.
 5. **Ruins.** Small broken concrete buildings, smashed walls, exposed rebar, low cover walls to fight around.
