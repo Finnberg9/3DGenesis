@@ -1,5 +1,67 @@
 # 3DGenesis dev log
 
+## 2026-09-25: Three tabs, fourteen shapes, and a kill worth a quarter
+
+### The builder has three tabs
+It had twelve: kit, shop, body, proportions, paint, and seven category tabs that -- since the kit/shop split -- only ever listed what you already owned, which is what the kit tab is. Seven tabs to say what one tab already said.
+
+- **YOUR KIT** everything you own, one list, draggable onto the body
+- **THE SHOP** everything you do not, by rarity, with prices
+- **BODY** the shape, and directly under it the sizing sliders and the colours
+
+The sizing and paint controls were **lifted into functions** the body tab calls rather than copied into it: two copies of a slider is two places for it to drift.
+
+### The starting pack is a working animal
+It was a mouth and one random weapon, which is not a creature: with no eyes you cannot see and with no spare limbs you cannot change how you stand, so everybody walked out of the cage with the body they were handed.
+
+The pack is now **eyes, limbs and a mouth** -- the three things a body cannot work without -- from the common tier, plus one extra about half the time. **Everything in it comes as a pair**, because a body is bilateral and one of anything cannot be placed symmetrically.
+
+### A kill is worth a quarter of what you killed
+Growth was `gain = 0.02 + 0.10 * ratio` added to every cell, every kill: no relationship to any number a player could reason about, and three or four kills made you enormous.
+
+The rule is one sentence now: **killing something adds a quarter of its mass to yours.** Mass rises with cell growth, so the whole body is multiplied by exactly `(1 + 0.25 * preyMass/yourMass)`, which lands the new mass on `yourMass + 0.25 * preyMass` and nowhere else -- measured exact in the browser. It is also self-limiting in a way the old curve was not: the bigger you get, the less any one kill is worth, because the ratio falls as you grow. A newborn is capped at 4x prey-to-self so it cannot triple off one lucky kill.
+
+### Fourteen body shapes, and nothing else
+"They are a lot too similar and too dinosaur looking." Thirty plans, most of them the same animal with the neck a bit longer.
+
+The picker offers **ten that walk and four that fly**, each built around one feature allowed to be absurdly oversized:
+
+| | |
+|---|---|
+| **LURKER** | one enormous body, a face across the whole front, legs you can barely see under it |
+| **MAW** | a head bigger than the animal carrying it. A walking mouth |
+| **HOLLOW** | tall, gaunt and vertical, arms that hang almost to the floor, a head far too small for the frame |
+| **CENTIPEDE** | very long, very low, twelve legs down a segmented body |
+| **SCORPION** | wide armoured carapace, pincers, a tail over its own back |
+| **STILT-WALKER** | a tiny body carried absurdly high, head fused into the torso, stub tail |
+| **CRAB** | flat and far wider than it is long, legs splayed around it |
+| **BRUTE** | shoulders and arms, almost no hips |
+| **MANTIS** | upright and narrow, folded blades, a long abdomen behind |
+| **HYDRA** | a low heavy body under one enormous neck |
+| **FLIT** | small, light and quick |
+| **MOTHWING** | enormous wings on almost nothing, and no legs at all |
+| **SKIMMER** | wings that are its arms, folded to move on the ground |
+| **DRAKE** | long neck, long tail, four legs and a wingspan over all of it |
+
+**The other sixteen plans stay in the table.** Renumbering would turn every saved design into a different animal; they are simply not offered.
+
+Three things the tests caught that would have shipped otherwise:
+
+- **The drake could not fly.** Lift needs wing area against mass and a drake is heavy: at mass 30 its wingspan was under the threshold, so the dragon walked. Wingspan raised until it actually beats its own weight -- 79 air speed now.
+- **The hollow had no arms.** `classifyLimbs` calls a limb a leg when its foot lands within 72% of the mean foot depth, and the walking physics reads the same function -- so arms that hung nearly to the floor quietly became a fifth and sixth leg. They hang clearly shorter than that now, and it has 4 legs and 2 arms.
+- **The drake broke the 100 hp invariant** at mass 30.5 against a reference of 28. `HP_REF_MASS` is 32, and the guard in `test_plans.js` that asserts it still covers the heaviest startable body is what flagged it.
+
+The distinctness check also needed fixing rather than the shapes: it scored a winged drake and a wingless mantis as near neighbours because **wingspan was not one of the axes it compared**, which is the single most visible thing about a silhouette that has one.
+
+### Tested
+- `test_bodies.js` (node, new, 21 checks): all fourteen exist, none develops a broken number, every one reads exactly 100 hp, every land shape walks, the moth has none and the other three fliers stand, all four fliers fly and no land shape does, all can see and all have mouths, no two share a silhouette and the closest pair still differs on several axes, each shape's headline feature is measurably extreme, a world full of them runs for ninety seconds, and twenty generations of mutation never breaks one.
+- Browser checks for the three-tab builder (shapes, four sizing sliders and the colours all on the body tab) and for the exact growth arithmetic.
+- Two stale assertions updated to the new contract rather than the game bent to fit them: the pile check still expected two parts, and the silhouette check still expected thirty shapes.
+- Replayed green: `test_core`, `test_fight_core`, `test_combat`, `test_hp`, `test_plans`, `test_bones`, `test_loadout_steps`, `test_brstart_steps`, `test_silho_steps`.
+
+### Still not in this build
+Stealth, sneaking and tall grass; rarity-glow loot beacons; ruined buildings and cover walls; the leg-intersection bug; 50 players; the wet-hide shader; and the horror pass on the body rather than the mouth.
+
 ## 2026-09-24 (late): Ribcages, one loot per body, and nothing bites you over its shoulder
 
 Three from playing it.
