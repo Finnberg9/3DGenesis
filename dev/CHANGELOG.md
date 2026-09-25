@@ -1,5 +1,182 @@
 # 3DGenesis dev log
 
+## 2026-09-25 (evening): Weather, and four things Finn asked for while it was being built
+
+The sky was the last big system the renderer had a hole for. `fogCol.w` has been
+sitting in the globals block unused since it was written, the brief called it the
+global wetness channel, and nothing has ever set it. It sets it now, and rain is
+what sets it.
+
+Finn sent five more things mid-session; all of them are in.
+
+### Weather is a pure function of the clock
+
+```js
+wxAt(bt) -> { rain, storm, gust }
+```
+
+`world.light` is a pure function of `world.bt` and always has been. So is the sky
+now. A **weather cell** is a seventh of a day; each cell's character comes out of
+`hash(seed, cell)`, so:
+
+- a reloaded world gets back the weather it had,
+- every client of a match sees the same sky without a packet crossing the wire,
+- a fast-forwarded world still gets its rain in the right places.
+
+Thresholds slide with `climate.moist`, which is already a slow wander on the same
+clock: at the wet end of the cycle a bit over half of all cells carry rain, at the
+dry end about one in six. Inside a cell the rain eases in over the first fifth and
+out over the last quarter, because a hard edge on weather reads as a bug.
+
+One derived quantity is NOT pure and cannot be: **surface wetness is an integral**,
+rising over about twenty seconds of hard rain and drying over three minutes. It
+lives in `world.wet`, converges from any starting value, and is therefore safe to
+leave out of a save. Night dew puts a floor under it so dawn is damp with no
+weather at all.
+
+### What rain does, in the order it matters
+
+The drops are the last and smallest part of it. In front of them:
+
+- **The air thickens.** Fog density up to 4.8x, and the colour of the distance
+  goes grey-green.
+- **The light goes out of the sky**, down 55% in rain and another 22% in a storm.
+- **Everything gets wet**, through `fogCol.w`:
+  - *Skin*: the covering's own wetness doubles as how much rain STICKS. Fur beads
+    it and reaches about a third soaked; chitin and plate sheet it and go to full.
+    The clear coat, the moving specular and the two lobes were all already there
+    from 09-25; they just had nothing to turn them on.
+  - *Terrain*: darkens everywhere, and water RUNS OFF. Slopes stay merely dark;
+    flat ground holds a film; hollows hold standing water. A puddle is not a
+    texture, it is a patch whose **normal goes flat** and whose specular goes up,
+    with the sky in it at a glancing angle. That is the only thing that reads as
+    standing water.
+  - *Foliage*: a leaf is waxy, so it keeps its colour and takes a hard little
+    highlight. Bark is not, so it just soaks and goes dark.
+- **Lightning** lights the whole world for about a tenth of a second, white with
+  a little blue in it. Tinting the fog toward a colour instead made it read as a
+  damage overlay, which is what the first cut did.
+- **Thunder arrives late.** The gap is the distance: `d / 340`. A near strike is a
+  crack with a tail, a far one is a long low roll.
+- **Sound**: two bands. A broad hiss that rises with how hard it is coming down,
+  and a high spattering band that only exists under leaves -- rain on your own
+  head and rain on the canopy above you are different sounds.
+
+### The drops themselves: six vertices and no buffers
+
+Position, size and fall speed all come out of hashes on the instance index, and
+each drop is wrapped into a box that follows the eye **in world space**:
+
+```wgsl
+let rel = home - g.camPos.xyz;
+let p0  = g.camPos.xyz + (rel - BOX * round(rel / BOX));
+```
+
+so a drop belongs to the world and moves past you when you run, rather than
+hanging on the lens. The streak lies along the drop's own velocity and is built
+in the shader from the view vector, so there is no billboard maths on the CPU and
+nothing to sort. `pass.draw(6, n)` and that is the whole draw call.
+
+The box started at 260 units and the rain was invisible: spreading the budget
+over a volume nobody can resolve buys distance you cannot see and costs the
+density that sells it. 80 units, and it reads.
+
+### The zone wall is a thunderhead now
+
+Finn: *"make it more like a heavy storm cloud where there is dark clouds super
+tall up cumulonimbus... and when youre in the storm its super rainy and loud and
+flashing lights and hard to see and you slowly die."*
+
+The wall was four layers and 520 units of grey. It is **seven levels and 1750
+units** of storm cell:
+
+- It **leans out as it climbs** (`CLOUD_SPREAD` 1.0 to 3.7), so the anvil
+  overhangs the band and the light goes before the damage does.
+- Puffs get **bigger with height**, which is what makes a tower read as scale.
+- The **base is nearly black and the anvil is white** (`CLOUD_LUM` 0.16 to 1.30).
+  Nothing else in this game has that range inside one object, and it is the
+  reason it reads as weather rather than as smoke.
+- **Lightning lights it from the inside**: the flash feeds each puff's own tint,
+  low levels hardest.
+- **The band IS the weather.** Inside it, rain and storm are forced to full, so
+  the fog, the flashes, the thunder and the wetness are the same system the sky
+  uses. The thunder delay becomes the distance to the edge, so the crack gets
+  closer as the ring does. Rain reaches ~900 units ahead of the wall: you get wet
+  before you get hurt.
+- The puff budget now follows the quality setting (420 on low to 1500 on ultra).
+  Seven levels is a lot more cloud than four, and every puff is a big soft
+  alpha-blended sphere.
+
+### VEIL is invisibility
+
+Finn: *"purple to turn you completely invisible, where we can still faintly see
+ourselves but others cant at all, they can only hear you and get damaged by you."*
+
+It was a 0.25 multiplier on being noticed, which is a discount, not a spell.
+
+- **`spellSeenMul()` returns 0.** Nothing sees you.
+- The core's perception loop consults `world.seenMul(o)` -- one function, one
+  place stealth lives. It is applied AFTER personal space, which is *felt*, not
+  seen, so a hidden animal is still a solid object to walk into.
+- **It can hear you.** A swing gives you away for 1.5 s, sprinting for 0.9 s, and
+  while the sound is in the air you are back to 0.55.
+- **You can see yourself**, faintly: a dithered discard in the skin shader,
+  keyed off a ghost field packed above the skin field in the pattern float. It is
+  stochastic transparency, so there is no second pipeline and no sort order, and
+  the noise re-rolling at 14 Hz is what makes it shimmer instead of screen-door.
+  The hard parts have no ghost channel, so they take the colour of the air
+  instead -- washed to the fog, which at any distance is the same answer.
+- A veiled body does not glow. A lit-up invisible animal is a contradiction.
+
+### RAGE costs nothing
+
+One line in `fightSpend`. Sprint, swing, dodge and guard are all free while it
+runs, and it clears an exhaustion you were already in -- otherwise drinking it at
+zero stamina would do nothing for twenty seconds.
+
+### You walk down hills now
+
+Finn: *"everytime i go downhills it just glitch jumps down it. You should only
+fall if the slope is like 80 degrees or steeper."*
+
+He was right and it was a real bug. What counted as the ground falling away was:
+
+```js
+const walkDrop = Math.max(2, (c.ph.speedLand || 40) * PAGE_SLOPE_TAN * dt * 1.6);
+```
+
+Your **top speed**, not the distance you actually covered, with a floor of two
+world units. A slow animal, or any animal in a long frame, cleared that bar on
+ordinary ground, got put in the air, and gravity dropped it back on -- the hop.
+
+The honest test is the slope you just walked: the ground fell `drop` over the
+`dh` you actually moved, and that is a fall only if `drop/dh` is steeper than
+**tan 80**. Plus a lip of 0.35 body heights you can step off for free, or terrain
+noise under a stationary animal reads as a cliff.
+
+Measured: a 47 degree hill, 250 units of descent, **0 airborne frames out of 160,
+peak hop 0.00**. Jumping still leaves the ground (17 frames, 19.5 units).
+
+This terrain is a height field with a 60 degree slope limit, so there are no
+faces steeper than 80 degrees anywhere on the island. That is the point: with
+this rule the only way off the ground is a jump or a ledge.
+
+**Fall damage starts three times higher**, as asked: `FALL_SAFE_H` 2.5 -> 7.5 body
+heights, on the player and on every other animal. The fatal span past it is
+unchanged.
+
+### Guards
+
+`test_veil_steps.js` and `test_fall_steps.js` are new and green. `test_plans`,
+`test_bodies`, `test_silho_steps`, `test_nomerge_steps`, `test_move_steps`,
+`test_br_steps`, `test_perf_steps`, `test_spell_steps` and `test_core` all pass.
+
+`test_horror_steps` has **one pre-existing failure**: the wet detail on `m_jaws`
+sits 0.055 outside the mouth. Checked against a build with today's three patches
+removed -- it fails there too, so it is not from this pass. It is the frame trap
+the 09-26 brief warned about: `m_jaws` uses +x up and +y along the muzzle, and
+`drool`/`lollTongue` assume +x along the muzzle.
+
 ## 2026-09-25 (night): The body gets a skeleton, and three bugs that had nothing to do with design
 
 Finn, on the ten shipped a few hours earlier: "they still look like shit, like cartoonish

@@ -3240,7 +3240,11 @@
           const push = (pr - dd) / pr;                      // 0 (touching range) .. 1 (co-located)
           sepX -= (dx / dd) * push; sepY -= (dy / dd) * push; sepN++;
         }
-        if (d2 > senseSq) return;
+        // What this animal presents to another animal's senses. 0 is not
+        // "hard to see": it is not seen. Physical separation above this line
+        // is untouched, so a hidden body is still a body in the way.
+        const vis = world.seenMul ? world.seenMul(o) : 1;
+        if (vis <= 0 || d2 > senseSq * vis) return;
         near++;
         if (o.speciesId === c.speciesId) { kin++; kinX += dx; kinY += dy; }
         if (o.ph.attack > p.defense + 3 && o.ph.mass > p.mass * 0.9 && d2 < threatD) { threatD = d2; threat = o; }
@@ -3517,7 +3521,10 @@
         const HS2 = terrain.heightScale || 420;
         const fell = (terrain.height(c.x, c.y) - terrain.height(nx, ny)) * HS2;
         const safe = Math.max(6, (p.standH || p.radius || 6) * FALL_SAFE_H_SIM);
-        if (fell > safe) {
+        // the same 80 degree rule the player gets: a step down a hill is a
+        // step down a hill, whatever the height difference adds up to
+        const stepH = Math.hypot(nx - c.x, ny - c.y);
+        if (fell > Math.max(safe, stepH * FALL_SLOPE_TAN_SIM)) {
           const over = fell - safe;
           const sizeK = clamp(0.8 + (p.mass || 1) / 40, 0.8, 1.7);
           hpHurt(c, Math.pow(over / Math.max(14, (p.standH || p.radius || 6) * FALL_FATAL_H_SIM), 1.6) * sizeK * hpMaxOf(p));
@@ -3811,7 +3818,8 @@
   // ---- being attacked ---------------------------------------------------
   const HURT_TIME = 5;
 // The same numbers the player falls by, in body heights.
-const FALL_SAFE_H_SIM = 2.5, FALL_FATAL_H_SIM = 7;
+const FALL_SAFE_H_SIM = 7.5, FALL_FATAL_H_SIM = 7;
+const FALL_SLOPE_TAN_SIM = 5.6713;   // tan 80
 // 60 degrees is the limit for anything that walks. A body built to scramble
 // earns its way to 80. Measured over this baseline, in world units.
 const SLOPE_TAN_WALK = 1.7321;    // tan 60
@@ -4198,16 +4206,16 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
     // ---- 2026-09-25: the new ten ------------------------------------------
     // `crook` is new: how hard the leg pass breaks the mirror. 0 keeps a plan
     // byte-identical to what it was, so nothing above this line moves.
-    { a: 1.00, b: 0.88, seg: 11, prof: 'animal', arch: 0.34, droop: 0.02, wide: 0.58, neck: 0.76, nx: 0.96, ny: -0.18, ns: 2, head: 0.86, snx: 0.72, snr: 0.74, tail: 0.0, tailR: 0.14, ts: 4, stand: 2.05, hump: 0.78, waist: 0.16, waistAt: 0.22, crook: 0.5 , blend: 0.45, ribs: 0.20, keel: 0.38}, // 38 bloom: everything forward, nothing behind, and the face is the mouth
-    { a: 0.80, b: 0.28, seg: 9,  prof: 'tube',   arch: 0.12, droop: 0.26, wide: 0,    neck: 0.62, nx: 0.88, ny: -0.24, ns: 3, head: 0.30, snx: 0.78, snr: 0.26, tail: 1.5, tailR: 0.11, ts: 10, stand: 0.90, hump: 0.55, crook: 0.7, view: [0.42, 0.56, 0.72] , blend: 0.22, ribs: 0.48, keel: 0.00}, // 39 kite: a starved body hanging under a span four times its length
-    { a: 0.78, b: 0.54, seg: 11, prof: 'animal', arch: 0.74, droop: 0.34, wide: 0.54, neck: 0.58, nx: 0.42, ny: -0.92, ns: 2, head: 0.26, snx: 0.40, snr: 0.32, tail: 0.0, tailR: 0.12, ts: 4, stand: 2.85, hump: 0.99, waist: 0.54, waistAt: 0.20, waistW: 0.09, crook: 0.8 , blend: 0.28, ribs: 0.32, keel: 0.62}, // 40 gibbet: a shoulder yoke with no hips, head hanging inside the chest
-    { a: 1.18, b: 0.96, seg: 11, prof: 'blob',   arch: 0.04, droop: 0.58, wide: 0.64, neck: 0.88, nx: 0.92, ny: -0.30, ns: 2, head: 0.30, snx: 0.62, snr: 0.30, tail: 0.5, tailR: 0.11, ts: 5, stand: 2.00, hump: 0.18, crook: 0.38 , blend: 0.80, ribs: 0.08, keel: 0.00}, // 41 cradle: a hanging belly on six legs that cannot carry it
-    { a: 1.32, b: 0.58, seg: 13, prof: 'insect', arch: 0.32, droop: 0.00, wide: 0.14, neck: 0.58, nx: 0.82, ny: -0.40, ns: 3, head: 0.26, snx: 0.74, snr: 0.28, tail: 1.9, tailR: 0.22, ts: 9, stand: 1.40, tailUp: 1.0, hump: 0.72, waist: 0.64, waistAt: 0.42, waistW: 0.09, crook: 0.4 , blend: 0.12, ribs: 0.58, keel: 0.22}, // 42 thresher: two lobes, blade arms, the metasoma over the back
-    { a: 1.20, b: 0.42, seg: 9,  prof: 'round',  arch: 0.14, droop: 0.00, wide: 1.60, neck: 0.66, nx: 0.92, ny: -0.46, ns: 2, head: 0.26, snx: 0.50, snr: 0.26, tail: 0.0, tailR: 0.12, ts: 4, stand: 1.30, hump: 0.30, crook: 0.55 , blend: 0.20, ribs: 0.26, keel: 0.90}, // 43 pall: a lid. Wider than it is long, eight crooked legs, nothing above the rim
-    { a: 2.05, b: 0.40, seg: 19, prof: 'tube',   arch: 0.58, droop: 0.00, wide: 0.10, neck: 1.35, nx: 0.42, ny: 0.94,  ns: 6, head: 0.34, snx: 0.52, snr: 0.34, tail: 1.0, tailR: 0.14, ts: 7, stand: 0.95, flex: 1, hump: 0.97, crook: 0.5 , blend: 0.08, ribs: 0.66, keel: 0.18}, // 44 husk: two thirds on the floor, the front third standing up
-    { a: 0.70, b: 0.64, seg: 9,  prof: 'insect', arch: 0.22, droop: 0.00, wide: 0.36, neck: 0.58, nx: 0.84, ny: -0.22, ns: 2, head: 0.36, snx: 0.66, snr: 0.36, tail: 1.7, tailR: 0.20, ts: 8, stand: 0.88, tailUp: 0.85, hump: 0.45, waist: 0.52, waistAt: 0.38, waistW: 0.10, crook: 0.5 , blend: 0.18, ribs: 0.52, keel: 0.34}, // 45 wrack: short broad wings on a pinched body: the opposite of the kite
-    { a: 1.00, b: 0.94, seg: 11, prof: 'animal', arch: 0.46, droop: 0.04, wide: 0.30, neck: 1.30, nx: 0.50, ny: 0.66,  ns: 8, head: 0.54, snx: 1.30, snr: 0.46, tail: 3.0, tailR: 0.36, ts: 11, stand: 1.85, hump: 0.78, waist: 0.20, waistAt: 0.30, crook: 0.20, narc: 0.40, neckR: 1.45, neckTap: 0.54, tailBase: 1.35, tailTap: 0.52, view: [0.58, 0.26, 0.77] , blend: 0.52, ribs: 0.24, keel: 0.86}, // 46 sire: the body is SHORT so the neck and the tail are long on screen
-    { a: 0.74, b: 0.30, seg: 11, prof: 'insect', arch: 0.86, droop: 0.22, wide: 0.10, neck: 0.98, nx: 0.74, ny: -0.48, ns: 4, head: 0.34, snx: 0.88, snr: 0.28, tail: 2.1, tailR: 0.16, ts: 11, stand: 2.65, hump: 0.94, waist: 0.30, waistAt: 0.26, crook: 1.0 , blend: 0.22, ribs: 0.60, keel: 0.66}, // 47 null: two crooked legs, a head below the shoulder line, and nothing else
+    { a: 1.00, b: 0.88, seg: 11, prof: 'animal', arch: 0.34, droop: 0.02, wide: 0.58, neck: 0.52, nx: 0.94, ny: -0.26, ns: 2, head: 0.64, snx: 1.05, snr: 0.62, tail: 0.0, tailR: 0.14, ts: 4, stand: 1.32, hump: 0.78, waist: 0.16, waistAt: 0.22, crook: 0.5 , blend: 0.45, ribs: 0.20, keel: 0.38, flesh: 0.82, ribcage: 0.55, spineRow: 0.40, scap: 0.85, pelvis: 0.65, digi: 0.25}, // 38 bloom: everything forward, nothing behind, and the face is the mouth
+    { a: 0.86, b: 0.46, seg: 9,  prof: 'tube',   arch: 0.12, droop: 0.26, wide: 0,    neck: 0.62, nx: 0.88, ny: -0.24, ns: 3, head: 0.30, snx: 0.78, snr: 0.26, tail: 1.5, tailR: 0.11, ts: 10, stand: 0.90, hump: 0.55, crook: 0.7, view: [0.42, 0.56, 0.72] , blend: 0.22, ribs: 0.48, keel: 0.00, flesh: 0.50, ribcage: 0.95, spineRow: 0.85, scap: 0.55, pelvis: 0.35, digi: 0.80}, // 39 kite: a starved body hanging under a span four times its length
+    { a: 0.78, b: 0.54, seg: 11, prof: 'animal', arch: 0.74, droop: 0.34, wide: 0.54, neck: 0.58, nx: 0.42, ny: -0.92, ns: 2, head: 0.26, snx: 0.40, snr: 0.32, tail: 0.0, tailR: 0.12, ts: 4, stand: 2.85, hump: 0.99, waist: 0.54, waistAt: 0.20, waistW: 0.09, crook: 0.8 , blend: 0.28, ribs: 0.32, keel: 0.62, flesh: 0.54, ribcage: 0.90, spineRow: 0.98, scap: 1.00, pelvis: 0.18, digi: 0.88}, // 40 gibbet: a shoulder yoke with no hips, head hanging inside the chest
+    { a: 1.18, b: 0.96, seg: 11, prof: 'blob',   arch: 0.04, droop: 0.58, wide: 0.64, neck: 0.88, nx: 0.92, ny: -0.30, ns: 2, head: 0.30, snx: 0.62, snr: 0.30, tail: 0.5, tailR: 0.11, ts: 5, stand: 2.00, hump: 0.18, crook: 0.38 , blend: 0.80, ribs: 0.08, keel: 0.00, flesh: 0.94, ribcage: 0.22, spineRow: 0.18, scap: 0.30, pelvis: 0.55, digi: 0.92}, // 41 cradle: a hanging belly on six legs that cannot carry it
+    { a: 1.32, b: 0.58, seg: 13, prof: 'insect', arch: 0.32, droop: 0.00, wide: 0.14, neck: 0.58, nx: 0.82, ny: -0.40, ns: 3, head: 0.26, snx: 0.74, snr: 0.28, tail: 1.9, tailR: 0.22, ts: 9, stand: 1.40, tailUp: 1.0, hump: 0.72, waist: 0.64, waistAt: 0.42, waistW: 0.09, crook: 0.4 , blend: 0.12, ribs: 0.58, keel: 0.22, flesh: 0.60, ribcage: 0.72, spineRow: 0.62, scap: 0.50, pelvis: 0.50, digi: 1.00}, // 42 thresher: two lobes, blade arms, the metasoma over the back
+    { a: 1.20, b: 0.42, seg: 9,  prof: 'round',  arch: 0.14, droop: 0.00, wide: 1.60, neck: 0.66, nx: 0.92, ny: -0.46, ns: 2, head: 0.26, snx: 0.50, snr: 0.26, tail: 0.0, tailR: 0.12, ts: 4, stand: 1.30, hump: 0.30, crook: 0.55 , blend: 0.20, ribs: 0.26, keel: 0.90, flesh: 0.54, ribcage: 1.00, spineRow: 0.50, scap: 0.40, pelvis: 0.40, digi: 0.90}, // 43 pall: a lid. Wider than it is long, eight crooked legs, nothing above the rim
+    { a: 1.70, b: 0.56, seg: 17, prof: 'tube',   arch: 0.58, droop: 0.00, wide: 0.10, neck: 1.35, nx: 0.42, ny: 0.94,  ns: 6, head: 0.34, snx: 0.52, snr: 0.34, tail: 1.0, tailR: 0.14, ts: 7, stand: 0.95, flex: 1, hump: 0.97, crook: 0.5 , blend: 0.08, ribs: 0.66, keel: 0.18, flesh: 0.72, ribcage: 0.48, spineRow: 0.78, scap: 0.20, pelvis: 0.20, digi: 0.60}, // 44 husk: two thirds on the floor, the front third standing up
+    { a: 0.70, b: 0.64, seg: 9,  prof: 'insect', arch: 0.22, droop: 0.00, wide: 0.36, neck: 0.58, nx: 0.84, ny: -0.22, ns: 2, head: 0.36, snx: 0.66, snr: 0.36, tail: 1.7, tailR: 0.20, ts: 8, stand: 0.88, tailUp: 0.85, hump: 0.45, waist: 0.52, waistAt: 0.38, waistW: 0.10, crook: 0.5 , blend: 0.18, ribs: 0.52, keel: 0.34, flesh: 0.62, ribcage: 0.68, spineRow: 0.58, scap: 0.60, pelvis: 0.50, digi: 0.85}, // 45 wrack: short broad wings on a pinched body: the opposite of the kite
+    { a: 1.02, b: 0.86, seg: 11, prof: 'animal', arch: 0.42, droop: 0.04, wide: 0.26, neck: 1.95, nx: 0.56, ny: 0.72,  ns: 8, head: 0.46, snx: 1.20, snr: 0.40, tail: 2.2, tailR: 0.30, ts: 11, stand: 1.95, hump: 0.80, waist: 0.22, waistAt: 0.30, crook: 0.25, view: [0.26, 0.30, 0.92] , blend: 0.52, ribs: 0.24, keel: 0.78, flesh: 0.66, ribcage: 0.88, spineRow: 1.00, scap: 0.92, pelvis: 0.82, digi: 0.70}, // 46 sire: the body is SHORT so the neck and the tail are long on screen
+    { a: 0.82, b: 0.54, seg: 11, prof: 'insect', arch: 0.86, droop: 0.22, wide: 0.10, neck: 0.98, nx: 0.74, ny: -0.48, ns: 4, head: 0.34, snx: 0.88, snr: 0.28, tail: 2.1, tailR: 0.16, ts: 11, stand: 2.65, hump: 0.94, waist: 0.30, waistAt: 0.26, crook: 1.0 , blend: 0.22, ribs: 0.60, keel: 0.66, flesh: 0.56, ribcage: 1.00, spineRow: 1.00, scap: 0.72, pelvis: 0.75, digi: 1.00}, // 47 null: two crooked legs, a head below the shoulder line, and nothing else
   ];
   const BODY_RANGE = { len: [0.6, 1.6], girth: [0.7, 1.45], neck: [0, 2.2], tail: [0, 1.8] };
   function planProfile(kind, u) {
@@ -4226,7 +4234,9 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
       }
     }
   }
-  const SKIN_REACH = 1.55, SKIN_ISO = 0.5;
+  // SKIN_ISO must be the level the mesher extracts at, which is zero. Any
+  // other value pins every part to a surface that is not the one drawn.
+  const SKIN_REACH = 1.55, SKIN_ISO = 0.0;
   // Rest-pose skeleton for a design. The number and order of balls depends
   // only on the plan, never on the body sliders, so part anchors (which store
   // a ball index) survive any slider change.
@@ -4291,31 +4301,13 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
     const shoulderY = spineY(0.86);
     const hx = a * 0.78 + neckLen * P.nx, hy = shoulderY + b * 0.30 + neckLen * P.ny;
     const nx0 = a * 0.70, ny0 = shoulderY + b * 0.22;
-    // ---- narc: the neck is an S, not a ray ---------------------------------
-    // A straight chain of balls from shoulder to skull reads as a bird at any
-    // length, because the eye classifies on the NUMBER OF ARCS before it looks
-    // at proportion. One arc is a swan. Two is a dragon. narc bows the chain
-    // one way over its first half and back over its second; both endpoints are
-    // untouched, so the head lands exactly where every part anchor, the bite
-    // reach and the look-at code already expect it, and narc 0 reproduces the
-    // old straight neck to the byte.
-    // neckR thickens the whole chain and neckTap sets how fast it narrows into
-    // the skull: a heavy animal needs a neck that is visibly carrying the head,
-    // and a constant-width tube reads as a hose.
-    const narc = P.narc || 0;
-    const ntap = P.neckTap == null ? 0.34 : P.neckTap;
-    const nRm = P.neckR == null ? 1 : P.neckR;
-    const ndx = hx - nx0, ndy = hy - ny0;
-    const nlen = Math.hypot(ndx, ndy) || 1;
-    const npx = -ndy / nlen, npy = ndx / nlen;      // perpendicular, in the body plane
     for (let i = 1; i <= P.ns; i++) {
       const u = i / (P.ns + 1);
       // Thickness comes off the BODY, not a flat 0.34: on a big animal a
       // constant-width neck vanishes, which is why the long-necked plans all
       // rendered as a snout stuck on a log.
-      const r = neckLen > 0.12 ? (0.30 + 0.55 * b) * (1 - ntap * u) * (1 + NK * 0.10) * nRm : 0.0001;
-      const bow = narc * nlen * 0.42 * Math.sin(2 * Math.PI * u);
-      balls.push({ x: nx0 + ndx * u + npx * bow, y: ny0 + ndy * u + npy * bow, z: 0, r, g: 'neck', hide: neckLen <= 0.12 });
+      const r = neckLen > 0.12 ? (0.30 + 0.55 * b) * (1 - 0.34 * u) * (1 + NK * 0.10) : 0.0001;
+      balls.push({ x: nx0 + (hx - nx0) * u, y: ny0 + (hy - ny0) * u, z: 0, r, g: 'neck', hide: neckLen <= 0.12 });
     }
     const headIdx = balls.length;
     const hr = P.head;
@@ -4335,13 +4327,7 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
       const ang = 0.12 + 0.18 * u - tup * (0.30 + 1.55 * u);
       tx -= seg * Math.cos(ang);
       ty -= seg * Math.sin(ang) * 0.6;
-      // tailTap: how fast the tail loses width along its length. 0.78 is the
-      // old fixed value. A whip wants it high; a counterweight wants it low,
-      // because a tail that has thinned to a thread by half its length has no
-      // mass left to read as mass however long it is.
-      const ttap = P.tailTap == null ? 0.78 : P.tailTap;
-      const troot = 1 + (P.tailBase || 0) * Math.exp(-(u / 0.34) * (u / 0.34));
-      const r = tl > 0.05 ? Math.max(0.03, tr0 * (1 - ttap * u) * troot) : 0.0001;
+      const r = tl > 0.05 ? Math.max(0.03, tr0 * (1 - 0.78 * u)) : 0.0001;
       balls.push({ x: tx, y: ty, z: 0, r, g: 'tail', hide: tl <= 0.05 });
     }
     const sk = { balls, a, b, headIdx, tailStart, tailLen: tl, neckLen, NK, plan: P, flex: !!P.flex };
@@ -4376,10 +4362,40 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
     if (Math.sign(y) * a2 * y2 < k) return Math.sqrt(x2 + y2) * il2 - ra;
     return (Math.sqrt(x2 * a2 * il2) + y * rr) * il2 - ra;
   }
-  function primDist(q, x, y, z) {
-    return q.t === 's' ? Math.hypot(x - q.ax, y - q.ay, z - q.az) - q.ra
-                       : sdRoundCone(x, y, z, q.ax, q.ay, q.az, q.bx, q.by, q.bz, q.ra, q.rb);
+  // An oriented rounded box. rr is the corner radius: 0 is a hard slab with
+  // flat faces and sharp edges, and raising it rounds the whole thing back
+  // toward a pill. This is the shape the creature vocabulary did not have.
+  function sdRoundBox(px, py, pz, q) {
+    const dx = px - q.ax, dy = py - q.ay, dz = pz - q.az;
+    const u = dx * q.ex[0] + dy * q.ex[1] + dz * q.ex[2];
+    const v = dx * q.ey[0] + dy * q.ey[1] + dz * q.ey[2];
+    const w = dx * q.ez[0] + dy * q.ez[1] + dz * q.ez[2];
+    const rr = q.rr || 0;
+    const qx = Math.abs(u) - (q.hx - rr), qy = Math.abs(v) - (q.hy - rr), qz = Math.abs(w) - (q.hz - rr);
+    const ox = Math.max(qx, 0), oy = Math.max(qy, 0), oz = Math.max(qz, 0);
+    return Math.sqrt(ox * ox + oy * oy + oz * oz) + Math.min(Math.max(qx, Math.max(qy, qz)), 0) - rr;
   }
+  // An axis-aligned-in-local-space ellipsoid, exactly as the mesher draws it.
+  // It used to fall through to the round-cone branch and return NaN, which
+  // poisoned the whole field.
+  function sdEllipsoid(px, py, pz, q) {
+    const dx = px - q.ax, dy = py - q.ay, dz = pz - q.az;
+    const u = (dx * q.ex[0] + dy * q.ex[1] + dz * q.ex[2]) / q.rx;
+    const v = (dx * q.ey[0] + dy * q.ey[1] + dz * q.ey[2]) / q.ry;
+    const w = (dx * q.ez[0] + dy * q.ez[1] + dz * q.ez[2]) / q.rz;
+    const k0 = Math.hypot(u, v, w);
+    const k1 = Math.hypot(u / q.rx, v / q.ry, w / q.rz);
+    return k1 > 1e-9 ? k0 * (k0 - 1) / k1 : -Math.min(q.rx, q.ry, q.rz);
+  }
+  function primDist(q, x, y, z) {
+    if (q.t === 's') return Math.hypot(x - q.ax, y - q.ay, z - q.az) - q.ra;
+    if (q.t === 'b') return sdRoundBox(x, y, z, q);
+    if (q.t === 'e') return sdEllipsoid(x, y, z, q);
+    return sdRoundCone(x, y, z, q.ax, q.ay, q.az, q.bx, q.by, q.bz, q.ra, q.rb);
+  }
+  // smooth maximum, for cutting. -smin(-a, -b, k) with the same blend radius,
+  // so a carved edge is as soft or as sharp as a welded one.
+  function smax(a, b, k) { return -smin(-a, -b, k); }
   function buildBodyPrims(sk) {
     const B = sk.balls, P = sk.plan;
     const live = (i) => B[i] && !B[i].hide;
@@ -4393,7 +4409,127 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
     // A smooth minimum at 0.26 b melts every joint in the chain, which is why
     // every plan came out as one lozenge. Low blend leaves the creases in.
     const kb = 0.26 * sk.b * (P.blend == null ? 1 : P.blend);
-    for (let i = 0; i + 1 < P.seg; i++) cone(i, i + 1, body, kb);
+
+    // ---- the armature ------------------------------------------------------
+    // Emitted straight into the primitive list rather than into sk.balls: the
+    // balls are the anchor coordinate system that every saved part indexes
+    // into, and adding to it would move every anchor on every saved creature.
+    const cage = P.ribcage || 0;         // how much of the girth the ribs carry
+    const proc = P.spineRow || 0;        // dorsal processes off each vertebra
+    const scap = P.scap || 0;            // shoulder blades
+    const pelv = P.pelvis || 0;          // hip plates
+    const flesh = P.flesh == null ? 1 : P.flesh;   // meat over the cage
+    if (cage > 0 || proc > 0 || scap > 0 || pelv > 0) {
+      const ax = sk.a, bb = sk.b;
+      const spineAt = (u) => {
+        const i = Math.min(P.seg - 1, Math.max(0, Math.round(u * (P.seg - 1))));
+        return B[i];
+      };
+      const kBone = kb * 0.55;           // bone welds hard; flesh is what melts
+
+      // -- ribs ---------------------------------------------------------------
+      // A rib leaves the backbone, bows OUT at the middle of its arc and comes
+      // back IN at the tip, so the two sides reach toward each other under the
+      // belly and stop short. z = w sin(th), y = -h (1 - cos th) / 2. An arc
+      // that only ever grows is a row of spokes off a stick, which is what the
+      // first version of the carcass ribs looked like.
+      if (cage > 0) {
+        const RN = 6;                    // segments per rib: a curve, not four tubes
+        const pairs = 4;
+        for (let r = 0; r < pairs; r++) {
+          const u = 0.24 + r * 0.185;    // over the chest, not the whole body
+          const v = spineAt(u);
+          if (!v || v.hide || v.r < 0.02) continue;
+          const w = v.r * (1.0 + 1.25 * cage);          // how far out the cage reaches
+          const h = v.r * (1.15 + 0.5 * cage);          // how far down it wraps
+          // thick enough to survive extraction AND to nearly meet its neighbour
+          const rr = Math.max(0.055 * sk.a, v.r * 0.30);
+          const lean = (u - 0.5) * 0.55 * ax;           // the cage rakes back
+          for (const side of [1, -1]) {
+            let prev = [v.x, v.y + v.r * 0.30, 0];
+            for (let q = 1; q <= RN; q++) {
+              const th = (q / RN) * 2.42;               // stops short of pi
+              const pt2 = [v.x - lean * (q / RN),
+                           v.y + v.r * 0.30 - h * (1 - Math.cos(th)) / 2,
+                           side * w * Math.sin(th)];
+              body.push({ t: 'c', ax: prev[0], ay: prev[1], az: prev[2],
+                          bx: pt2[0], by: pt2[1], bz: pt2[2],
+                          ra: rr * (1.12 - 0.25 * q / RN), rb: rr * (1.0 - 0.28 * q / RN),
+                          k: kBone, i: 0, j: 0 });
+              prev = pt2;
+            }
+          }
+        }
+      }
+
+      // -- dorsal processes ---------------------------------------------------
+      // A blade of bone standing up off each vertebra. This is what gives a
+      // back a RIDGE rather than a curve, and it is the single cheapest thing
+      // that stops a torso reading as a tube.
+      if (proc > 0) {
+        for (let i = 1; i < P.seg - 1; i++) {
+          const v = B[i];
+          if (!v || v.hide || v.r < 0.02) continue;
+          const u = i / (P.seg - 1);
+          const tall = v.r * proc * (0.85 + 1.15 * Math.sin(Math.PI * Math.pow(u, 0.8)));
+          const rr = Math.max(0.045 * sk.a, v.r * 0.22);
+          body.push({ t: 'c', ax: v.x, ay: v.y + v.r * 0.45, az: 0,
+                      bx: v.x - tall * 0.30, by: v.y + v.r * 0.45 + tall, bz: 0,
+                      ra: rr * 1.25, rb: rr * 0.45, k: kBone * 0.8, i: 0, j: 0 });
+        }
+      }
+
+      // -- scapulae -----------------------------------------------------------
+      // Flat, angled, and standing proud of the cage: a shoulder you can see
+      // the shape of under the skin.
+      // The core SDF is round cones and spheres only -- primDist treats anything
+      // that is not a sphere as a cone, so an ellipsoid here returns NaN and
+      // poisons the whole field, which is exactly what happened the first time:
+      // every part and limb on all ten failed to anchor because raySkin could
+      // not find a surface. A blade is a short wide cone lying along its own
+      // long axis, which reads the same from outside.
+      if (scap > 0) {
+        const v = spineAt(0.66);
+        if (v && !v.hide) {
+          const w = v.r * (0.95 + 0.5 * scap);
+          const len = v.r * (0.55 + 0.55 * scap);
+          for (const side of [1, -1]) {
+            body.push({ t: 'c',
+              ax: v.x - len * 0.55, ay: v.y + v.r * 0.55, az: side * w * 0.60,
+              bx: v.x + len * 0.35, by: v.y - v.r * 0.10, bz: side * w * 0.80,
+              ra: v.r * 0.30 * scap + v.r * 0.10, rb: v.r * 0.16 * scap + v.r * 0.07,
+              k: kBone, i: 0, j: 0 });
+          }
+        }
+      }
+
+      // -- pelvis -------------------------------------------------------------
+      if (pelv > 0) {
+        const v = spineAt(0.26);
+        if (v && !v.hide) {
+          const w = v.r * (0.90 + 0.45 * pelv);
+          const len = v.r * (0.50 + 0.50 * pelv);
+          for (const side of [1, -1]) {
+            body.push({ t: 'c',
+              ax: v.x - len * 0.30, ay: v.y + v.r * 0.55, az: side * w * 0.58,
+              bx: v.x + len * 0.50, by: v.y - v.r * 0.05, bz: side * w * 0.78,
+              ra: v.r * 0.26 * pelv + v.r * 0.10, rb: v.r * 0.14 * pelv + v.r * 0.07,
+              k: kBone, i: 0, j: 0 });
+          }
+        }
+      }
+    }
+    const fleshK = P.flesh == null ? 1 : P.flesh;
+    for (let i = 0; i + 1 < P.seg; i++) {
+      if (fleshK >= 0.999) { cone(i, i + 1, body, kb); continue; }
+      // shrink-wrapped: the spine is a backbone, not the body
+      if (!live(i) || !live(i + 1)) continue;
+      // keyed off the whole animal, because that is what sets the grid
+      const SPMIN = 0.026 * Math.max(sk.a * 2, sk.b * 4, (P.stand || 1) * 2);
+      body.push({ t: 'c', ax: B[i].x, ay: B[i].y, az: B[i].z, bx: B[i + 1].x, by: B[i + 1].y, bz: B[i + 1].z,
+                  ra: Math.max(vr(i) * fleshK, SPMIN), rb: Math.max(vr(i + 1) * fleshK, SPMIN),
+                  k: kb, i, j: i + 1 });
+    }
     const nearestSpine = (x, y, z) => {
       let bi = 0, bd = Infinity;
       for (let i = 0; i < P.seg; i++) { const d = Math.hypot(B[i].x - x, B[i].y - y, B[i].z - z); if (d < bd) { bd = d; bi = i; } }
@@ -4424,8 +4560,12 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
   function sdfSkin(sk, x, y, z, withTail) {
     let d = 1e9;
     const L = sk.prims;
-    for (let n = 0; n < L.length; n++) d = smin(d, primDist(L[n], x, y, z), L[n].k);
-    if (withTail) { const T = sk.tailPrims; for (let n = 0; n < T.length; n++) d = smin(d, primDist(T[n], x, y, z), T[n].k); }
+    // Additive pass. A subtractive primitive takes nothing away from empty
+    // space, so it has to wait until there is something to cut.
+    for (let n = 0; n < L.length; n++) { const q = L[n]; if (q.sub) continue; d = smin(d, primDist(q, x, y, z), q.k); }
+    if (withTail) { const T = sk.tailPrims; for (let n = 0; n < T.length; n++) { const q = T[n]; if (q.sub) continue; d = smin(d, primDist(q, x, y, z), q.k); } }
+    for (let n = 0; n < L.length; n++) { const q = L[n]; if (!q.sub) continue; d = smax(d, -primDist(q, x, y, z), q.k); }
+    if (withTail) { const T = sk.tailPrims; for (let n = 0; n < T.length; n++) { const q = T[n]; if (!q.sub) continue; d = smax(d, -primDist(q, x, y, z), q.k); } }
     return d;
   }
   // kept for callers that still think in fields: inside > 0.5, outside < 0.5
@@ -5062,13 +5202,13 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
         // No eyes on the front of the head at all -- they are pushed up and
         // back onto the skull, above and behind the petals, so the thing you
         // are looking into is a throat.
-        eyeAt('e_pit', 0.9, 0.72, -0.05, 0.40);
-        mouthAt('m_bloom', 1.15);
+        eyeAt('e_pit', 0.9, 0.80, -0.10, 0.34);
+        mouthAt('m_bloom', 1.90);
         put('s_blade', a * 0.30, b * 1.05, b * 0.34, 0.15, 1, 0.35, 1.05, true);
         put('s_blade', -a * 0.25, b * 0.92, b * 0.30, -0.2, 1, 0.35, 0.75, true);
         // four stumps under a body that overhangs them front and back
-        limb('l_thick',  a * 0.44, -b * 0.30,  b * 0.70,  a * 0.62, -st, b * 1.06, 0.30, 0.10, 0.10, 't_pad', 1.02);
-        limb('l_thick', -a * 0.36, -b * 0.30,  b * 0.66, -a * 0.52, -st, b * 1.00, -0.26, 0.10, 0.10, 't_pad', 0.86);
+        limb('l_thick',  a * 0.40, -b * 0.42,  b * 0.66,  a * 0.50, -st, b * 0.88, 0.08, 0.06, 0.04, 't_pad', 1.55);
+        limb('l_thick', -a * 0.34, -b * 0.42,  b * 0.62, -a * 0.44, -st, b * 0.84, -0.08, 0.06, 0.04, 't_pad', 1.35);
         break;
       case 39: // KITE. The wing is the animal.
         eyeAt('e_pit', 0.8, 0.55, 0.30, 0.42); mouthAt('m_hook', 0.9);
@@ -5111,7 +5251,7 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
         legRow('l_thin', [0.74, 0.26, -0.24, -0.72], { out: 0.98, up: 0.05, rake: 1.05, reach: 2.15, knee: 0.95, th: 0.66, tip: 't_talon' });
         break;
       case 44: // HUSK. Two thirds on the floor, the front third standing up.
-        eyeAt('e_pit', 0.9, 0.30, 0.38, 0.50); mouthAt('m_bloom', 0.95);
+        eyeAt('e_pit', 0.9, 0.30, 0.38, 0.50); mouthAt('m_bloom', 1.35);
         put('s_blade', a * 0.55, b * 1.05, b * 0.22, 0.3, 1, 0.3, 0.7, true);
         legRow('l_thin', [0.62, 0.36, 0.10, -0.16, -0.42, -0.68], { out: 0.82, rake: 0.7, reach: 1.05, knee: 0.5, th: 0.62, tip: 't_talon' });
         tailPut('s_spike', 0.9);
@@ -5125,11 +5265,11 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
         tailPut('s_sting', 1.2);
         break;
       case 46: // SIRE. Short body, long neck, long tail, and a real wing on it.
-        eyeAt('e_slit', 0.95, 0.52, 0.30, 0.58);
-        mouthAt('m_rex', 1.10);
+        eyeAt('e_slit', 0.95, 0.48, 0.34, 0.56);
+        mouthAt('m_bloom', 1.20);
         put('h_curved', head.x - hr * 0.30, head.y + hr * 0.9, hr * 0.38, -0.35, 1, 0.4, 1.15, true);
         put('h_straight', head.x - hr * 0.60, head.y + hr * 0.7, hr * 0.30, -0.6, 0.9, 0.4, 0.75, true);
-        put('w_bat', a * 0.10, b * 0.86, b * 0.80, 0, 0.94, 0.34, 3.6, true);
+        put('w_bat', a * 0.08, b * 0.76, b * 0.50, 0, 0.7, 0.72, 3.6, true);
         put('s_blade', -a * 0.40, b * 0.96, b * 0.22, -0.3, 1, 0.3, 0.9, true);
         limb('l_leg',  a * 0.48, -b * 0.28,  b * 0.58,  a * 0.56, -st, b * 0.76, 0.16, 0, 0.05, 't_talon', 1.05);
         limb('l_leg', -a * 0.46, -b * 0.28,  b * 0.58, -a * 0.56, -st, b * 0.76, -0.16, 0, 0.05, 't_talon', 1.20);
@@ -6010,15 +6150,30 @@ fn fbm(p: vec2<f32>) -> f32 { return tn(p) * 0.5 + tn(p * 2.03 + vec2<f32>(5.2, 
   col = mix(col, rock, rockK);
   // sand darkens where waves wet it
   let sea = g.params.w;
-  let wet = (1.0 - smoothstep(sea + 0.5, sea + 5.0, i.wpos.y)) * step(sea - 30.0, i.wpos.y);
-  col *= 1.0 - 0.3 * wet;
+  let shore = (1.0 - smoothstep(sea + 0.5, sea + 5.0, i.wpos.y)) * step(sea - 30.0, i.wpos.y);
+  // rain wets the whole island, and water RUNS OFF: a slope stays darker than
+  // it was but flat ground holds a film and the hollows hold standing water.
+  let rainW = g.fogCol.w;
+  let flat = smoothstep(0.16, 0.02, slope);
+  let puddle = smoothstep(0.60, 0.82, fbm(xz * 0.022 + vec2<f32>(11.3, 4.1))) * flat * smoothstep(0.30, 0.80, rainW);
+  let wet = clamp(max(shore, rainW * (0.30 + 0.70 * flat)), 0.0, 1.0);
+  col *= 1.0 - 0.34 * wet - 0.22 * puddle;
   // bump from the fine noise so the sun rakes across the ground
   let e = 1.5;
   let h0 = fbm(xz * 0.09); let hx = fbm((xz + vec2<f32>(e, 0.0)) * 0.09); let hz = fbm((xz + vec2<f32>(0.0, e)) * 0.09);
   N = normalize(N + vec3<f32>(h0 - hx, 0.0, h0 - hz) * 2.2 * det * (0.4 + 0.6 * rockK));
+  // standing water fills the relief in rather than covering it: the normal
+  // goes back to flat inside a puddle, which is what makes it a mirror
+  N = normalize(mix(N, normalize(i.nrm), puddle * 0.88));
   var lit = shade(col, N, i.wpos);
   let V = normalize(g.camPos.xyz - i.wpos);
-  lit += vec3<f32>(0.5) * pow(max(dot(reflect(-normalize(g.lightDir.xyz), N), V), 0.0), 40.0) * wet * 0.25 * g.params.z;
+  let R = reflect(-normalize(g.lightDir.xyz), N);
+  // two lobes again: a broad wet sheen over the whole soaked surface and a
+  // tight one for the puddles, plus the sky a puddle reflects at a glance
+  lit += vec3<f32>(0.5) * pow(max(dot(R, V), 0.0), 40.0) * wet * 0.30 * g.params.z;
+  lit += vec3<f32>(1.0, 0.99, 0.95) * pow(max(dot(R, V), 0.0), 320.0) * puddle * 1.5 * g.params.z;
+  let fres = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0);
+  lit = mix(lit, mix(lit, g.fogCol.rgb * 1.15, clamp(fres, 0.0, 1.0)), puddle * 0.85);
   return vec4<f32>(lit, 1.0);
 }`;
 
@@ -6242,7 +6397,18 @@ fn shingle(u: f32, v: f32, rad: f32) -> vec3<f32> {
 }
 @fragment fn fs(i: VO) -> @location(0) vec4<f32> {
   let p = i.opos; let n = normalize(i.onrm);
-  let pk = i.misc.x;
+  var pk = i.misc.x;
+  // ---- VEIL: stochastic transparency. A dithered discard is see-through
+  // without a blend, which means no second pipeline and no sort order, and
+  // the noise moving at 14 Hz is what makes it shimmer rather than screen-door.
+  let gq = floor(pk / 1024.0 + 0.001);
+  if (gq > 0.5) {
+    let ghost = gq / 15.0;
+    let px = floor(i.pos.xy);
+    let hp = fract(sin(dot(px, vec2<f32>(12.9898, 78.233)) + floor(g.params.x * 14.0) * 1.7) * 43758.5453);
+    if (hp < ghost) { discard; }
+    pk = pk - gq * 1024.0;
+  }
   let skin = floor(pk / 16.0 + 0.001);
   let pat = pk - skin * 16.0;
   let edge = fbm(p * 2.2) - 0.5;
@@ -6278,7 +6444,6 @@ fn shingle(u: f32, v: f32, rad: f32) -> vec3<f32> {
   // it. aniso stretches each row's highlight ALONG the row.
   var aniso = 0.0;
   var wet = 1.0;            // how much fluid this covering carries, 0..1
-  var shed = 1.0;           // how much of the WORLD's wetness this covering keeps
   var cavity = 1.0;         // 1 on a ridge, 0 deep in a crease
   let belly = clamp(-n.y, 0.0, 1.0);
   let arc = atan2(p.z, p.y) * max(0.15, length(p.yz));
@@ -6292,27 +6457,27 @@ fn shingle(u: f32, v: f32, rad: f32) -> vec3<f32> {
     amp = 0.46 / sf; gloss = 1.45;
     // each scale is a hard little lens: anisotropic along the row, and the
     // seam between two scales is a cavity that holds fluid
-    aniso = 0.62; wet = 1.0; shed = 1.0; cavity = smoothstep(0.0, 0.22, sh.y);
+    aniso = 0.62; wet = 1.0; cavity = smoothstep(0.0, 0.22, sh.y);
   } else if (skin > 1.5 && skin < 2.5) {   // feathers: long shingles lying toward the tail
     let sh = shingle(p.x * 4.2 + fbm(p * 2.0) * 0.4, arc * 6.5, 0.78);
     h = sh.x;
     let barbs = 0.5 + 0.5 * sin(arc * 60.0 + p.x * 8.0);
     tone = mix(0.72, 1.08, sh.x) * (0.9 + 0.2 * sh.z) * (0.95 + 0.06 * barbs);
-    amp = 0.035; gloss = 0.55; fuzz = 0.25; aniso = 0.35; wet = 0.30; shed = 0.55; cavity = smoothstep(0.0, 0.3, sh.y);
+    amp = 0.035; gloss = 0.55; fuzz = 0.25; aniso = 0.35; wet = 0.30; cavity = smoothstep(0.0, 0.3, sh.y);
   } else if (skin > 2.5 && skin < 3.5) {   // fur: fine strands combed back, fuzzy silhouette
     let q = vec3<f32>(p.x * 10.0 + fbm(p * 4.0) * 1.5, p.y * 55.0, p.z * 55.0);
     h = vnoise(q) * 0.7 + vnoise(q * 2.3 + 7.0) * 0.3;
     tone = 0.9 + 0.16 * h;
-    amp = 0.012; gloss = 0.25; fuzz = 0.55; aniso = 0.0; wet = 0.12; shed = 0.30; cavity = 1.0;
+    amp = 0.012; gloss = 0.25; fuzz = 0.55; aniso = 0.0; wet = 0.12; cavity = 1.0;
   } else if (skin > 3.5) {                 // armour plates: big flat plates with deep seams
     let w = worleyV(p * mix(5.5, 9.0, belly));
     let e = w.d2 - w.d1;
     h = smoothstep(0.0, 0.1, e) * (1.0 - 0.15 * w.d1);
     tone = mix(0.6, 1.0, smoothstep(0.0, 0.07, e)) * (0.9 + 0.2 * w.id);
-    amp = 0.1; gloss = 2.2; aniso = 0.18; wet = 0.85; shed = 0.90; cavity = smoothstep(0.0, 0.055, e);
+    amp = 0.1; gloss = 2.2; aniso = 0.18; wet = 0.85; cavity = smoothstep(0.0, 0.055, e);
   } else {                                 // smooth, leathery micro relief
     h = fbm(p * 26.0) * 0.5;
-    amp = 0.012; gloss = 1.0; aniso = 0.0; wet = 1.0; shed = 1.0; cavity = 0.5 + h;
+    amp = 0.012; gloss = 1.0; aniso = 0.0; wet = 1.0; cavity = 0.5 + h;
   }
   col *= tone;
   var N = normalize(i.nrm);
@@ -6336,13 +6501,12 @@ fn shingle(u: f32, v: f32, rad: f32) -> vec3<f32> {
   // film; exposed dermis soaks.
   let downface = clamp(0.5 - 0.5 * Ngeo.y, 0.0, 1.0);
   let pool = clamp((1.0 - cavity) * 0.75 + downface * 0.45, 0.0, 1.0);
-  // The world's own wetness -- dew, night, standing water, and the builder's
-  // display film -- weighted by what this covering does with fluid. Fur sheds
-  // it, plate holds a film, bare dermis soaks. It can only ever ADD, so a
-  // covering that is already wet by nature is unchanged.
-  let wetW = clamp(g.fogCol.w, 0.0, 1.0) * shed;
-  let wetC = max(wet, wetW);
-  let wetLevel = clamp(wetC * (0.55 + 0.45 * pool), 0.0, 1.0);
+  let dryWet = wet * (0.55 + 0.45 * pool);
+  // fogCol.w is the weather. A fur coat sheds most of it and a chitin plate
+  // sheets it, so the covering's own wetness doubles as how much rain sticks.
+  let shed = 0.30 + 0.70 * wet;
+  let rainWet = g.fogCol.w * shed * (0.45 + 0.55 * pool);
+  let wetLevel = clamp(max(dryWet, rainWet), 0.0, 1.0);
   // porosity straight off gloss: no extra map, no extra vertex data. Plate and
   // bone come out near zero and so do not darken; dermis comes out near one.
   let porosity = clamp(-2.5 * (gloss * 0.45) + 1.25, 0.0, 1.0);
@@ -6563,7 +6727,20 @@ fn barkTri(p: vec3<f32>, N: vec3<f32>, fine: f32, da: f32, dy: f32) -> f32 {
       N = normalize(N - (T * gA * 0.55 + vec3<f32>(0.0, 1.0, 0.0) * gY * 0.9) * det);
     }
   }
+  // rain: bark soaks and goes dark, a leaf holds a bead and catches the sky.
+  // A leaf is a waxy surface and a trunk is not, so the leaf keeps more of its
+  // colour and gets the hard little highlight, and the bark just goes dark.
+  let wetW = g.fogCol.w;
+  let isLeaf = i.leaf > 0.5;
+  col *= 1.0 - select(0.34, 0.20, isLeaf) * wetW;
   var lit = shade(col, N, i.wpos);
+  if (wetW > 0.01) {
+    let Lw = normalize(g.lightDir.xyz);
+    let Vw = normalize(g.camPos.xyz - i.wpos);
+    let Hw = normalize(Lw + Vw);
+    let gl = pow(max(dot(N, Hw), 0.0), select(80.0, 240.0, isLeaf));
+    lit += vec3<f32>(0.95, 1.0, 1.0) * gl * wetW * select(0.20, 0.60, isLeaf) * g.params.z;
+  }
   if (metalSpec > 0.0) { lit += vec3<f32>(0.78, 0.80, 0.84) * metalSpec * shadowAt(i.wpos, N); }
   if (glow > 0.0) {
     // bright enough to carry at night, and it does not take the fog's grade
@@ -8455,6 +8632,7 @@ function buildPipelines() {
 function makeBindGroups() {
   const SE = r2ShadowEntries();
   try { cloudInit(); } catch (e) { console.warn('cloud pipeline', e); }
+  try { rainInit(); } catch (e) { console.warn('rain pipeline', e); }
   folBind = dev.createBindGroup({ layout: folPipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: gBuf } }].concat(SE) });
   skinBind = dev.createBindGroup({ layout: skinPipe.getBindGroupLayout(0), entries: [
     { binding: 0, resource: { buffer: gBuf } }, { binding: 1, resource: { buffer: boneBuf } }].concat(SE) });
@@ -9368,7 +9546,8 @@ const v3 = {
 const colMul = (c, k) => [Math.min(1, c[0] * k), Math.min(1, c[1] * k), Math.min(1, c[2] * k)];
 const colMix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 const colHi = (c) => [Math.min(1, c[0] * 1.18 + 0.16), Math.min(1, c[1] * 1.18 + 0.16), Math.min(1, c[2] * 1.18 + 0.16)];
-const IVORY = [0.94, 0.91, 0.82], KERATIN = [0.30, 0.24, 0.20], BLACKP = [0.03, 0.03, 0.04], WHITE = [0.97, 0.97, 0.95];
+// Bone and keratin on a living animal are dull and dirty, not enamel white.
+const IVORY = [0.58, 0.55, 0.47], KERATIN = [0.22, 0.18, 0.15], BLACKP = [0.03, 0.03, 0.04], WHITE = [0.72, 0.71, 0.67];
 const MAW = [0.32, 0.07, 0.09], TONGUE = [0.86, 0.42, 0.46];
 
 // Local drawing frame. P origin (world), X/Y/Z world unit axes, S scale.
@@ -9580,8 +9759,8 @@ const VIS = {
       const z = (i - 1.5) * 0.28, y = 0.52 + (1.5 - Math.abs(i - 1.5)) * 0.06;
       g.cn(-0.28 - o * 0.5, y, z, 1, 0.1, 0, 0.07, 0.26, IVORY);
     }
-    drool(g, e, 0.26, 0.22, 0.34, 2, 0.26 + o * 0.28, (e.seed || 0) + 0.9, JAW_F_UP);
-    lipTendrils(g, e, 0.28, 0.14, 0.23, 2, 0.11, 0.24, JAW_F_UP);
+    drool(g, e, 0.22, 0.26, 0.34, 2, 0.26 + o * 0.28, (e.seed || 0) + 0.9);
+    lipTendrils(g, e, 0.14, 0.28, 0.30, 2, 0.14, 0.30);
   } },
   m_maw: { name: 'fanged maw', cat: 'mouth', size: 0.56, col: 'base', draw(g, c, e) {
     const o = 0.18 + e.chomp * 0.3;
@@ -9594,8 +9773,8 @@ const VIS = {
     for (const s of [1, -1]) g.cn(-0.34 - o * 0.5, 0.62, s * 0.62, 1, 0.2, 0, 0.1, 0.5, IVORY);
     lollTongue(g, e, -0.28, 0.28, 0.56, 0.17, o);
     innerJaw(g, e, -0.34, 0.32, 1.0, o);
-    drool(g, e, 0.24, 0.30, 0.46, 2, 0.30 + o * 0.34, (e.seed || 0) + 1.7, JAW_F_UP);
-    lipTendrils(g, e, 0.30, 0.20, 0.60, 2, 0.28, 0.36, JAW_F_UP);
+    drool(g, e, 0.30, 0.24, 0.46, 2, 0.30 + o * 0.34, (e.seed || 0) + 1.7);
+    lipTendrils(g, e, 0.20, 0.30, 0.60, 2, 0.28, 0.45);
   } },
   m_rex: { name: 'crushing jaw', cat: 'mouth', size: 0.66, col: 'base', use: 'a deep bone-cracking bite: the heaviest damage of any mouth, and the most genome space', draw(g, c, e) { dinoJawHard(g, c, e, jawShape('m_rex')); } },
   m_spino: { name: 'fishing jaw', cat: 'mouth', size: 0.5, col: 'base', use: 'long crocodile jaws full of conical teeth: extra reach, good in water', draw(g, c, e) { dinoJawHard(g, c, e, jawShape('m_spino')); } },
@@ -9608,20 +9787,11 @@ const VIS = {
   // revealed is a short soft pink throat with two small teeth in it -- small
   // and wet against the hard outer segments, because filling the middle with a
   // second set of fangs is what kills the contrast.
-  m_bloom: { name: 'split mandible', cat: 'mouth', size: 1.05, col: 'base',
+  m_bloom: { name: 'split mandible', cat: 'mouth', size: 0.44, col: 'base',
     use: 'four mandibles that unlatch and splay like a flower: the longest reach of any mouth',
     draw(g, c, e) {
       const o = 0.42 + e.chomp * 0.58;         // rests half open; 1 is fully splayed
       const hard = colMul(c, 0.82), lip = [0.52, 0.22, 0.26], gum = [0.62, 0.30, 0.33];
-      // The collar. Sunk BACK from the part origin so it overlaps the snout it
-      // is mounted on: without it the four blades hang in free air in front of
-      // a head, which is what "the mandible looks detached" means.
-      for (let i = 0; i < 6; i++) {
-        const an = (i / 6) * Math.PI * 2;
-        const cy = 0.30 + Math.sin(an) * 0.26, cz = Math.cos(an) * 0.26;
-        g.sp(-0.26, cy, cz, 1, 0, 0, 0.15, 0.24, 0.15, colMul(hard, 0.88));
-      }
-      g.ball(-0.34, 0.30, 0, 0.26, colMul(hard, 0.80));
       // the throat behind them: soft, short, and it does not grow when they open
       g.sp(-0.02, 0.30, 0, 0, 1, 0, 0.19, 0.26, 0.19, lip);
       g.ball(0.18, 0.32, 0, 0.17, gum);
@@ -9675,7 +9845,7 @@ const VIS = {
   // ---- no eye at all ----------------------------------------------------
   // A sunken field of pits in a shallow dish. There is nothing to meet, so the
   // player cannot tell whether they have been noticed -- which is the point.
-  e_pit: { name: 'pit field', cat: 'eyes', size: 0.34, col: [0.14, 0.12, 0.13],
+  e_pit: { name: 'pit field', cat: 'eyes', size: 0.26, col: [0.14, 0.12, 0.13],
     use: 'senses further than any eye and gives nothing back: a head wearing this has no face',
     draw(g, c, e) {
       g.sp(0, -0.04, 0, 0, 1, 0, 0.62, 0.10, 0.52, colMul(e.base, 0.82));
@@ -9762,7 +9932,7 @@ const VIS = {
     }
   } },
   // ---------------------------------------------------- spikes and armour
-  s_spike: { name: 'spike', cat: 'armor', size: 0.3, col: [0.90, 0.86, 0.76], draw(g, c, e) {
+  s_spike: { name: 'spike', cat: 'armor', size: 0.3, col: [0.54, 0.50, 0.43], draw(g, c, e) {
     g.sp(0, 0.05, 0, 0, 1, 0, 0.34, 0.14, 0.34, e.base);
     g.cn(0, 0, 0, -0.18, 1, 0, 0.3, 1.5, c);
   } },
@@ -9770,7 +9940,7 @@ const VIS = {
   // Five hard segments, each 0.88 of the one before, then a telson that BREAKS
   // the taper by swelling back out to roughly segment-two width before the
   // needle. A monotonic taper to a point reads as an antenna.
-  s_sting: { name: 'stinger tail', cat: 'armor', size: 0.95, col: [0.72, 0.66, 0.54],
+  s_sting: { name: 'stinger tail', cat: 'armor', size: 0.32, col: [0.24, 0.21, 0.17],
     use: 'five armoured segments and a venom bulb: the hardest-hitting tail weapon in the game',
     draw(g, c, e) {
       const curl = 0.34 + Math.sin(e.t * 1.6 + e.seed) * 0.06;
@@ -9801,7 +9971,7 @@ const VIS = {
   // Flat faces on edge instead of a cone. Each plate is a slab with one hard
   // edge facing out and a shorter counter-plate behind it, and the row leans so
   // no two catch the light at the same angle.
-  s_blade: { name: 'bone blades', cat: 'armor', size: 0.52, col: [0.86, 0.82, 0.72],
+  s_blade: { name: 'bone blades', cat: 'armor', size: 0.30, col: [0.50, 0.47, 0.41],
     use: 'angular plates of bone through the skin: cuts what hits you and turns what does not',
     draw(g, c, e) {
       const base = e.base;
@@ -9822,7 +9992,7 @@ const VIS = {
         g.sp(r0[0], r0[1], r0[2], 0, 1, 0, 0.17, 0.05, 0.13, base);
       }
     } },
-  s_quills: { name: 'quills', cat: 'armor', size: 0.3, col: [0.92, 0.90, 0.84], draw(g, c, e) {
+  s_quills: { name: 'quills', cat: 'armor', size: 0.3, col: [0.48, 0.45, 0.40], draw(g, c, e) {
     const dirs = [[-0.2, 1, 0], [-0.5, 1, 0.3], [-0.5, 1, -0.3], [0.1, 1, 0.45], [0.1, 1, -0.45], [-0.8, 1, 0]];
     dirs.forEach((d, i) => { g.cn(d[0] * 0.2, 0, d[2] * 0.2, d[0], d[1], d[2], 0.07, 1.5 + (i % 3) * 0.25, i % 2 ? c : e.detail); });
   } },
@@ -10153,17 +10323,15 @@ const GORE = [0.42, 0.06, 0.05];        // the inside of things
 // is thin, so it reads as one continuous line; the bead at the end is smaller
 // than the thread is thick at the top, which is what makes it read as a drip
 // about to fall rather than as a ball on a stick.
-function droolStrand(g, x, y, z, len, ph, t, r0, F0) {
-  const F = F0 || JAW_F_DEFAULT;
-  let p = jawPt(F, x, y, z);
+function droolStrand(g, x, y, z, len, ph, t, r0) {
+  let p = [x, y, z];
   const N = 6, R = r0 || 0.020;
   for (let i = 0; i < N; i++) {
     const u = (i + 1) / N;
     // the swing grows toward the free end, which is what makes it hang
     const sx = Math.sin(t * 1.6 + ph + u * 2.4) * 0.05 * u;
     const sz = Math.cos(t * 1.27 + ph * 1.7 + u * 2.0) * 0.04 * u;
-    const st = jawPt(F, sx * 0.35, -len / N, sz * 0.35);
-    const q = [p[0] + st[0], p[1] + st[1], p[2] + st[2]];
+    const q = [p[0] + sx * 0.35, p[1] - len / N, p[2] + sz * 0.35];
     const d = v3.sub(q, p), L = v3.len(d) || 1e-4, dn = v3.mul(d, 1 / L);
     g.cn(p[0], p[1], p[2], dn[0], dn[1], dn[2], R * (1 - 0.42 * (u - 1 / N)), L * 1.12,
          u > 0.65 ? SPIT_D : SPIT);
@@ -10174,18 +10342,8 @@ function droolStrand(g, x, y, z, len, ph, t, r0, F0) {
 // Saliva across a mouth: a few strands on their own phases, plus one bead
 // that has already broken off and is falling. Saliva that never parts is a
 // rubber band, and the eye notices.
-// The frame a mouth is drawn in: f along the muzzle, u up, s across. Omitted,
-// it is the dinosaur-jaw frame these helpers were originally written in.
-const JAW_F_DEFAULT = { f: [1, 0, 0], u: [0, 1, 0], s: [0, 0, 1] };
-// m_jaws and m_maw open along x and run along y: x is UP for them.
-const JAW_F_UP = { f: [0, 1, 0], u: [1, 0, 0], s: [0, 0, 1] };
-const jawPt = (F, af, au, as2) => [
-  F.f[0] * af + F.u[0] * au + F.s[0] * as2,
-  F.f[1] * af + F.u[1] * au + F.s[1] * as2,
-  F.f[2] * af + F.u[2] * au + F.s[2] * as2];
-function drool(g, e, x, y, halfW, n, len, seed, F0) {
+function drool(g, e, x, y, halfW, n, len, seed) {
   if (!gore(e)) return;
-  const F = F0 || JAW_F_DEFAULT;
   const t = e.t;
   for (let i = 0; i < n; i++) {
     const f = n === 1 ? 0 : (i / (n - 1)) * 2 - 1;
@@ -10194,14 +10352,13 @@ function drool(g, e, x, y, halfW, n, len, seed, F0) {
     const cyc = (t * 0.33 + i * 0.41 + seed * 0.11) % 1;
     const grow = cyc < 0.82 ? 0.30 + cyc * 0.85 : 0.12;        // snaps back short
     // hung off the lip line itself, not out of the middle of the muzzle
-    droolStrand(g, x, y, f * halfW, len * grow, ph, t, 0.020, F);
+    droolStrand(g, x, y, f * halfW, len * grow, ph, t, 0.020);
   }
   // The bead that let go. It falls a SHORT way and is small: the first cut
   // sent it a length and a half clear of the jaw, where it read as an
   // unrelated object floating beside the head.
   const d = (t * 0.55 + seed * 0.37) % 1;
-  const bp = jawPt(F, x + 0.03, y - len * (0.10 + d * 0.55), (seed % 1 - 0.5) * halfW * 0.8);
-  g.ball(bp[0], bp[1], bp[2], 0.026 * (1 - d * 0.4), SPIT);
+  g.ball(x + 0.03, y - len * (0.10 + d * 0.55), (seed % 1 - 0.5) * halfW * 0.8, 0.026 * (1 - d * 0.4), SPIT);
 }
 // A tongue that lolls: segments, drooping further and dragging sideways the
 // wider the mouth is open.
@@ -10257,22 +10414,20 @@ function innerJaw(g, e, x0, y0, scale, open) {
   }
 }
 // Cilia round the lips, each on its own phase so they never move as a block.
-function lipTendrils(g, e, x0, y0, halfW, n, len, back, F0) {
+function lipTendrils(g, e, x0, y0, halfW, n, len, back) {
   if (!gore(e)) return;
-  const F = F0 || JAW_F_DEFAULT;
   for (let i = 0; i < n; i++) {
     for (const sg of [1, -1]) {
       const u = n === 1 ? 0.5 : i / (n - 1);
       const ph = e.seed * 2.1 + i * 1.7 + (sg > 0 ? 0 : 0.9);
-      let p = jawPt(F, x0 - u * back, y0, sg * halfW * (0.7 + u * 0.35));
+      let p = [x0 - u * back, y0, sg * halfW * (0.7 + u * 0.35)];
       let d = [-0.25, -0.75, sg * 0.4];
       const N = 3, L = len * (0.7 + 0.5 * (1 - u));
       for (let k = 0; k < N; k++) {
         const w = Math.sin(e.t * 1.9 + ph + k * 0.8) * 0.20;
         d = v3.norm([d[0] - 0.12 + w * 0.3, d[1] - 0.10, d[2] + w * sg * 0.5]);
-        const dw = jawPt(F, d[0], d[1], d[2]);
-        const q = v3.add(p, v3.mul(dw, L / N));
-        g.cn(p[0], p[1], p[2], dw[0], dw[1], dw[2], 0.032 * (1 - k * 0.22), (L / N) * 1.08, colMul(GORE, 1.5 + k * 0.2));
+        const q = v3.add(p, v3.mul(d, L / N));
+        g.cn(p[0], p[1], p[2], d[0], d[1], d[2], 0.032 * (1 - k * 0.22), (L / N) * 1.08, colMul(GORE, 1.5 + k * 0.2));
         p = q;
       }
     }
@@ -10534,7 +10689,9 @@ function drawDesignOld(des, X) {
   const col = des.col || { base: [0.5, 0.6, 0.5], coat: [0.9, 0.9, 0.8], detail: [0.2, 0.3, 0.2], pat: 0 };
   const base = X.tint ? colMix(col.base, X.tint, X.tintK) : col.base;
   const coat = X.tint ? colMix(col.coat, X.tint, X.tintK) : col.coat;
-  const detail = col.detail;
+  // a flinch reddens the hide and leaves the teeth alone; a veil takes
+  // everything, teeth included, because a floating jaw is worse than no jaw
+  const detail = (X.tint && X.tintAll) ? colMix(col.detail, X.tint, X.tintK) : col.detail;
   const R = X.R, t = X.t, seed = X.seed || 0;
   const hide = X.hide;
   // animated ball positions (body space)
@@ -10740,12 +10897,22 @@ function packPrims(prims) {
   prims.forEach((q, i) => {
     const o = i * PS;
     T[o + 1] = q.ax; T[o + 2] = q.ay; T[o + 3] = q.az; T[o + 10] = q.k || 0;
+    T[o + 18] = q.sub ? 1 : 0;      // 1 = this primitive CUTS instead of adds
     if (q.t === 's') { T[o] = 0; T[o + 7] = q.ra; }
     else if (q.t === 'c') {
       const bax = q.bx - q.ax, bay = q.by - q.ay, baz = q.bz - q.az, l2 = bax * bax + bay * bay + baz * baz;
       if (l2 < 1e-10) { T[o] = 0; T[o + 7] = Math.max(q.ra, q.rb); return; }
       T[o] = 1; T[o + 4] = bax; T[o + 5] = bay; T[o + 6] = baz; T[o + 7] = q.ra; T[o + 8] = q.rb;
       const rr = q.ra - q.rb; T[o + 9] = l2; T[o + 11] = rr; T[o + 12] = l2 - rr * rr; T[o + 13] = 1 / l2;
+    } else if (q.t === 'b') {
+      // raw axes, half-extents, corner radius. At rr 0 this is a hard slab.
+      T[o] = 3;
+      T[o + 4] = q.ex[0]; T[o + 5] = q.ex[1]; T[o + 6] = q.ex[2];
+      T[o + 7] = q.ey[0]; T[o + 8] = q.ey[1]; T[o + 9] = q.ey[2];
+      T[o + 11] = q.ez[0]; T[o + 12] = q.ez[1]; T[o + 13] = q.ez[2];
+      const rr = q.rr || 0;
+      T[o + 14] = Math.max(1e-5, q.hx - rr); T[o + 15] = Math.max(1e-5, q.hy - rr);
+      T[o + 16] = Math.max(1e-5, q.hz - rr); T[o + 17] = rr;
     } else {
       T[o] = 2;
       T[o + 4] = q.ex[0] / q.rx; T[o + 5] = q.ex[1] / q.rx; T[o + 6] = q.ex[2] / q.rx;
@@ -10773,6 +10940,12 @@ function sdPacked(T, o, x, y, z) {
   const u = px * T[o + 4] + py * T[o + 5] + pz * T[o + 6];
   const v = px * T[o + 7] + py * T[o + 8] + pz * T[o + 9];
   const w = px * T[o + 11] + py * T[o + 12] + pz * T[o + 13];
+  if (ty === 3) {
+    const qx = Math.abs(u) - T[o + 14], qy = Math.abs(v) - T[o + 15], qz = Math.abs(w) - T[o + 16];
+    const ox2 = qx > 0 ? qx : 0, oy2 = qy > 0 ? qy : 0, oz2 = qz > 0 ? qz : 0;
+    const inside = Math.min(Math.max(qx, Math.max(qy, qz)), 0);
+    return Math.sqrt(ox2 * ox2 + oy2 * oy2 + oz2 * oz2) + inside - T[o + 17];
+  }
   const k0 = Math.sqrt(u * u + v * v + w * w);
   const u2 = u * T[o + 14], v2 = v * T[o + 15], w2 = w * T[o + 16];
   const k1 = Math.sqrt(u2 * u2 + v2 * v2 + w2 * w2);
@@ -10786,13 +10959,20 @@ function primBounds(q) {
     return [Math.min(q.ax, q.bx) - r, Math.min(q.ay, q.by) - r, Math.min(q.az, q.bz) - r,
             Math.max(q.ax, q.bx) + r, Math.max(q.ay, q.by) + r, Math.max(q.az, q.bz) + r];
   }
+  if (q.t === 'b') {
+    const r2 = Math.max(q.hx, q.hy, q.hz) + m;
+    return [q.ax - r2, q.ay - r2, q.az - r2, q.ax + r2, q.ay + r2, q.az + r2];
+  }
   const r = Math.max(q.rx, q.ry, q.rz) + m;
   return [q.ax - r, q.ay - r, q.az - r, q.ax + r, q.ay + r, q.az + r];
 }
-function primMinR(q) { return q.t === 's' ? q.ra : q.t === 'c' ? Math.min(q.ra, q.rb) : Math.min(q.rx, q.ry, q.rz); }
+function primMinR(q) {
+  return q.t === 's' ? q.ra : q.t === 'c' ? Math.min(q.ra, q.rb)
+       : q.t === 'b' ? Math.min(q.hx, q.hy, q.hz) : Math.min(q.rx, q.ry, q.rz);
+}
 
 // Mesh a list of primitives. quality: 1 = editor / your own body, 0 = distant AI.
-function meshPrims(prims, quality, fine) {
+function meshPrims(prims, quality) {
   if (!prims.length) return null;
   const bb = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
   let minR = Infinity;
@@ -10806,12 +10986,8 @@ function meshPrims(prims, quality, fine) {
   const span = Math.max(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]);
   // a grid fine enough for the thinnest limb, bounded both ways
   // quality 2: editor and your own body, 1: animals near you, 0: distant animals
-  // `fine` (1 = unchanged) shrinks the cell for designs whose surface carries
-  // relief the limb radius knows nothing about. The cell caps move with it, or
-  // the clamp below immediately undoes the refinement.
-  const F2 = Math.min(Math.max(+fine || 1, 1), 1.7);
-  const maxCells = [64, 96, 124][clamp(quality | 0, 0, 2)] * F2, minCells = [36, 48, 56][clamp(quality | 0, 0, 2)] * F2;
-  let step = minR * (quality >= 2 ? 0.5 : quality ? 0.6 : 0.8) / F2;
+  const maxCells = [64, 96, 168][clamp(quality | 0, 0, 2)], minCells = [36, 48, 56][clamp(quality | 0, 0, 2)];
+  let step = minR * (quality >= 2 ? 0.5 : quality ? 0.6 : 0.8);
   step = Math.min(Math.max(step, span / maxCells), span / minCells);
   const pad = step * 2;
   const ox = bb[0] - pad, oy = bb[1] - pad, oz = bb[2] - pad;
@@ -10848,7 +11024,10 @@ function meshPrims(prims, quality, fine) {
     const q = prims[pi], r = pr[pi];
     for (let K = r[4]; K <= r[5]; K++) for (let J = r[2]; J <= r[3]; J++) {
       let idx = cat(r[0], J, K);
-      for (let I = r[0]; I <= r[1]; I++, idx++) CF[idx] = smoothInto(CF[idx], sdPacked(TP, pi * PS, ox + I * cs, oy + J * cs, oz + K * cs), q.k);
+      for (let I = r[0]; I <= r[1]; I++, idx++) {
+        if (q.sub) { CF[idx] = Math.min(CF[idx], 0); continue; }   // force refinement where anything is cut
+        CF[idx] = smoothInto(CF[idx], sdPacked(TP, pi * PS, ox + I * cs, oy + J * cs, oz + K * cs), q.k);
+      }
     }
   }
   // blocks to refine
@@ -10895,7 +11074,8 @@ function meshPrims(prims, quality, fine) {
     // which primitives can reach this block
     const mx = ox + (i0 + BS * 0.5) * step, my = oy + (j0 + BS * 0.5) * step, mz = oz + (k0 + BS * 0.5) * step;
     let up = FAR;
-    for (let n = 0; n < L.length; n++) { const d = sdPacked(TP, L[n] * PS, mx, my, mz); dcs[n] = d; if (d + HDb < up) up = d + HDb; }
+    for (let n = 0; n < L.length; n++) { const d = sdPacked(TP, L[n] * PS, mx, my, mz); dcs[n] = d;
+      if (!TP[L[n] * PS + 18] && d + HDb < up) up = d + HDb; }
     let m = 0;
     for (let n = 0; n < L.length; n++) if (dcs[n] - HDb < up + TP[L[n] * PS + 10] + 2 * step) L[m++] = L[n];
     L.length = m;
@@ -10908,11 +11088,22 @@ function meshPrims(prims, quality, fine) {
           if (D1[idx] < FAR) continue;           // shared face already done exactly
           const x = ox + i * step;
           let f = FAR, d1 = FAR, d2 = FAR, b1 = -1, b2 = -1;
+          // additive pass. A cut takes nothing out of empty space, so it has
+          // to wait until there is something to cut, and it never claims a
+          // bone -- a carved hollow belongs to whatever it was carved out of.
           for (let n = 0; n < m; n++) {
-            const pi = L[n], d = sdPacked(TP, pi * PS, x, y, z), kk = TP[pi * PS + 10];
+            const pi = L[n]; if (TP[pi * PS + 18]) continue;
+            const d = sdPacked(TP, pi * PS, x, y, z), kk = TP[pi * PS + 10];
             if (kk > 0) { const h = kk - Math.abs(f - d); if (h > 0) { const hh = h / kk; f = Math.min(f, d) - hh * hh * kk * 0.25; } else if (d < f) f = d; }
             else if (d < f) f = d;
             if (d < d1) { d2 = d1; b2 = b1; d1 = d; b1 = pi; } else if (d < d2) { d2 = d; b2 = pi; }
+          }
+          // subtractive pass: smooth maximum against the negated shape
+          for (let n = 0; n < m; n++) {
+            const pi = L[n]; if (!TP[pi * PS + 18]) continue;
+            const d = -sdPacked(TP, pi * PS, x, y, z), kk = TP[pi * PS + 10];
+            if (kk > 0) { const h = kk - Math.abs(-f + d); if (h > 0) { const hh = h / kk; f = -(Math.min(-f, -d) - hh * hh * kk * 0.25); } else if (d > f) f = d; }
+            else if (d > f) f = d;
           }
           F[idx] = f; D1[idx] = d1 < FAR ? d1 : FAR * 0.999; D2[idx] = d2; B1[idx] = b1; B2[idx] = b2;
         }
@@ -11480,7 +11671,11 @@ function creaturePrims(des, G) {
       // floor below -- a thin leg is fattened to survive surface extraction, and
       // separating it as if it were still thin is how two of them ended up
       // welded together after this pass had already run and passed
-      let rad = Math.max(rq.r0 * 0.95, 0.030 * G._limbScale);
+      // the widest drawn feature on a limb is the hip plate, not the shaft
+      const thc = clamp(rq.th, 0.5, 2.2);
+      const capW = 1 + (1.13 - 1) / (0.55 + 0.45 * thc);
+      const s0e = Math.max(rq.r0 * 0.82, 0.030 * G._limbScale);
+      let rad = Math.max(rq.r0 * 0.95, 0.030 * G._limbScale, s0e * capW * 1.02);
       const tv = lb.tip && VIS[lb.tip.id];
       if (tv) rad = Math.max(rad, tv.size * clamp(lb.tip.s || 1, 0.4, 2.5) * rq.th * 0.45);
       // The hip is slid out of the torso before anything else (see below). That
@@ -11493,17 +11688,29 @@ function creaturePrims(des, G) {
       const br = hb ? Math.max(0.05, hb.r) : 0.5;
       const hip = v3.add(rt, v3.mul(nOut, Math.min(br * 0.62, br * 0.30 + rq.r0 * 0.85)));
       HIP.push(hip);
-      PP.push([hip, v3.add(rt, lb.k), v3.add(rt, lb.f)]);
+      // the same three-bone polyline the renderer walks, hock included
+      const kn = v3.add(rt, lb.k), ft = v3.add(rt, lb.f);
+      const dg = (sk.plan && sk.plan.digi) || 0;
+      const kfv = v3.sub(ft, kn);
+      const fwv = [ft[0] - hip[0], 0, ft[2] - hip[2]];
+      const fwl = Math.hypot(fwv[0], fwv[2]) || 1;
+      const ht = 0.30 + 0.28 * dg;
+      const hk = [kn[0] + kfv[0] * ht - (fwv[0] / fwl) * dg * 0.30 * v3.len(kfv),
+                  kn[1] + kfv[1] * ht,
+                  kn[2] + kfv[2] * ht - (fwv[2] / fwl) * dg * 0.30 * v3.len(kfv)];
+      PP.push([hip, kn, hk, ft]);
       RR.push(rad); SEP.push([0, 0, 0]); THIN.push(1);
     }
     const SN = 7;
-    const ptAt = (P, u) => (u <= 1 ? v3.lerp(P[0], P[1], u) : v3.lerp(P[1], P[2], u - 1));
+    const ptAt = (P, u) => (u <= 1 ? v3.lerp(P[0], P[1], u)
+                          : u <= 2 ? v3.lerp(P[1], P[2], u - 1)
+                                   : v3.lerp(P[2], P[3], u - 2));
     const gap = (i, j) => {                       // closest approach, and which way to part
       let best = Infinity, bv = null;
       for (let a = 0; a <= SN; a++) {
-        const pa = v3.add(ptAt(PP[i], (a / SN) * 2), SEP[i]);
+        const pa = v3.add(ptAt(PP[i], (a / SN) * 3), SEP[i]);
         for (let b = 0; b <= SN; b++) {
-          const pb = v3.add(ptAt(PP[j], (b / SN) * 2), SEP[j]);
+          const pb = v3.add(ptAt(PP[j], (b / SN) * 3), SEP[j]);
           const d = v3.sub(pa, pb), L = v3.len(d);
           if (L < best) { best = L; bv = d; }
         }
@@ -11543,8 +11750,11 @@ function creaturePrims(des, G) {
         const { best } = gap(i, j);
         const need = (RR[i] * THIN[i] + RR[j] * THIN[j]) * LG;
         if (best >= need || need <= 1e-6) continue;
-        const f = Math.max(0.42, best / need);
-        THIN[i] = Math.min(THIN[i], f); THIN[j] = Math.min(THIN[j], f);
+        // clamped against the ORIGINAL thickness, not against the running
+        // value, so three passes cannot compound 0.42 into 0.07
+        const f = Math.max(0.62, best / need);
+        THIN[i] = Math.max(0.62, Math.min(THIN[i], f));
+        THIN[j] = Math.max(0.62, Math.min(THIN[j], f));
       }
     }
   }
@@ -11576,7 +11786,7 @@ function creaturePrims(des, G) {
     // the ratio that looks skeletal on a thin leg looks like a boulder on a
     // thick one. The ankle ball is gone; the taper does that job.
     const cap = (amt) => 1 + (amt - 1) / (0.55 + 0.45 * clamp(th, 0.5, 2.2));
-    const HIPW = cap(1.34), KNEEW = cap(1.42);
+    const HIPW = cap(1.13), KNEEW = cap(1.17);
     // and no shaft may be thinner than the mesher's grid can carry, or the limb
     // is simply not extracted -- which is what "too skinny to create" was
     // The floor has to be measured against the WHOLE model, not the torso: the
@@ -11584,26 +11794,80 @@ function creaturePrims(des, G) {
     // with a small body and enormous legs gets a coarse grid and loses any
     // shaft thinner than a cell. That is why the thin classes came out as
     // threads of beads with the bone missing between them.
-    const SH = 0.82 * thin, RMIN = 0.030 * G._limbScale * thin;
+    // RMIN is the mesher's extraction floor. It must NOT be scaled by the
+    // thinning factor: that is the floor that stops thinning deleting the limb.
+    const SH = 0.82 * thin, RMIN = 0.030 * G._limbScale;
     const s0 = Math.max(r0 * SH, RMIN), s1 = Math.max(r1 * SH, RMIN * 0.88), s2 = Math.max(r2 * SH, RMIN * 0.76);
-    const dU = v3.norm(v3.sub(knee, root)), dL = v3.norm(v3.sub(foot, knee));
+    // ---- three bones -------------------------------------------------------
+    // The hock: up the shin and kicked back. digi 0 leaves it exactly on the
+    // knee-to-foot line, which is the old two-bone limb.
+    const digi = (sk.plan && sk.plan.digi) || 0;   // creaturePrims has sk, not P
+    const kf = v3.sub(foot, knee);
+    const fwd = [foot[0] - root[0], 0, foot[2] - root[2]];
+    const fl = Math.hypot(fwd[0], fwd[2]) || 1;
+    const backd = [-fwd[0] / fl, 0, -fwd[2] / fl];
+    const hockT = 0.30 + 0.28 * digi;
+    const hock = [knee[0] + kf[0] * hockT + backd[0] * digi * 0.30 * v3.len(kf),
+                  knee[1] + kf[1] * hockT,
+                  knee[2] + kf[2] * hockT + backd[2] * digi * 0.30 * v3.len(kf)];
+    const rH = s1 * 0.86, rF = s2;
+
     const perp = (d) => { let e = v3.norm(v3.cross(d, [0, 0, 1])); if (!isFinite(e[0]) || v3.len(e) < 0.5) e = [1, 0, 0]; return e; };
-    const ex0 = perp(dU), ex1 = perp(dL);
-    out.push({ t: 'e', ax: root[0], ay: root[1], az: root[2], ex: ex0, ey: dU, ez: v3.cross(ex0, dU),
-               rx: r0 * HIPW * thin, ry: r0 * HIPW * thin * 0.54, rz: r0 * HIPW * thin, k: 0.14 * th, bone: up, col });
-    out.push({ t: 'c', ax: root[0], ay: root[1], az: root[2], bx: knee[0], by: knee[1], bz: knee[2], ra: s0, rb: s1, k: 0.03, bone: up, col });
-    // the knee: a cap across the bone, not a marble threaded onto it
-    out.push({ t: 'e', ax: knee[0], ay: knee[1], az: knee[2], ex: ex0, ey: dU, ez: v3.cross(ex0, dU),
-               rx: r1 * KNEEW * thin, ry: r1 * KNEEW * thin * 0.44, rz: r1 * KNEEW * thin * 0.86, k: 0.04 * th, bone: up, col });
-    out.push({ t: 'c', ax: knee[0], ay: knee[1], az: knee[2], bx: foot[0], by: foot[1], bz: foot[2], ra: s1, rb: s2, k: 0.03, bone: lo, col });
-    void ex1; void dL;
-    // muscle swell on the upper segment
-    const ud = v3.sub(knee, root), L1 = v3.len(ud);
+    const dU = v3.norm(v3.sub(knee, root));
+    const dM = v3.norm(v3.sub(hock, knee));
+    const dL = v3.norm(v3.sub(foot, hock));
+
+    // A bone: the cone is the load-bearing shaft the merge guard measures, and
+    // the slabs are the visible surface. The slab's WIDE half-axis is the cone
+    // radius and its thin one is 0.56 of that, so the drawn limb is chiselled
+    // without the envelope growing past what the guard checks.
+    const bone = (A, Bp, ra, rb, boneIdx, twist) => {
+      const d = v3.sub(Bp, A), Ln = v3.len(d);
+      if (Ln < 1e-5) return;
+      const ey = v3.mul(d, 1 / Ln);
+      const e0 = perp(ey), e1 = v3.cross(ey, e0);
+      out.push({ t: 'c', ax: A[0], ay: A[1], az: A[2], bx: Bp[0], by: Bp[1], bz: Bp[2],
+                 ra: ra * 0.70, rb: rb * 0.70, k: 0.03, bone: boneIdx, col });
+      const N = 3;
+      for (let q = 0; q < N; q++) {
+        const um = (q + 0.5) / N;
+        const r = ra + (rb - ra) * um;
+        const m = v3.lerp(A, Bp, um);
+        const ang = um * twist;
+        const ca = Math.cos(ang), sa = Math.sin(ang);
+        const ex = [e0[0] * ca + e1[0] * sa, e0[1] * ca + e1[1] * sa, e0[2] * ca + e1[2] * sa];
+        out.push({ t: 'e', ax: m[0], ay: m[1], az: m[2],
+                   ex, ey, ez: v3.cross(ex, ey),
+                   rx: r, ry: Ln / N * 0.66, rz: r * 0.56,
+                   k: 0.022 * th, bone: boneIdx, col });
+      }
+    };
+    // A joint: a plate ACROSS the bone. Wide crossways, nearly flat lengthways.
+    const jointPlate = (P0, dIn, dOut, r, boneIdx, wide) => {
+      const ey = v3.norm(v3.add(dIn, dOut));
+      const ex = perp(ey);
+      out.push({ t: 'e', ax: P0[0], ay: P0[1], az: P0[2],
+                 ex, ey, ez: v3.cross(ex, ey),
+                 rx: r * wide, ry: r * 0.30, rz: r * wide * 0.72,
+                 k: 0.03 * th, bone: boneIdx, col });
+    };
+
+    bone(root, knee, s0, s1, up, 1.7);
+    bone(knee, hock, s1, rH, up, -1.4);
+    bone(hock, foot, rH, rF, lo, 1.1);
+    jointPlate(root, dU, dU, s0, up, HIPW * 1.06);
+    jointPlate(knee, dU, dM, s1, up, KNEEW * 1.10);
+    jointPlate(hock, dM, dL, rH, lo, 1.22);
+    // what flesh there is sits high on the femur, and it is a flattened sheet
+    // over the bone rather than a ball hung off it
+    const L1 = v3.len(v3.sub(knee, root));
     if (L1 > 0.2) {
-      const m = v3.lerp(root, knee, 0.30), ey = v3.norm(ud);
-      let ex = v3.norm(v3.cross(ey, [0, 0, 1])); if (!isFinite(ex[0]) || v3.len(ex) < 0.5) ex = [1, 0, 0];
-      const bulk = lb.id === 'l_spring' ? 1.55 : 1;   // springing legs carry a huge thigh
-      out.push({ t: 'e', ax: m[0], ay: m[1], az: m[2], ex, ey, ez: v3.cross(ex, ey), rx: r0 * 0.92 * bulk, ry: L1 * 0.22 * (bulk > 1 ? 1.2 : 1), rz: r0 * 0.88 * bulk, k: 0.04, bone: up, col });
+      const m = v3.lerp(root, knee, 0.28), ey = dU;
+      const ex = perp(ey);
+      const bulk = lb.id === 'l_spring' ? 1.55 : 1;
+      out.push({ t: 'e', ax: m[0], ay: m[1], az: m[2], ex, ey, ez: v3.cross(ex, ey),
+                 rx: s0 * 1.16 * bulk, ry: L1 * 0.26 * (bulk > 1 ? 1.2 : 1), rz: s0 * 0.78 * bulk,
+                 k: 0.035, bone: up, col });
     }
     if (lb.tip && FLESH[lb.tip.id]) {
       const tv = VIS[lb.tip.id];
@@ -11620,10 +11884,6 @@ function creaturePrims(des, G) {
       FLESH[lb.tip.id](F, tc, { base: cols.base });
     }
   });
-  // How much relief this body carries that the grid would otherwise miss. A
-  // rib notch is a fraction of the torso radius, and the step is sized off the
-  // thinnest limb, so the two are unrelated and ribs has to ask for its own.
-  out.fine = 1 + 1.6 * Math.min(0.42, (sk.plan && sk.plan.ribs) || 0) + 0.28 * ((sk.plan && sk.plan.keel) ? 1 : 0);
   // part flesh
   const mouth = mouthPart(des);
   for (const pt of des.parts || []) {
@@ -11657,7 +11917,7 @@ function meshWorkerSource() {
     packPrims, sdPacked, primBounds, primMinR, meshPrims].map(String).join('\n') + `
 onmessage = (e) => {
   const d = e.data; let m = null, err = null;
-  try { m = meshPrims(d.prims, d.q, d.fine); } catch (x) { err = String((x && x.stack) || x); }
+  try { m = meshPrims(d.prims, d.q); } catch (x) { err = String((x && x.stack) || x); }
   if (m) postMessage({ id: d.id, vertData: m.vertData, idx: m.idx, tris: m.tris }, [m.vertData.buffer, m.idx.buffer]);
   else postMessage({ id: d.id, err: err || 'empty' });
 };`;
@@ -11713,9 +11973,7 @@ function installDesignMesh(des, key, q, nl, m) {
 function buildDesignMeshNow(des, quality) {
   const G = designGeo(des);
   let m = null;
-  let pr0 = null;
-  try { pr0 = creaturePrims(des, G); } catch (e) { console.error(e); }
-  try { m = pr0 ? meshPrims(pr0, quality, pr0.fine) : null; } catch (e) { console.error(e); m = null; }
+  try { m = meshPrims(creaturePrims(des, G), quality); } catch (e) { console.error(e); m = null; }
   return installDesignMesh(des, designMeshKey(des), quality, G.cls.limbs.length, m);
 }
 function meshRequest(des, q) {
@@ -11746,7 +12004,7 @@ function meshDispatch() {
     const job = { des, key: designMeshKey(des), q: des._jq, nl: G.cls.limbs.length };
     des._job = job; meshJobs.set(id, job);
     slot.busy = id;
-    slot.w.postMessage({ id, prims, q: job.q, fine: prims.fine || 1 });
+    slot.w.postMessage({ id, prims, q: job.q });
   }
 }
 function meshJobDone(r) {
@@ -11874,7 +12132,9 @@ function drawDesign(des, X) {
   const col = des.col || { base: [0.5, 0.6, 0.5], coat: [0.9, 0.9, 0.8], detail: [0.2, 0.3, 0.2], pat: 0 };
   const base = X.tint ? colMix(col.base, X.tint, X.tintK) : col.base;
   const coat = X.tint ? colMix(col.coat, X.tint, X.tintK) : col.coat;
-  const detail = col.detail;
+  // a flinch reddens the hide and leaves the teeth alone; a veil takes
+  // everything, teeth included, because a floating jaw is worse than no jaw
+  const detail = (X.tint && X.tintAll) ? colMix(col.detail, X.tint, X.tintK) : col.detail;
   const R = X.R, t = X.t, seed = X.seed || 0;
   const hide = X.hide;
   const L = boneLayout(G);
@@ -11940,7 +12200,12 @@ function drawDesign(des, X) {
     boneN += boneCount;
     const inst = new Float32Array(BINST_FLOATS);
     const q = X.toW([0, 0, 0]);
-    inst.set([q[0], q[1], q[2], X.yaw || 0, R, base[0], base[1], base[2], coat[0], coat[1], coat[2], detail[0], detail[1], detail[2], (col.pat | 0) + 16 * ((col.skin != null ? col.skin : (C.PLAN_SKIN ? C.PLAN_SKIN[des.plan | 0] : 0)) | 0), X.selBody ? 1 : 0, wAmp, wPh, sk.a, bb]);
+    // pattern | skin | ghost, packed into one float. The ghost field is the
+    // VEIL: 0 solid, 15 all but gone. Packed above the skin field so nothing
+    // that reads pattern or covering changes.
+    const ghost16 = Math.round(clamp(X.ghost || 0, 0, 1) * 15);
+    const packed = (col.pat | 0) + 16 * ((col.skin != null ? col.skin : (C.PLAN_SKIN ? C.PLAN_SKIN[des.plan | 0] : 0)) | 0) + 1024 * ghost16;
+    inst.set([q[0], q[1], q[2], X.yaw || 0, R, base[0], base[1], base[2], coat[0], coat[1], coat[2], detail[0], detail[1], detail[2], packed, X.selBody ? 1 : 0, wAmp, wPh, sk.a, bb]);
     skinDraws.push({ mesh, inst });
   } else {
     // placeholder while the skin bakes: the same primitives as simple shapes
@@ -12194,7 +12459,11 @@ function drawDesignedCreature(c, t, camDist, A) {
         : Math.sin(t * (airborne ? 6.5 : 3.4) + c.id) * (airborne ? 0.62 : (p.canFly ? 0.18 : 0.08)),
     chomp: rig.chomp != null ? rig.chomp : A.bite > 0 ? A.bite : 0.12 + 0.12 * Math.sin(t * 1.7 + c.id),
     grip: clamp(c._grab || 0, 0, 1),
-    tint: A.flinch > 0.01 ? [1, 0.25, 0.22] : null, tintK: A.flinch * 0.55,
+    ghost: isPlayer ? spellGhost() : 0,
+    tint: (isPlayer && spellGhost() > 0) ? [gArr[24] * 1.25 + 0.06, gArr[25] * 1.25 + 0.06, gArr[26] * 1.25 + 0.06]
+        : A.flinch > 0.01 ? [1, 0.25, 0.22] : null,
+    tintK: (isPlayer && spellGhost() > 0) ? 0.82 * spellGhost() : A.flinch * 0.55,
+    tintAll: isPlayer && spellGhost() > 0,
     blink: (pi) => (((t * 0.29 + pi * 0.137 + c.id * 0.071) % 1) < 0.035 ? 1 : 0),
     limbPose(o, li, root, knee, foot) {
       const ov = rig.limb(o, root, foot);
@@ -12385,6 +12654,7 @@ function sndThump(vol) {
 function sndHit() { if (SND.ctx && SND.on) { sndThump(0.35); sndNoiseBurst(900, 1.2, 0.18, 0.25, 0, 0.7); } }
 function sndTick(dt) {
   if (!SND.ctx || !SND.on || !world) return;
+  try { wxSound(dt); } catch (e) {}
   const ctx = SND.ctx, t = ctx.currentTime;
   const light = world.light != null ? world.light : 1;
   const night = light < 0.3;
@@ -12925,6 +13195,323 @@ function playerRoar() {
   }
 }
 
+// =====================================================================
+// WEATHER: rain, storms, and the wetness the whole renderer was waiting for.
+//
+// The sky is a PURE FUNCTION of (seed, world.bt), exactly like world.light.
+// Nothing about it is stored, so a reloaded world gets the weather it had,
+// every client of a match sees the same sky without a packet, and a
+// fast-forwarded world still gets its rain in the right places.
+//
+// One derived quantity is NOT pure, and cannot be: surface wetness is the
+// integral of rain over time with a long decay, so it is stepped in
+// world.wet. It converges on its own from any starting value, which is why
+// it is safe to leave it out of a save.
+//
+// world.wet is written into fogCol.w every frame and read by the skin,
+// terrain, foliage and rock shaders as the global wetness channel.
+// =====================================================================
+
+const WX = {
+  rain: 0,          // 0..1 precipitation, eased in and out across a cell
+  storm: 0,         // 0..1 how much of that rain is a thunderstorm
+  gust: 0,          // 0..1 wind
+  wind: [1, 0],     // unit wind direction, turns slowly over the day
+  flash: 0,         // lightning, decays in ~0.15 s
+  nextBolt: 4,      // real seconds until the next strike is considered
+  boltDist: 1200,   // metres to the last strike, for the thunder delay
+  thunder: [],      // queued rumbles: {t} in real seconds
+  cell: -1,         // which weather cell we are in, for the once-per-cell toast
+  said: -1,
+};
+
+// A weather cell is one stretch of sky: about a seventh of a day, so a storm
+// is a couple of real minutes and a clear spell is rarely longer than ten.
+function wxCellLen() {
+  const dl = (world && world.params && world.params.dayLen) || 10;
+  return dl / 7;
+}
+// Deterministic per-cell value. Mixing the world seed in means two worlds with
+// the same clock do not share a sky.
+function wxHash(cell, salt) {
+  let h = (Math.imul(cell | 0, 374761393) ^ Math.imul(salt | 0, 668265263)
+           ^ Math.imul((world && world.seed) | 0, 2246822519)) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+// The envelope inside a cell: the sky takes time to close over and time to
+// break up. A hard edge on rain reads as a bug, not as weather.
+function wxEnvelope(u) {
+  return Math.min(smooth01(u / 0.20), smooth01((1 - u) / 0.26));
+}
+function smooth01(x) { const t = clamp(x, 0, 1); return t * t * (3 - 2 * t); }
+
+// Pure: what the sky is doing at this moment. No side effects, no state.
+function wxAt(bt) {
+  if (!world) return { rain: 0, storm: 0, gust: 0 };
+  const L = wxCellLen();
+  const cell = Math.floor(bt / L);
+  const u = bt / L - cell;
+  const env = wxEnvelope(u);
+  // A wet climate phase rains oftener and harder; a drought barely rains at
+  // all. climate.moist is already a slow -1..1 wander on the same clock.
+  const moist = (world.climate && world.climate.moist) || 0;
+  const r = wxHash(cell, 1);
+  // thresholds slide with the climate: at moist=+1 a bit over half of all
+  // cells carry rain, at moist=-1 about one in six does
+  const dry = clamp(0.62 - moist * 0.22, 0.30, 0.86);
+  const wetc = clamp(0.90 - moist * 0.06, dry + 0.05, 0.97);
+  let rain = 0, storm = 0;
+  if (r >= dry) {
+    const k = (r - dry) / Math.max(1e-3, 1 - dry);         // 0..1 through the wet band
+    rain = 0.30 + 0.70 * smooth01(k * 1.15);
+    if (r >= wetc) storm = smooth01((r - wetc) / Math.max(1e-3, 1 - wetc));
+  }
+  // gusts: always some wind, much more under a storm, breathing on its own
+  const gust = clamp(0.18 + 0.55 * rain + 0.25 * Math.sin(bt * 6.1) * Math.sin(bt * 2.7), 0, 1);
+  return { rain: rain * env, storm: storm * env, gust, cell };
+}
+
+// Stepped once per tick. Everything here is either an integral (wetness) or a
+// real-time event (lightning), and neither belongs in the pure function.
+function wxTick(dt) {
+  if (!world) return;
+  const w = wxAt(world.bt || 0);
+  if (!WX.frozen) { WX.rain = w.rain; WX.storm = w.storm; WX.gust = w.gust; }
+  WX.cell = w.cell;
+  // The closing wall is weather, and it is the worst weather on the island.
+  // Its own rain overrides the sky's: inside the band it is always a storm,
+  // and the nearer the wall the more of it reaches you.
+  WX.zone = 0;
+  if (!WX.frozen && typeof BR !== 'undefined' && BR.on && BR.phase !== 'off') {
+    try {
+      const bf = brFogAt(player.camX, player.camZ);
+      const gap = brEdgeGap(player.camX, player.camZ);    // >0 safe, <0 inside
+      // rain reaches out ahead of the wall: you get wet before you get hurt
+      const near = clamp(1 - gap / 900, 0, 1);
+      WX.zone = clamp(Math.max(bf * 1.35, near * 0.55), 0, 1);
+      WX.rain = Math.max(WX.rain, WX.zone);
+      WX.storm = Math.max(WX.storm, clamp(WX.zone * 1.2, 0, 1));
+      WX.wallGap = gap;
+    } catch (e) { WX.zone = 0; }
+  }
+
+  // ---- wind direction: a slow turn, so a squall arrives from somewhere
+  const a = (world.bt || 0) * 0.35 + wxHash(Math.floor((world.bt || 0) / (wxCellLen() * 6)), 7) * 6.283;
+  WX.wind = [Math.cos(a), Math.sin(a)];
+
+  // ---- wetness: soaks in about 20 s of hard rain, dries over three minutes.
+  // Night dew puts a floor under it so dawn is damp even without weather.
+  const light = world.light != null ? world.light : 1;
+  const dew = 0.20 * smooth01((0.34 - light) / 0.34);
+  const target = Math.max(WX.rain, dew);
+  const cur = world.wet || 0;
+  if (WX.frozen) { /* held by the harness */ }
+  else if (target > cur) world.wet = cur + (target - cur) * (1 - Math.exp(-dt / 6.5));
+  else world.wet = target + (cur - target) * Math.exp(-dt / 95);
+  world.wet = clamp(world.wet, 0, 1);
+
+  // ---- lightning. Strikes get closer and faster as the storm deepens.
+  WX.flash *= Math.exp(-dt / 0.11);
+  if (WX.flash < 1e-3) WX.flash = 0;
+  if (WX.storm > 0.05) {
+    WX.nextBolt -= dt * (0.35 + 2.4 * WX.storm);
+    if (WX.nextBolt <= 0) {
+      WX.nextBolt = 2.5 + Math.random() * 11;
+      WX.flash = 0.75 + 0.55 * Math.random();
+      WX.boltDist = 260 + Math.random() * Math.random() * 4200 * (1.15 - WX.storm);
+      // in a match the lightning is IN the wall, so the gap between the flash
+      // and the crack is how far you are from the edge -- and it closes
+      if (WX.zone > 0.02 && WX.wallGap != null) {
+        WX.boltDist = clamp(Math.abs(WX.wallGap) + 120 + Math.random() * 700, 90, 6000);
+      }
+      // sound travels; the gap between the flash and the crack is the range
+      WX.thunder.push({ t: WX.boltDist / 340, d: WX.boltDist });
+      // a close strike double-flickers
+      if (WX.boltDist < 900) WX.thunder.push({ t: WX.boltDist / 340 + 0.9, d: WX.boltDist * 1.4 });
+    }
+  } else { WX.nextBolt = 3 + Math.random() * 6; }
+  for (let i = WX.thunder.length - 1; i >= 0; i--) {
+    WX.thunder[i].t -= dt;
+    if (WX.thunder[i].t <= 0) { const b = WX.thunder[i]; WX.thunder.splice(i, 1); try { sndThunder(b.d); } catch (e) {} }
+  }
+  // one line when the sky turns over, and never twice for the same cell
+  if (WX.cell !== WX.said) {
+    const prev = WX.said; WX.said = WX.cell;
+    if (prev >= 0 && typeof toast === 'function') {
+      const nx = wxAt((WX.cell + 0.5) * wxCellLen());
+      if (nx.storm > 0.35) toast('The sky closes over. A storm is coming in.', 2600);
+      else if (nx.rain > 0.45) toast('Rain moving in off the water.', 2200);
+    }
+  }
+}
+
+// ---------------------------------------------------------------- rendering
+// A drop is six vertices and NO buffers: position, size and fall speed all
+// come out of hashes on the instance index, and the drop is wrapped into a box
+// that follows the camera in world space, so it moves past you when you run
+// instead of hanging on the lens.
+// The box only has to cover what you can actually resolve. Rain reads from
+// the streaks NEAR the eye; spreading the same budget over a bigger volume
+// buys distance nobody can see and costs the density that sells it.
+const RAIN_BOX = 80;             // world units on a side
+const RAIN_MAX = 20000;
+let rainPipe = null, rainBuf = null, rainBind = null, rainN = 0;
+const rainArr = new Float32Array(8);
+
+const WGSL_RAIN = `
+struct RU { p : vec4<f32>, q : vec4<f32> };
+@group(0) @binding(1) var<uniform> r : RU;
+struct VO { @builtin(position) pos : vec4<f32>, @location(0) uv : vec2<f32>,
+            @location(1) wpos : vec3<f32>, @location(2) a : f32 };
+fn rh(n: f32) -> f32 { return fract(sin(n * 127.1 + 311.7) * 43758.5453); }
+@vertex fn vs(@builtin(vertex_index) vi : u32, @builtin(instance_index) ii : u32) -> VO {
+  let id = f32(ii);
+  let h1 = rh(id * 1.13); let h2 = rh(id * 2.71 + 5.3); let h3 = rh(id * 3.77 + 11.1);
+  let h4 = rh(id * 7.31 + 3.9);
+  let BOX = r.q.x;
+  let t = g.params.x;
+  let fall = r.p.w * (0.78 + 0.44 * h4);
+  // world-space drift, then wrapped modulo the box around the eye: continuous
+  // motion, no popping, and the drop belongs to the world and not to the camera
+  let drift = vec3<f32>(r.p.y, -fall, r.p.z) * t;
+  let home = vec3<f32>(h1, h2, h3) * BOX + drift;
+  let rel = home - g.camPos.xyz;
+  let p0 = g.camPos.xyz + (rel - BOX * round(rel / BOX));
+  // the streak lies along the drop's own velocity
+  let vel = normalize(vec3<f32>(r.p.y, -fall, r.p.z));
+  let toEye = g.camPos.xyz - p0;
+  let d = length(toEye);
+  var wdir = cross(vel, toEye / max(d, 1e-4));
+  let wl = length(wdir);
+  wdir = select(vec3<f32>(1.0, 0.0, 0.0), wdir / max(wl, 1e-4), wl > 1e-4);
+  // near drops are drawn longer and thicker, so the rain has depth to it
+  let len = r.q.y * (0.55 + 0.9 * h4);
+  let wid = r.q.z * (0.6 + 0.8 * h1) * (1.0 + 0.55 * smoothstep(60.0, 8.0, d));
+  let corner = array<vec2<f32>, 6>(vec2<f32>(-1.0, 0.0), vec2<f32>(1.0, 0.0), vec2<f32>(1.0, 1.0),
+                                   vec2<f32>(-1.0, 0.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0));
+  let c = corner[vi];
+  let w = p0 + vel * (len * c.y) + wdir * (wid * c.x);
+  var o : VO;
+  o.pos = g.viewProj * vec4<f32>(w, 1.0);
+  o.uv = c; o.wpos = w;
+  // fade the far half of the box out so the volume has no wall, and fade the
+  // nearest drops too so nothing flickers a metre off the lens
+  o.a = r.p.x * smoothstep(BOX * 0.52, BOX * 0.30, d) * smoothstep(0.6, 3.5, d);
+  return o;
+}
+@fragment fn fs(i : VO) -> @location(0) vec4<f32> {
+  // soft along the width, tapered at the head and tail of the streak
+  let across = 1.0 - i.uv.x * i.uv.x;
+  let along = sin(i.uv.y * 3.14159);
+  var a = i.a * across * pow(along, 0.45) * 0.85;
+  if (a < 0.004) { discard; }
+  // a drop is mostly the sky it carries: bright against dark ground, dim
+  // against a bright sky, which is what makes rain read as water and not chalk
+  let day = g.params.z;
+  let col = mix(vec3<f32>(0.42, 0.48, 0.56), vec3<f32>(0.80, 0.86, 0.92), day) * (0.55 + 0.75 * day);
+  let dist = distance(i.wpos, g.camPos.xyz);
+  let f = clamp(1.0 - exp(-(dist * g.params.y) * (dist * g.params.y)), 0.0, 1.0);
+  return vec4<f32>(mix(col, g.fogCol.rgb, f * 0.7), a);
+}`;
+
+function rainInit() {
+  if (rainPipe) return;
+  const m = dev.createShaderModule({ code: WGSL_COMMON + WGSL_RAIN });
+  rainPipe = dev.createRenderPipeline({
+    layout: 'auto',
+    vertex: { module: m, entryPoint: 'vs' },
+    fragment: { module: m, entryPoint: 'fs', targets: [{ format: fmt, blend: {
+      color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha' },
+      alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } }] },
+    primitive: { topology: 'triangle-list', cullMode: 'none' },
+    depthStencil: { format: 'depth24plus', depthWriteEnabled: false, depthCompare: 'less' },
+    multisample: { count: SAMPLES },
+  });
+  rainBuf = dev.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  rainBind = dev.createBindGroup({ layout: rainPipe.getBindGroupLayout(0), entries: [
+    { binding: 0, resource: { buffer: gBuf } }, { binding: 1, resource: { buffer: rainBuf } }] });
+}
+const RAIN_BUDGET = { low: 1600, medium: 4500, high: 9000, ultra: 14000 };
+function rainBuild() {
+  WX.builds = (WX.builds || 0) + 1; WX.sawRain = WX.rain;
+  rainN = 0;
+  if (!rainPipe || WX.rain <= 0.02) return 0;
+  // Under a closed canopy most of it never reaches you; it lands on the leaves
+  // instead, which is what the sound does.
+  let canopy = 0;
+  try { canopy = clamp(forestCanopyAt(player.camX, player.camZ) || 0, 0, 1); } catch (e) { canopy = 0; }
+  WX.canopy = canopy;
+  const budget = RAIN_BUDGET[GFX.name] || 6000;
+  rainN = Math.max(0, Math.min(RAIN_MAX, Math.round(budget * WX.rain * (1 - 0.55 * canopy)) || 0));
+  const spd = 120 + 130 * WX.rain;
+  rainArr[0] = clamp(WX.rain * 1.15, 0, 1);          // intensity -> alpha
+  rainArr[1] = WX.wind[0] * (6 + 46 * WX.gust);      // wind drift x
+  rainArr[2] = WX.wind[1] * (6 + 46 * WX.gust);      // wind drift z
+  rainArr[3] = spd;                                   // fall speed
+  rainArr[4] = RAIN_BOX;
+  rainArr[5] = 1.6 + 3.4 * WX.rain;                   // streak length
+  rainArr[6] = 0.045 + 0.035 * WX.rain;               // streak half-width
+  rainArr[7] = 0;
+  dev.queue.writeBuffer(rainBuf, 0, rainArr);
+  return rainN;
+}
+function rainDraw(pass) {
+  if (!rainPipe || rainN <= 0) return;
+  pass.setPipeline(rainPipe); pass.setBindGroup(0, rainBind);
+  pass.draw(6, rainN);
+}
+
+// ---------------------------------------------------------------- sound
+// Two bands, because rain on your own head and rain on the canopy above you
+// are different sounds: a broad hiss that rises with how hard it is coming
+// down, and a high spattering band that only exists under leaves.
+function wxSoundInit() {
+  if (!SND.ctx || SND.rain) return;
+  const ctx = SND.ctx;
+  const s1 = ctx.createBufferSource(); s1.buffer = SND.noiseBuf; s1.loop = true;
+  const f1 = ctx.createBiquadFilter(); f1.type = 'bandpass'; f1.frequency.value = 1400; f1.Q.value = 0.55;
+  SND.rain = ctx.createGain(); SND.rain.gain.value = 0;
+  s1.connect(f1).connect(SND.rain).connect(SND.master); s1.start();
+  SND.rainF = f1;
+  const s2 = ctx.createBufferSource(); s2.buffer = SND.noiseBuf; s2.loop = true; s2.playbackRate.value = 1.7;
+  const f2 = ctx.createBiquadFilter(); f2.type = 'bandpass'; f2.frequency.value = 5200; f2.Q.value = 1.6;
+  SND.leaf = ctx.createGain(); SND.leaf.gain.value = 0;
+  s2.connect(f2).connect(SND.leaf).connect(SND.master); s2.start();
+}
+// A long low roll for a distant strike, a crack with a tail for a near one.
+function sndThunder(dist) {
+  if (!SND.ctx || !SND.on) return;
+  const near = clamp(1 - dist / 3000, 0, 1);
+  const vol = 0.10 + 0.55 * near * near;
+  const dur = 1.6 + 3.4 * (1 - near);
+  sndVoice((ctx, out, t) => {
+    const s = ctx.createBufferSource(); s.buffer = SND.noiseBuf; s.loop = true;
+    s.playbackRate.value = 0.25 + 0.35 * near;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(90 + 900 * near, t);
+    lp.frequency.exponentialRampToValueAtTime(60 + 120 * near, t + dur);
+    lp.Q.value = 0.8;
+    const gn = ctx.createGain();
+    gn.gain.setValueAtTime(0, t);
+    gn.gain.linearRampToValueAtTime(vol, t + (near > 0.6 ? 0.012 : 0.35));
+    gn.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+    s.connect(lp).connect(gn).connect(out); s.start(t, Math.random() * 1.2); s.stop(t + dur + 0.1);
+  }, (Math.random() * 1.4 - 0.7));
+}
+function wxSound(dt) {
+  if (!SND.ctx || !SND.on) return;
+  wxSoundInit();
+  if (!SND.rain) return;
+  const t = SND.ctx.currentTime;
+  let canopy = 0;
+  try { canopy = forestCanopyAt(player.camX, player.camZ); } catch (e) { canopy = 0; }
+  const r = WX.rain;
+  SND.rain.gain.setTargetAtTime(0.30 * r * r * (1 - 0.35 * canopy), t, 0.9);
+  SND.rainF.frequency.setTargetAtTime(900 + 1500 * r + 700 * WX.gust, t, 0.9);
+  SND.leaf.gain.setTargetAtTime(0.055 * r * canopy, t, 0.9);
+}
+
 // ================================================================ player
 const player = {
   c: null, yaw: 0, pitch: -0.05, spectator: false, generation: 0, deaths: 0,
@@ -12939,7 +13526,16 @@ const player = {
 // body. (The square-cube term in applyFallDamage tilts it further against
 // heavy animals, which is how it works in life.)
 const PAGE_SLOPE_TAN = 1.7321;   // tan 60, the walking limit, page-side copy
-const FALL_SAFE_H = 2.5;
+// tan 80. Steeper than this under your feet and there is nothing to walk on;
+// anything shallower is a hill, however fast it drops away.
+const FALL_SLOPE_TAN = 5.6713;
+// And a lip you can step off without it being a fall, as a fraction of your
+// own standing height. Without it, terrain noise under a stationary animal
+// reads as a cliff.
+const FALL_STEP_FRAC = 0.35;
+// Tripled on 2026-09-25: a fall had to be under two and a half body heights
+// to be free, which on this terrain meant almost every hill hurt.
+const FALL_SAFE_H = 7.5;
 const FALL_FATAL_H = 7;
 function fallSafeFor(p) { return Math.max(6, (p && (p.standH || p.radius) || 6) * FALL_SAFE_H); }
 function fallFatalFor(p) { return Math.max(14, (p && (p.standH || p.radius) || 6) * FALL_FATAL_H); }
@@ -14058,12 +14654,16 @@ function updateJump(dt) {
   // The ground dropping away under you is a fall, not a teleport. Whatever it
   // dropped becomes height you are now standing on nothing above.
   if (player._gWas != null && player.grounded) {
-    // A walk down a slope drops the ground under you too, and with a 60 degree
-    // limit that is a lot per frame. Only count a drop that no walk could have
-    // produced in the time available.
-    const walkDrop = Math.max(2, (c.ph.speedLand || 40) * PAGE_SLOPE_TAN * dt * 1.6);
+    // THE SLOPE YOU JUST WALKED, not the speed you could have walked it at.
+    // The ground fell `drop` over the `dh` you actually covered: steeper than
+    // 80 degrees and your feet had nothing under them, and anything shallower
+    // is a hill, which you walk down. The old test used top speed and a two
+    // unit floor, so ordinary ground threw you into the air and gravity
+    // dropped you back onto it -- the hop Finn was seeing on every descent.
+    const dh = player._gAt ? Math.hypot(c.x - player._gAt[0], c.y - player._gAt[1]) : 0;
     const drop = player._gWas - gNow;
-    if (isFinite(drop) && drop > walkDrop) { player.jumpY += drop; player.grounded = false; }
+    const walkable = dh * FALL_SLOPE_TAN + Math.max(1.5, (c.ph.standH || 6) * BODY_SCALE * FALL_STEP_FRAC);
+    if (isFinite(drop) && drop > walkable) { player.jumpY += drop; player.grounded = false; }
   }
   player._gWas = gNow;
   player._gAt = [c.x, c.y];
@@ -14188,11 +14788,15 @@ function fightBlocking() {
   return !!keys['q'] && FIGHT.stagger <= 0 && FIGHT.dodgeT <= 0 && !!player.c && player.c.alive && !player.spectator;
 }
 function fightSpend(n) {
+  // RAGE spends nothing. Sprint, swing, dodge and guard are all free while it
+  // is running, and it clears an exhaustion you were already in -- otherwise
+  // drinking it at zero stamina would do nothing for twenty seconds.
+  if (spellActive('rage')) { FIGHT.exhausted = false; FIGHT.stamDelay = 0; return; }
   FIGHT.stam = Math.max(0, FIGHT.stam - n);
   FIGHT.stamDelay = STAM_DELAY;
   if (FIGHT.stam <= 0.01) FIGHT.exhausted = true;
 }
-function fightCanSprint() { return !FIGHT.exhausted && FIGHT.stam > 0 && FIGHT.stagger <= 0 && !fightBlocking(); }
+function fightCanSprint() { return (spellActive('rage') || (!FIGHT.exhausted && FIGHT.stam > 0)) && FIGHT.stagger <= 0 && !fightBlocking(); }
 // multiplier on your move speed: guarding shuffles, a stagger nearly stops you
 function fightSpeedMul() {
   let m = 1;
@@ -14498,10 +15102,10 @@ const SPELL_DEF = {
            hud: 'every hit you land is doubled' },
   ward:  { n: 2, name: 'WARD',  dur: 20, col: [0.24, 1.00, 0.42], blurb: 'untouchable',
            hud: 'nothing can hurt you' },
-  veil:  { n: 3, name: 'VEIL',  dur: 30, col: [0.66, 0.32, 1.00], blurb: 'small and unseen',
-           hud: 'small, quiet and very hard to see' },
-  rage:  { n: 4, name: 'RAGE',  dur: 20, col: [1.00, 0.20, 0.14], blurb: 'bigger, faster, stronger',
-           hud: 'x1.5 damage and health, bigger and faster' },
+  veil:  { n: 3, name: 'VEIL',  dur: 30, col: [0.66, 0.32, 1.00], blurb: 'invisible',
+           hud: 'nothing can see you. it can still hear you, and you can still bite' },
+  rage:  { n: 4, name: 'RAGE',  dur: 20, col: [1.00, 0.20, 0.14], blurb: 'no stamina, no limit',
+           hud: 'x1.5 damage and health, bigger, faster, and nothing you do costs stamina' },
 };
 const SPELL_IDS = ['power', 'ward', 'veil', 'rage'];
 const SHROOM_IDS = SPELL_IDS;
@@ -14509,7 +15113,7 @@ const SPELL_BY_N = { 1: 'power', 2: 'ward', 3: 'veil', 4: 'rage' };
 const SPELL_CARRY = 3;              // of each kind. A pouch, not a warehouse.
 // What is in the pouch and what is running. Deliberately NOT in PROG: a spell
 // is a thing this round gave you, and it does not leave with you.
-const SPELL = { bag: { power: 0, ward: 0, veil: 0, rage: 0 }, on: {}, owner: null };
+const SPELL = { bag: { power: 0, ward: 0, veil: 0, rage: 0 }, on: {}, owner: null, noise: 0 };
 function spellReset(why) {
   for (const k of SPELL_IDS) SPELL.bag[k] = 0;
   SPELL.on = {};
@@ -14518,6 +15122,10 @@ function spellReset(why) {
   if (why) toast(why, 2200);
 }
 function spellActive(k) { return (SPELL.on[k] || 0) > 0; }
+// The island's view of one animal, as a multiplier on the SQUARED sight
+// range. Only the body the player is steering can be hidden; everything else
+// is as visible as it has always been.
+function creatureSeenMul(o) { return (o === player.c) ? spellSeenMul() : 1; }
 function spellLeft(k) { return Math.max(0, SPELL.on[k] || 0); }
 // Multipliers, read by the fight and the renderer. One place each, so a buff
 // cannot be applied twice or forgotten in one of two code paths.
@@ -14528,12 +15136,24 @@ function spellHpMul()     { return spellActive('rage') ? 1.5 : 1; }
 function spellInvuln()    { return spellActive('ward'); }
 // How visible you are to everything else. VEIL is the stealth spell: a small
 // body that makes no noise is one the island's senses have to work for.
-function spellSeenMul()   { return spellActive('veil') ? 0.25 : 1; }
+// 0 means NOTHING sees you. Not a smaller silhouette, not a shorter sight
+// line: the island's eyes do not have you at all. What it does have is ears,
+// so sprinting and swinging give you away for a second and a half at a time.
+function spellSeenMul() {
+  if (!spellActive('veil')) return 1;
+  return SPELL.noise > 0 ? 0.55 : 0;
+}
+// How much of yourself you can see while veiled. Not zero: steering a body
+// you cannot see at all is not stealth, it is a bug report.
+function spellGhost() { return spellActive('veil') ? (SPELL.noise > 0 ? 0.66 : 0.82) : 0; }
+// Anything loud. Called from the sprint and from every swing you throw.
+function spellNoise(sec) { if (spellActive('veil')) SPELL.noise = Math.max(SPELL.noise || 0, sec); }
 // The colour you are giving off right now: the strongest thing running, so a
 // stack reads as its headline effect rather than as brown.
 function spellGlow() {
   let best = null, bestT = 0;
   for (const k of SPELL_IDS) {
+    if (k === 'veil') continue;        // you do not glow while you are hiding
     const t = spellLeft(k);
     if (t > 0 && t > bestT * 0.0001 && (!best || SPELL_DEF[k].n > SPELL_DEF[best].n)) { best = k; bestT = t; }
   }
@@ -14662,6 +15282,7 @@ function fightStartSwing() {
   player.atkCD = MD.dur + 0.10;
   startAnim(c, mv, MD.dur);
   FIGHT.swing = { mv, t: MD.dur * 0.44, weak };
+  spellNoise(1.5);          // a swing is loud, and loud is how you are found
   if (weak) toast('Exhausted: weak ' + MD.label + '.', 800);
 }
 // A strike lands only on what the body is pointed at: within 10 degrees of the
@@ -14754,6 +15375,12 @@ function fightResolveSwing(sw) {
 function fightTick(dt) {
   world.hitFilter = fightHitFilter;
   fightFaceTick(dt);
+  // What the island can see of each animal. One function, consulted by the
+  // core's perception loop, so there is exactly one place stealth lives.
+  world.seenMul = creatureSeenMul;
+  SPELL.noise = Math.max(0, (SPELL.noise || 0) - dt);
+  if (FIGHT.sprinting) spellNoise(0.9);
+  spellTick(dt);
   spellTick(dt);
   shroomUpdate(dt);
   world.params.bodyScale = BODY_SCALE;
@@ -17147,17 +17774,36 @@ function renderFrame(t) {
   gArr[16] = player.camX; gArr[17] = player.camY; gArr[18] = player.camZ; gArr[19] = 0;
   r2SunMoon();
   gArr[24] = fog[0]; gArr[25] = fog[1]; gArr[26] = fog[2];
-  // Global surface wetness. Dew condenses once the light goes and burns off as
-  // it returns, the canopy holds what falls through it, and anything standing
-  // near open water is in the damp. world.wet, when a weather system sets it,
-  // overrides upward and never downward.
-  {
-    const dew = Math.pow(1 - clamp(lt2, 0, 1), 1.3) * 0.62 + can * 0.14;
-    const nearWater = clamp((terrain.LV.water * HEIGHT_SCALE + 2.5 - player.camY) * 0.22, 0, 0.30);
-    gArr[27] = clamp(Math.max(dew + nearWater, +world.wet || 0), 0, 1);
-  }
+  // fogCol.w is the global wetness channel: 0 bone dry, 1 streaming.
+  gArr[27] = clamp(world.wet || 0, 0, 1);
   r2FrameGlobals();
   gArr[28] = t; gArr[29] = FOG_DENSITY * GFX.fog * (1 + 2.4 * can) * (1 + 3.2 * (1 - lt2)); gArr[30] = (0.1 + 0.9 * lt2) * (1 - 0.22 * can); gArr[31] = terrain.LV.water * HEIGHT_SCALE;
+  // ---- what the weather does to the air -------------------------------
+  // Rain is not a particle effect with the world unchanged behind it: the
+  // air thickens, the light goes out of the sky, and the colour of the
+  // distance goes grey-green. The drops are the last and smallest part.
+  if (WX.rain > 0.002) {
+    const r = WX.rain, st = WX.storm;
+    gArr[29] = gArr[29] * (1 + 2.6 * r + 2.2 * st);
+    const grey = clamp(r * 0.72, 0, 0.72);
+    gArr[24] = gArr[24] * (1 - grey) + 0.30 * grey;
+    gArr[25] = gArr[25] * (1 - grey) + 0.34 * grey;
+    gArr[26] = gArr[26] * (1 - grey) + 0.33 * grey;
+    gArr[30] = gArr[30] * (1 - 0.55 * r - 0.22 * st);
+  }
+  // ---- lightning: the flash lights the whole world for about a tenth of a
+  // second, and it is BLUE-WHITE and far brighter than the sun, which is why
+  // a storm at night is a series of stills rather than a lit scene.
+  if (WX.flash > 0.002) {
+    const fl = clamp(WX.flash, 0, 1.4);
+    gArr[30] = gArr[30] + fl * 0.85;
+    // the flash is WHITE with a little blue in it. Tinting the fog toward a
+    // colour is how it ends up reading as a damage overlay instead.
+    const fk = 0.55 * fl;
+    gArr[24] = gArr[24] * (1 - fk) + 0.80 * fk;
+    gArr[25] = gArr[25] * (1 - fk) + 0.83 * fk;
+    gArr[26] = gArr[26] * (1 - fk) + 0.90 * fk;
+  }
   // the match fog: thick enough at the centre of the band that you cannot see
   // your own tail, and it washes the world grey-green as it takes you
   if (BR.on) {
@@ -17179,6 +17825,7 @@ function renderFrame(t) {
   const nInst = buildCreatureInstances(player.camX, player.camZ, t);
   const nPlant = buildPlantInstances(player.camX, player.camZ, t);
   try { if (BR.on) cloudBuild(t); else cloudCount = 0; } catch (e) { console.warn('cloud build', e); }
+  try { rainBuild(); } catch (e) { rainN = 0; if (!rainBuild._w) { rainBuild._w = 1; console.warn('rain build', e); } }
   folUpdate(player.camX, player.camY, player.camZ, player.yaw);
 
   const enc = dev.createCommandEncoder();
@@ -17220,6 +17867,7 @@ function renderFrame(t) {
   pass.setVertexBuffer(0, waterVB); pass.draw(6);
   try { rivDraw(pass); } catch (e) { console.warn('river draw', e); }
   try { cloudDraw(pass); } catch (e) { console.warn('cloud draw', e); }
+  try { rainDraw(pass); } catch (e) { console.warn('rain draw', e); }
   pass.end();
   if (R2on) r2PostPass(enc, fog);
   dev.queue.submit([enc.finish()]);
@@ -18058,7 +18706,8 @@ function edSetGlobals(eye, target, aspect, fov, fogDen, t) {
   gArr.set(vpM, 0);
   gArr[16] = eye[0]; gArr[17] = eye[1]; gArr[18] = eye[2]; gArr[19] = 1;   // w=1: editor, no near-camera foliage fade
   gArr[20] = 0.42; gArr[21] = 0.82; gArr[22] = 0.38; gArr[23] = 0;
-  gArr[24] = 0.52; gArr[25] = 0.60; gArr[26] = 0.52; gArr[27] = 0.55;
+  gArr[24] = 0.52; gArr[25] = 0.60; gArr[26] = 0.52;
+  gArr[27] = clamp((typeof world !== 'undefined' && world && world.wet != null) ? world.wet : 0, 0, 1);
   gArr[28] = t; gArr[29] = fogDen; gArr[30] = 1; gArr[31] = -1000; gArr[65] = 0;
   dev.queue.writeBuffer(gBuf, 0, gArr);
 }
@@ -20960,7 +21609,7 @@ function quitToMenu() {
 // Drawn with its own alpha-blended pipeline over the shared sphere mesh, sorted
 // back to front, so the puffs read as volume rather than as balls.
 // =====================================================================
-const CLOUD_MAX = 900;
+const CLOUD_MAX = 1500;
 const CLOUD_FLOATS = 8;                 // pos3, radius, tint3, density
 const cloudData = new Float32Array(CLOUD_MAX * CLOUD_FLOATS);
 let cloudVB = null, cloudPipe = null, cloudBind = null, cloudCount = 0;
@@ -20969,8 +21618,16 @@ let cloudVB = null, cloudPipe = null, cloudBind = null, cloudCount = 0;
 // air starts hurting, which is what makes it read as cloud coming for you
 // rather than a pane you walk through.
 const CLOUD_ROWS = [-260, -60, 150, 380, 640];
-const CLOUD_LAYERS = [0.10, 0.42, 0.80, 1.20];// height, as a fraction of the wall height
-const CLOUD_WALL_H = 520;
+// Seven levels up a cumulonimbus: the dark shelf at the base, the body of the
+// tower, and the anvil that spreads out at the top where it hits the cap.
+const CLOUD_LAYERS = [0.05, 0.20, 0.40, 0.62, 0.86, 1.12, 1.40];
+const CLOUD_WALL_H = 1750;
+// How far each level leans OUT from the ring. The anvil overhangs: standing at
+// the edge of the band you are under it, which is why the light goes first.
+const CLOUD_SPREAD = [1.0, 1.05, 1.25, 1.65, 2.25, 3.0, 3.7];
+// The base of a storm cell is nearly black and the anvil is white. Nothing
+// else in this game has that range in one object.
+const CLOUD_LUM = [0.16, 0.24, 0.42, 0.66, 0.92, 1.16, 1.30];
 const CLOUD_SEE = 5200;                 // puffs are only built this close to the eye
 // Ring spacing. The bank has to be solid where you are standing and may be
 // sparse away down the arc, so the step is set from how far along the ring the
@@ -21010,7 +21667,7 @@ fn cn(p: vec2<f32>) -> f32 {
   let n3 = cn(q.zx * 5.1 + vec2<f32>(t * 0.041, t * 0.033));
   let n = n1 * 0.55 + n2 * 0.30 + n3 * 0.15;
   var a = smoothstep(0.015, 0.50, facing);
-  a *= smoothstep(0.34, 0.78, n * 0.72 + facing * 0.40);
+  a *= smoothstep(0.26, 0.72, n * 0.72 + facing * 0.44);
   a *= i.dens;
   if (a < 0.012) { discard; }
   let day = g.params.z;
@@ -21018,8 +21675,9 @@ fn cn(p: vec2<f32>) -> f32 {
   let up = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);
   let sun = clamp(dot(N, L) * 0.5 + 0.5, 0.0, 1.0);
   // lit from above and from the sun, dark and heavy underneath
-  var col = mix(vec3<f32>(0.085, 0.100, 0.105), vec3<f32>(0.62, 0.65, 0.64), day);
-  col *= 0.44 + 0.56 * up;
+  var col = mix(vec3<f32>(0.035, 0.042, 0.055), vec3<f32>(0.50, 0.53, 0.58), day);
+  // the underside of a storm cell is nearly black and the shoulders are lit
+  col *= 0.13 + 0.87 * pow(up, 0.75);
   col = mix(col, mix(vec3<f32>(0.16, 0.19, 0.22), vec3<f32>(0.96, 0.94, 0.88), day), sun * 0.40);
   col *= i.tint;
   // the fog between you and it
@@ -21103,19 +21761,26 @@ function cloudBuild(t) {
     const a = aCam + k * stepA;
     const ca = Math.cos(a), sa = Math.sin(a);
     for (let ri = 0; ri < CLOUD_ROWS.length; ri++) {
-      const rr = (typeof brZoneEdge === 'function' ? brZoneEdge(a) : R) + CLOUD_ROWS[ri];
-      const bx = Z.cx + ca * rr, bz = Z.cz + sa * rr;
-      if (bx < -2000 || bz < -2000 || bx > WORLD_W + 2000 || bz > WORLD_H + 2000) continue;
-      const dx = bx - camX, dz = bz - camZ;
-      const d2 = dx * dx + dz * dz;
-      if (d2 > SEE * SEE) continue;
-      const gy = groundAt(clamp(bx, 1, WORLD_W - 1), clamp(bz, 1, WORLD_H - 1));
+      const edgeR = (typeof brZoneEdge === 'function' ? brZoneEdge(a) : R);
+      const rr = edgeR + CLOUD_ROWS[ri];
+      const bx0 = Z.cx + ca * rr, bz0 = Z.cz + sa * rr;
+      if (bx0 < -2000 || bz0 < -2000 || bx0 > WORLD_W + 2000 || bz0 > WORLD_H + 2000) continue;
+      const dx0 = bx0 - camX, dz0 = bz0 - camZ;
+      if (dx0 * dx0 + dz0 * dz0 > SEE * SEE) continue;
+      const gy = groundAt(clamp(bx0, 1, WORLD_W - 1), clamp(bz0, 1, WORLD_H - 1));
       for (let li = 0; li < CLOUD_LAYERS.length; li++) {
+        // the tower leans outward as it climbs, so the top overhangs the band
+        const rr2 = edgeR + CLOUD_ROWS[ri] * CLOUD_SPREAD[li];
+        const bx = Z.cx + ca * rr2, bz = Z.cz + sa * rr2;
+        const dx = bx - camX, dz = bz - camZ;
+        const d2 = dx * dx + dz * dz;
         const key = (k * 97 + ri * 31 + li) | 0;
         const h1 = cloudHash(key, 1), h2 = cloudHash(key, 2), h3 = cloudHash(key, 3);
         // slow boil: each puff breathes and drifts on its own phase
         const ph = h1 * 6.2832;
-        const rad = (185 + h2 * 210) * (1 + 0.10 * Math.sin(t * 0.25 + ph));
+        // a tower is built of bigger puffs the higher it goes, and the anvil
+        // is made of the biggest of all: that is what makes it read as scale
+        const rad = (185 + h2 * 210) * (1 + 0.10 * Math.sin(t * 0.25 + ph)) * (0.78 + 0.62 * li);
         const y = gy + CLOUD_WALL_H * CLOUD_LAYERS[li] + Math.sin(t * 0.18 + ph) * 26 + h3 * 60;
         const px = bx + Math.sin(t * 0.11 + ph) * 34;
         const pz = bz + Math.cos(t * 0.09 + ph * 1.3) * 34;
@@ -21123,9 +21788,16 @@ function cloudBuild(t) {
         // the back and at the top, so the bank has a front to watch arrive
         // rather than being a uniform slab.
         const CLOUD_ROW_DENS = [0.34, 0.66, 0.95, 0.80, 0.52];
-        const dens = CLOUD_ROW_DENS[ri] * (li === CLOUD_LAYERS.length - 1 ? 0.58 : li === 0 ? 0.88 : 1);
-        const g1 = 0.88 + h1 * 0.16;
-        list.push({ x: px, y, z: pz, r: rad, tint: [g1 * 0.93, g1, g1 * 0.90], dens,
+        const dens = CLOUD_ROW_DENS[ri] * (li >= CLOUD_LAYERS.length - 1 ? 0.55 : li === 0 ? 0.95 : 1);
+        // The tint carries the level's own light. A storm base is not grey:
+        // it is darker than the ground under it, and the lightning inside is
+        // the only thing that ever lights it from below.
+        const g1 = (0.88 + h1 * 0.16) * CLOUD_LUM[li];
+        // a flash lights the cloud it is INSIDE far harder than it lights the
+        // island, and the low levels take the most of it
+        const fl = (typeof WX !== 'undefined' ? WX.flash : 0) * (1.6 - 0.12 * li);
+        const g2 = g1 + fl * 1.5;
+        list.push({ x: px, y, z: pz, r: rad, tint: [g2 * 0.90, g2 * 0.96, g2 * 1.05], dens,
                     d2: (px - camX) * (px - camX) + (pz - camZ) * (pz - camZ) });
       }
     }
@@ -21140,7 +21812,8 @@ function cloudBuild(t) {
   // having arrived. Nearest first, cut to the budget, and only then sorted
   // back to front for the blend.
   list.sort((a, b) => a.d2 - b.d2);
-  const n2 = Math.min(list.length, CLOUD_MAX);
+  const CLOUD_BUDGET = { low: 420, medium: 800, high: 1250, ultra: 1500 };
+  const n2 = Math.min(list.length, CLOUD_BUDGET[GFX.name] || CLOUD_MAX);
   list.length = n2;
   list.sort((a, b) => b.d2 - a.d2);
   for (let i = 0; i < n2; i++) {
@@ -21862,6 +22535,7 @@ function tick(dt, skipRender) {
   try { if (BR.on) brTick(dt); } catch (e) { console.warn('br tick', e); }
   try { carcTick(dt); } catch (e) { if (!carcTick._w) { carcTick._w = 1; console.warn('carcass tick', e); } }
   stepSim(dt);
+  try { wxTick(dt); } catch (e) { if (!wxTick._w) { wxTick._w = 1; console.warn('weather tick', e); } }
   trackBirths();
   updateCamera(dt);
   if (skipRender) return null;
@@ -22001,6 +22675,22 @@ window.__G3D = {
   look(yaw, pitch) { player.yaw = yaw; if (pitch != null) player.pitch = pitch; },
   press(k, on) { keys[String(k).toLowerCase()] = !!on; },
   rebuild: () => rebuildWorld(),
+  weather: {
+    get state() { return { rain: WX.rain, storm: WX.storm, gust: WX.gust, flash: WX.flash,
+                           wet: world ? (world.wet || 0) : 0, cell: WX.cell, drops: rainN,
+                           zone: WX.zone || 0, pipe: !!rainPipe, budget: RAIN_BUDGET[GFX.name] || 0,
+                           canopy: WX.canopy, builds: WX.builds, sawRain: WX.sawRain, frozen: WX.frozen }; },
+    at: (bt) => wxAt(bt),
+    // force the sky for a screenshot or an assertion. wet follows rain unless
+    // it is given on its own.
+    set(rain, storm, wet) {
+      WX.rain = clamp(rain || 0, 0, 1); WX.storm = clamp(storm || 0, 0, 1);
+      if (world) world.wet = clamp(wet != null ? wet : WX.rain, 0, 1);
+      WX.frozen = true;
+    },
+    bolt() { WX.flash = 1.1; },
+    release() { WX.frozen = false; },
+  },
   get rivers() { return { n: RIV.paths.length, tris: RIV.count / 3,
     lens: RIV.paths.map(p => Math.round(p.pts.length * 46)),
     drops: RIV.paths.map(p => Math.round((p.pts[0].wy - p.pts[p.pts.length - 1].wy) * (terrain.heightScale || 420))) }; },
@@ -22053,10 +22743,18 @@ window.__G3D = {
     kill: (slot, by, cause) => brOnPlayerKilled(slot, by, cause),
     get slot() { return BR.slot; },
     resetFall: () => fallResetGround(),
+    fallRule: () => ({ safeH: FALL_SAFE_H, fatalH: FALL_FATAL_H, slopeTan: FALL_SLOPE_TAN,
+                       stepFrac: FALL_STEP_FRAC,
+                       safe: player.c ? Math.round(fallSafeFor(player.c.ph)) : null,
+                       grounded: !!player.grounded, jumpY: +(player.jumpY || 0).toFixed(2) }),
+    fallDamage: (h2) => (player.c ? applyFallDamage(player.c, h2) : null),
     lunge: (side) => tryLunge(side),
     dodgeVec: () => ({ x: +FIGHT.dodgeDX.toFixed(3), z: +FIGHT.dodgeDZ.toFixed(3), t: +FIGHT.dodgeT.toFixed(3) }),
     clearDodge: () => { FIGHT.dodgeT = 0; FIGHT.dodgeCD = 0; FIGHT.iframe = 0; FIGHT.stam = STAM_MAX; FIGHT.exhausted = false; },
     drainStam: () => { FIGHT.stam = 0; FIGHT.exhausted = true; },
+    stam: () => ({ v: +FIGHT.stam.toFixed(2), ex: FIGHT.exhausted, sprint: FIGHT.sprinting }),
+    veil: () => ({ seen: spellSeenMul(), ghost: spellGhost(), noise: +(SPELL.noise || 0).toFixed(2) }),
+    swing: () => { fightStartSwing(); return !!FIGHT.swing; },
     setKeys: (o) => { for (const k in keys) keys[k] = false; for (const k in o) keys[k] = !!o[k]; },
     moveVec: (dt) => { const c = player.c; movePlayer(c, dt || 0.016); return { vx: +c.vx.toFixed(2), vy: +c.vy.toFixed(2) }; },
     facing: (a, t, need) => fightFacing(a, t, need == null ? FACE_LAND : need),
