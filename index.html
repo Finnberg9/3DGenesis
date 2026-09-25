@@ -3905,12 +3905,20 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
     m_spino:    { t: 'MOUTH', mode: 'carn', w: 1.0, cost: 3, atk: 4, reach: 5 },
     m_short:    { t: 'MOUTH', mode: 'carn', w: 0.9, cost: 3, atk: 4 },
     m_duck:     { t: 'MOUTH', mode: 'herb', w: 0.9, cost: 2, reach: 3 },
+    // Four mandibles, two upper and two lower, crossed when shut: opening is an
+    // unlatching rather than a hinge, and what is inside is soft and small
+    // against the hard outer segments. Long reach, because the petals open
+    // wider than any jaw.
+    m_bloom:    { t: 'MOUTH', mode: 'carn', w: 1.1, cost: 4, atk: 5, reach: 7 },
     e_round:    { t: 'EYE', w: 0.6, cost: 1 },
     e_big:      { t: 'EYE', w: 0.9, cost: 2, sense: 8 },
     e_slit:     { t: 'EYE', w: 0.7, cost: 1 },
     e_stalk:    { t: 'EYE', w: 0.7, cost: 2, sense: 14 },
     e_cluster:  { t: 'EYE', w: 0.9, cost: 2, sense: 10 },
     e_bug:      { t: 'EYE', w: 0.8, cost: 2, sense: 12 },
+    // No eye at all: a sunken field of pits. Senses further than any eye and
+    // weighs almost nothing, and the head it sits on has no face.
+    e_pit:      { t: 'EYE', w: 0.3, cost: 2, sense: 16 },
     h_straight: { t: 'HORN', w: 0.7, cost: 2 },
     h_curved:   { t: 'HORN', w: 0.8, cost: 2 },
     h_ram:      { t: 'HORN', w: 0.9, cost: 3, def: 4 },
@@ -3923,6 +3931,13 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
     s_shell:    { t: 'SPIKE', w: 1.2, cost: 3, def: 8, spd: -0.04 },
     s_knob:     { t: 'SPIKE', w: 0.5, cost: 1 },
     s_club:     { t: 'SPIKE', w: 0.7, cost: 2, atk: 4, sweep: 1 },
+    // Five hard segments and a telson that widens back out before the needle.
+    // A taper straight to a point is an antenna; the re-widening is what reads
+    // as a delivery device.
+    s_sting:    { t: 'SPIKE', w: 0.9, cost: 3, atk: 7, sweep: 1 },
+    // Chiselled plates on edge rather than a cone: flat faces that catch light
+    // as planes, so they read as bone through the skin instead of as studs.
+    s_blade:    { t: 'SPIKE', w: 0.8, cost: 2, atk: 3, def: 3 },
     l_leg:      { t: 'LIMB', w: 1.0, cost: 2, limb: 1 },
     l_thick:    { t: 'LIMB', w: 1.3, cost: 3, def: 2, limb: 1 },
     l_thin:     { t: 'LIMB', w: 0.75, cost: 1, limb: 1 },
@@ -3941,6 +3956,9 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
     w_bat:      { t: 'WING', w: 1.6, cost: 3 },
     w_feather:  { t: 'WING', w: 1.7, cost: 3 },
     w_insect:   { t: 'WING', w: 1.3, cost: 2 },
+    // A very high aspect ratio span, torn along the trailing edge only. Almost
+    // all wing and almost no animal.
+    w_ragged:   { t: 'WING', w: 1.5, cost: 3 },
     d_antenna:  { t: 'EYE', w: 0.25, cost: 1, sense: 10 },
     d_crest:    { t: 'ORN', w: 0.3, cost: 1 },
     d_frill:    { t: 'ORN', w: 0.5, cost: 1, def: 2 },
@@ -3969,10 +3987,12 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
     m_maw: 'super', m_trunk: 'super', m_short: 'super', e_stalk: 'super', e_cluster: 'super',
     h_ram: 'super', h_rhino: 'super', s_club: 'super', l_thick: 'super', l_spring: 'super',
     t_hand: 'super', t_pincer: 'super', f_fluke: 'super', w_insect: 'super', d_gland: 'super',
+  s_blade: 'super',
     // ultra: flight, armour and the long killing jaws.
     m_spino: 'ultra', h_antler: 'ultra', s_shell: 'ultra', w_bat: 'ultra', w_feather: 'ultra',
+  s_sting: 'ultra', w_ragged: 'ultra', e_pit: 'ultra',
     // alpha: the apex bite. Almost never born wild.
-    m_rex: 'alpha',
+    m_rex: 'alpha', m_bloom: 'alpha',
   };
   // What a tier is worth as a weapon, 0..1. The curve is deliberately steep at
   // the top: an alpha part should feel like finding an alpha part.
@@ -4174,6 +4194,20 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
     { a: 0.46, b: 0.52, seg: 9,  prof: 'blob',   arch: 0.14, droop: 0.00, wide: 0.24, neck: 0.10, nx: 0.85, ny: 0.10,  ns: 2, head: 0.30, snx: 0.22, snr: 0.34, tail: 0.5, tailR: 0.16, ts: 4, stand: 0.40, waist: 0.44, waistAt: 0.42, waistW: 0.12 }, // 35 mothwing: a blunt furred body with no beak whatever
     { a: 1.52, b: 0.74, seg: 13, prof: 'animal', arch: 0.46, droop: 0.06, wide: 0.12, neck: 2.30, nx: 0.58, ny: 0.62,  ns: 7, head: 0.46, snx: 0.62, snr: 0.50, tail: 2.7, tailR: 0.30, ts: 10, stand: 1.65, hump: 0.70, waist: 0.20, waistAt: 0.34 }, // 36 drake: a raised shoulder, a thick neck that rears, a heavy jaw, a long tail
     { a: 0.86, b: 0.46, seg: 9,  prof: 'animal', arch: 0.26, droop: 0.00, wide: 0,    neck: 1.05, nx: 0.78, ny: -0.06, ns: 4, head: 0.40, snx: 1.55, snr: 0.26, tail: 0.25, tailR: 0.10, ts: 4, stand: 1.00, hump: 0.55 }, // 37 skimmer: the one long beak, held out level on a folded frame
+
+    // ---- 2026-09-25: the new ten ------------------------------------------
+    // `crook` is new: how hard the leg pass breaks the mirror. 0 keeps a plan
+    // byte-identical to what it was, so nothing above this line moves.
+    { a: 1.00, b: 0.88, seg: 11, prof: 'animal', arch: 0.34, droop: 0.02, wide: 0.58, neck: 0.76, nx: 0.96, ny: -0.18, ns: 2, head: 0.86, snx: 0.72, snr: 0.74, tail: 0.0, tailR: 0.14, ts: 4, stand: 2.05, hump: 0.78, waist: 0.16, waistAt: 0.22, crook: 0.5 , blend: 0.45, ribs: 0.20, keel: 0.38}, // 38 bloom: everything forward, nothing behind, and the face is the mouth
+    { a: 0.80, b: 0.28, seg: 9,  prof: 'tube',   arch: 0.12, droop: 0.26, wide: 0,    neck: 0.62, nx: 0.88, ny: -0.24, ns: 3, head: 0.30, snx: 0.78, snr: 0.26, tail: 1.5, tailR: 0.11, ts: 10, stand: 0.90, hump: 0.55, crook: 0.7, view: [0.42, 0.56, 0.72] , blend: 0.22, ribs: 0.48, keel: 0.00}, // 39 kite: a starved body hanging under a span four times its length
+    { a: 0.78, b: 0.54, seg: 11, prof: 'animal', arch: 0.74, droop: 0.34, wide: 0.54, neck: 0.58, nx: 0.42, ny: -0.92, ns: 2, head: 0.26, snx: 0.40, snr: 0.32, tail: 0.0, tailR: 0.12, ts: 4, stand: 2.85, hump: 0.99, waist: 0.54, waistAt: 0.20, waistW: 0.09, crook: 0.8 , blend: 0.28, ribs: 0.32, keel: 0.62}, // 40 gibbet: a shoulder yoke with no hips, head hanging inside the chest
+    { a: 1.18, b: 0.96, seg: 11, prof: 'blob',   arch: 0.04, droop: 0.58, wide: 0.64, neck: 0.88, nx: 0.92, ny: -0.30, ns: 2, head: 0.30, snx: 0.62, snr: 0.30, tail: 0.5, tailR: 0.11, ts: 5, stand: 2.00, hump: 0.18, crook: 0.38 , blend: 0.80, ribs: 0.08, keel: 0.00}, // 41 cradle: a hanging belly on six legs that cannot carry it
+    { a: 1.32, b: 0.58, seg: 13, prof: 'insect', arch: 0.32, droop: 0.00, wide: 0.14, neck: 0.58, nx: 0.82, ny: -0.40, ns: 3, head: 0.26, snx: 0.74, snr: 0.28, tail: 1.9, tailR: 0.22, ts: 9, stand: 1.40, tailUp: 1.0, hump: 0.72, waist: 0.64, waistAt: 0.42, waistW: 0.09, crook: 0.4 , blend: 0.12, ribs: 0.58, keel: 0.22}, // 42 thresher: two lobes, blade arms, the metasoma over the back
+    { a: 1.20, b: 0.42, seg: 9,  prof: 'round',  arch: 0.14, droop: 0.00, wide: 1.60, neck: 0.66, nx: 0.92, ny: -0.46, ns: 2, head: 0.26, snx: 0.50, snr: 0.26, tail: 0.0, tailR: 0.12, ts: 4, stand: 1.30, hump: 0.30, crook: 0.55 , blend: 0.20, ribs: 0.26, keel: 0.90}, // 43 pall: a lid. Wider than it is long, eight crooked legs, nothing above the rim
+    { a: 2.05, b: 0.40, seg: 19, prof: 'tube',   arch: 0.58, droop: 0.00, wide: 0.10, neck: 1.35, nx: 0.42, ny: 0.94,  ns: 6, head: 0.34, snx: 0.52, snr: 0.34, tail: 1.0, tailR: 0.14, ts: 7, stand: 0.95, flex: 1, hump: 0.97, crook: 0.5 , blend: 0.08, ribs: 0.66, keel: 0.18}, // 44 husk: two thirds on the floor, the front third standing up
+    { a: 0.70, b: 0.64, seg: 9,  prof: 'insect', arch: 0.22, droop: 0.00, wide: 0.36, neck: 0.58, nx: 0.84, ny: -0.22, ns: 2, head: 0.36, snx: 0.66, snr: 0.36, tail: 1.7, tailR: 0.20, ts: 8, stand: 0.88, tailUp: 0.85, hump: 0.45, waist: 0.52, waistAt: 0.38, waistW: 0.10, crook: 0.5 , blend: 0.18, ribs: 0.52, keel: 0.34}, // 45 wrack: short broad wings on a pinched body: the opposite of the kite
+    { a: 1.00, b: 0.94, seg: 11, prof: 'animal', arch: 0.46, droop: 0.04, wide: 0.30, neck: 1.30, nx: 0.50, ny: 0.66,  ns: 8, head: 0.54, snx: 1.30, snr: 0.46, tail: 3.0, tailR: 0.36, ts: 11, stand: 1.85, hump: 0.78, waist: 0.20, waistAt: 0.30, crook: 0.20, narc: 0.40, neckR: 1.45, neckTap: 0.54, tailBase: 1.35, tailTap: 0.52, view: [0.58, 0.26, 0.77] , blend: 0.52, ribs: 0.24, keel: 0.86}, // 46 sire: the body is SHORT so the neck and the tail are long on screen
+    { a: 0.74, b: 0.30, seg: 11, prof: 'insect', arch: 0.86, droop: 0.22, wide: 0.10, neck: 0.98, nx: 0.74, ny: -0.48, ns: 4, head: 0.34, snx: 0.88, snr: 0.28, tail: 2.1, tailR: 0.16, ts: 11, stand: 2.65, hump: 0.94, waist: 0.30, waistAt: 0.26, crook: 1.0 , blend: 0.22, ribs: 0.60, keel: 0.66}, // 47 null: two crooked legs, a head below the shoulder line, and nothing else
   ];
   const BODY_RANGE = { len: [0.6, 1.6], girth: [0.7, 1.45], neck: [0, 2.2], tail: [0, 1.8] };
   function planProfile(kind, u) {
@@ -4223,9 +4257,13 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
       }
       return g;
     };
+    // ribs: a notch on the SEGMENT index rather than on u, so the ridges land
+    // on the joints instead of drifting between them. ribs 0 is the old curve.
+    const rib = P.ribs || 0;
     for (let i = 0; i < P.seg; i++) {
       const u = i / (P.seg - 1);
-      balls.push({ x: -a + 2 * a * u, y: spineY(u), z: 0, r: b * girth(u), g: 'body' });
+      const ridge = rib > 0 ? 1 - rib * 0.5 * (1 - Math.cos(i * Math.PI)) : 1;
+      balls.push({ x: -a + 2 * a * u, y: spineY(u), z: 0, r: b * girth(u) * ridge, g: 'body' });
     }
     // lateral mass for broad plans (always 3 pairs so indices stay fixed)
     for (const u of [0.28, 0.5, 0.72]) {
@@ -4235,6 +4273,17 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
       balls.push({ x, y, z:  b * w, r, g: 'body', hide: w <= 0 });
       balls.push({ x, y, z: -b * w, r, g: 'body', hide: w <= 0 });
     }
+    // ---- dorsal keel ------------------------------------------------------
+    // Five balls riding above the spine. A plan with keel 0 emits them hidden
+    // and at zero radius, so every existing plan keeps its exact ball list and
+    // every saved design keeps its anchors.
+    const keel = P.keel || 0;
+    for (let ki = 0; ki < 5; ki++) {
+      const u = 0.18 + ki * 0.16;
+      const pr = girth(u);
+      const r = keel > 0 ? b * pr * 0.34 * (0.7 + 0.6 * Math.sin(Math.PI * ((u - 0.18) / 0.64))) : 0.0001;
+      balls.push({ x: -a + 2 * a * u, y: spineY(u) + b * pr * keel, z: 0, r, g: 'body', hide: keel <= 0 });
+    }
     const NK = P.neck * Nm;
     const neckLen = NK * 2.6;
     // The neck leaves the SHOULDER, so on a hunched body it starts high, and
@@ -4242,13 +4291,31 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
     const shoulderY = spineY(0.86);
     const hx = a * 0.78 + neckLen * P.nx, hy = shoulderY + b * 0.30 + neckLen * P.ny;
     const nx0 = a * 0.70, ny0 = shoulderY + b * 0.22;
+    // ---- narc: the neck is an S, not a ray ---------------------------------
+    // A straight chain of balls from shoulder to skull reads as a bird at any
+    // length, because the eye classifies on the NUMBER OF ARCS before it looks
+    // at proportion. One arc is a swan. Two is a dragon. narc bows the chain
+    // one way over its first half and back over its second; both endpoints are
+    // untouched, so the head lands exactly where every part anchor, the bite
+    // reach and the look-at code already expect it, and narc 0 reproduces the
+    // old straight neck to the byte.
+    // neckR thickens the whole chain and neckTap sets how fast it narrows into
+    // the skull: a heavy animal needs a neck that is visibly carrying the head,
+    // and a constant-width tube reads as a hose.
+    const narc = P.narc || 0;
+    const ntap = P.neckTap == null ? 0.34 : P.neckTap;
+    const nRm = P.neckR == null ? 1 : P.neckR;
+    const ndx = hx - nx0, ndy = hy - ny0;
+    const nlen = Math.hypot(ndx, ndy) || 1;
+    const npx = -ndy / nlen, npy = ndx / nlen;      // perpendicular, in the body plane
     for (let i = 1; i <= P.ns; i++) {
       const u = i / (P.ns + 1);
       // Thickness comes off the BODY, not a flat 0.34: on a big animal a
       // constant-width neck vanishes, which is why the long-necked plans all
       // rendered as a snout stuck on a log.
-      const r = neckLen > 0.12 ? (0.30 + 0.55 * b) * (1 - 0.34 * u) * (1 + NK * 0.10) : 0.0001;
-      balls.push({ x: nx0 + (hx - nx0) * u, y: ny0 + (hy - ny0) * u, z: 0, r, g: 'neck', hide: neckLen <= 0.12 });
+      const r = neckLen > 0.12 ? (0.30 + 0.55 * b) * (1 - ntap * u) * (1 + NK * 0.10) * nRm : 0.0001;
+      const bow = narc * nlen * 0.42 * Math.sin(2 * Math.PI * u);
+      balls.push({ x: nx0 + ndx * u + npx * bow, y: ny0 + ndy * u + npy * bow, z: 0, r, g: 'neck', hide: neckLen <= 0.12 });
     }
     const headIdx = balls.length;
     const hr = P.head;
@@ -4268,7 +4335,13 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
       const ang = 0.12 + 0.18 * u - tup * (0.30 + 1.55 * u);
       tx -= seg * Math.cos(ang);
       ty -= seg * Math.sin(ang) * 0.6;
-      const r = tl > 0.05 ? Math.max(0.03, tr0 * (1 - 0.78 * u)) : 0.0001;
+      // tailTap: how fast the tail loses width along its length. 0.78 is the
+      // old fixed value. A whip wants it high; a counterweight wants it low,
+      // because a tail that has thinned to a thread by half its length has no
+      // mass left to read as mass however long it is.
+      const ttap = P.tailTap == null ? 0.78 : P.tailTap;
+      const troot = 1 + (P.tailBase || 0) * Math.exp(-(u / 0.34) * (u / 0.34));
+      const r = tl > 0.05 ? Math.max(0.03, tr0 * (1 - ttap * u) * troot) : 0.0001;
       balls.push({ x: tx, y: ty, z: 0, r, g: 'tail', hide: tl <= 0.05 });
     }
     const sk = { balls, a, b, headIdx, tailStart, tailLen: tl, neckLen, NK, plan: P, flex: !!P.flex };
@@ -4317,7 +4390,9 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
       out.push({ t: 'c', ax: B[i].x, ay: B[i].y, az: B[i].z, bx: B[j].x, by: B[j].y, bz: B[j].z, ra: vr(i), rb: vr(j), k, i, j });
     };
     const sph = (i, out, k) => { if (live(i)) out.push({ t: 's', ax: B[i].x, ay: B[i].y, az: B[i].z, ra: vr(i), k, i, j: i }); };
-    const kb = 0.26 * sk.b;
+    // A smooth minimum at 0.26 b melts every joint in the chain, which is why
+    // every plan came out as one lozenge. Low blend leaves the creases in.
+    const kb = 0.26 * sk.b * (P.blend == null ? 1 : P.blend);
     for (let i = 0; i + 1 < P.seg; i++) cone(i, i + 1, body, kb);
     const nearestSpine = (x, y, z) => {
       let bi = 0, bd = Infinity;
@@ -4327,8 +4402,11 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
     // These are shoulder and hip masses, not separate animals. Blended hard so
     // they read as muscle over the ribcage instead of boulders glued on.
     for (let i = P.seg; i < P.seg + 6; i++) if (live(i)) { sph(i, body, kb * 3.0); cone(i, nearestSpine(B[i].x, B[i].y, B[i].z), body, kb * 3.0); }
+    // keel: welded hard to the spine whatever the body blend, so it reads as a
+    // ridge of bone standing out of the back rather than as a swelling in it
+    for (let i = P.seg + 6; i < P.seg + 11; i++) if (live(i)) { sph(i, body, kb * 0.30); cone(i, nearestSpine(B[i].x, B[i].y, B[i].z), body, kb * 0.30); }
     const chain = [];
-    for (let i = P.seg + 6; i < sk.headIdx; i++) if (live(i)) chain.push(i);
+    for (let i = P.seg + 11; i < sk.headIdx; i++) if (live(i)) chain.push(i);
     chain.push(sk.headIdx);
     let prev = nearestSpine(B[chain[0]].x, B[chain[0]].y, B[chain[0]].z);
     for (const i of chain) { cone(prev, i, body, 0.18); prev = i; }
@@ -4684,6 +4762,16 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
     { base: [0.28, 0.24, 0.34], coat: [0.64, 0.58, 0.70], detail: [0.92, 0.84, 0.44], pat: 2 },  // 35 mothwing
     { base: [0.24, 0.20, 0.18], coat: [0.52, 0.46, 0.40], detail: [0.80, 0.32, 0.14], pat: 1 },  // 36 drake
     { base: [0.30, 0.28, 0.24], coat: [0.62, 0.58, 0.50], detail: [0.78, 0.40, 0.20], pat: 1 },  // 37 skimmer
+    { base: [0.30, 0.22, 0.21], coat: [0.50, 0.41, 0.38], detail: [0.47, 0.20, 0.21], pat: 3 },  // 38 bloom
+    { base: [0.19, 0.18, 0.19], coat: [0.36, 0.35, 0.36], detail: [0.44, 0.38, 0.35], pat: 0 },  // 39 kite
+    { base: [0.24, 0.23, 0.21], coat: [0.44, 0.43, 0.40], detail: [0.58, 0.56, 0.50], pat: 0 },  // 40 gibbet
+    { base: [0.32, 0.27, 0.23], coat: [0.52, 0.47, 0.40], detail: [0.42, 0.26, 0.26], pat: 2 },  // 41 cradle
+    { base: [0.17, 0.17, 0.16], coat: [0.33, 0.34, 0.31], detail: [0.40, 0.34, 0.20], pat: 1 },  // 42 thresher
+    { base: [0.21, 0.21, 0.22], coat: [0.38, 0.38, 0.39], detail: [0.34, 0.37, 0.33], pat: 1 },  // 43 pall
+    { base: [0.26, 0.21, 0.18], coat: [0.45, 0.39, 0.33], detail: [0.44, 0.28, 0.20], pat: 1 },  // 44 husk
+    { base: [0.20, 0.19, 0.16], coat: [0.36, 0.35, 0.30], detail: [0.34, 0.39, 0.27], pat: 2 },  // 45 wrack
+    { base: [0.18, 0.20, 0.18], coat: [0.34, 0.37, 0.34], detail: [0.48, 0.25, 0.18], pat: 1 },  // 46 sire
+    { base: [0.23, 0.22, 0.22], coat: [0.41, 0.40, 0.39], detail: [0.56, 0.54, 0.50], pat: 0 },  // 47 null
   ];
   function surfaceAt(sk, tx, ty, tz, dx, dy, dz) {
     const l = Math.hypot(dx, dy, dz) || 1; dx /= l; dy /= l; dz /= l;
@@ -4695,7 +4783,9 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
   //                 scorpion stilt hydra mantis crab brute drifter wyrm
                      4, 1, 1, 4, 4, 3, 0, 1,
   //                 lurker maw hollow centipede flit mothwing drake
-                     0, 4, 0, 4, 2, 2, 1, 2];
+                     0, 4, 0, 4, 2, 2, 1, 2,
+  //                 bloom kite gibbet cradle thresher pall husk wrack sire null
+                     1, 0, 0, 1, 4, 4, 1, 4, 1, 0];
   // opt (all optional): body {len,girth,neck,tail}; eye / mouth / tip(id)->id overrides.
   function defaultDesign(planIdx, opt) {
     opt = opt || {};
@@ -4790,6 +4880,40 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
     const eyeAt = (id, s, up, fwd, side) => put(id, head.x + hr * fwd, head.y + hr * up, hr * side, fwd * 0.6, up, side, s, true);
     const mouthAt = (id, s) => put(id, snout.x + snout.r * 0.9, snout.y - snout.r * 0.25, 0, 1, -0.35, 0, s, false);
     const a = sk.a, b = sk.b, st = P.stand;
+    // deterministic per-limb hash, so a plan looks the same every time it is built
+    const crookRnd = (i, k) => {
+      let h2 = (i * 374761393 + k * 668265263 + pi * 2246822519) >>> 0;
+      h2 = Math.imul(h2 ^ (h2 >>> 13), 1274126177) >>> 0;
+      return ((h2 ^ (h2 >>> 16)) >>> 0) / 4294967296 * 2 - 1;   // -1..1
+    };
+    const crookLegs = () => {
+      const amt = P.crook || 0;
+      if (amt <= 0) return;
+      const orig = d.limbs.map((l) => l.f.slice());
+      for (let i = 0; i < d.limbs.length; i++) {
+        const lb = d.limbs[i];
+        // nearest neighbour ON THE SAME SIDE, in the rest pose
+        let gap = Infinity;
+        for (let j = 0; j < d.limbs.length; j++) {
+          if (j === i || Math.sign(orig[j][2]) !== Math.sign(orig[i][2])) continue;
+          gap = Math.min(gap, Math.abs(orig[j][0] - orig[i][0]));
+        }
+        const room = isFinite(gap) ? gap * 0.25 : Infinity;
+        // fore/aft reach and lateral reach: the leg genuinely gets longer or
+        // shorter along its own path
+        const legLen = Math.hypot(lb.f[0], lb.f[1], lb.f[2]) || b;
+        lb.f[0] += Math.max(-room, Math.min(room, crookRnd(i, 1) * 0.30 * amt * legLen));
+        lb.f[2] *= 1 + Math.abs(crookRnd(i, 2)) * 0.34 * amt;
+        // the bend. Pushing the knee past the straight line is the
+        // hyper-extension, and it is what makes a long leg look wrong rather
+        // than just long.
+        lb.k[0] += crookRnd(i, 3) * 0.40 * amt;
+        lb.k[1] += crookRnd(i, 4) * 0.34 * amt;
+        lb.k[2] *= 1 + crookRnd(i, 5) * 0.30 * amt;
+        lb.th *= 1 + crookRnd(i, 6) * 0.22 * amt;
+        // f[1] is deliberately untouched: every foot still reaches the floor.
+      }
+    };
     switch (pi) {
       case 0: // four-legged runner
         eyeAt('e_round', 1, 0.45, 0.35, 0.62); mouthAt('m_beak', 1);
@@ -4932,6 +5056,91 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
         put('f_fin', a * 0.35, -b * 0.4, b * 0.9, 0, -0.35, 1, 1.5, true);
         put('s_knob', a * 0.35, b * 1.05, 0, 0, 1, 0, 0.5, false);
         tailPut('f_fluke', 1.6);
+        break;
+      // ---- 2026-09-25: the new ten ---------------------------------------
+      case 38: // BLOOM. All mass over the shoulders. The face IS the mouth.
+        // No eyes on the front of the head at all -- they are pushed up and
+        // back onto the skull, above and behind the petals, so the thing you
+        // are looking into is a throat.
+        eyeAt('e_pit', 0.9, 0.72, -0.05, 0.40);
+        mouthAt('m_bloom', 1.15);
+        put('s_blade', a * 0.30, b * 1.05, b * 0.34, 0.15, 1, 0.35, 1.05, true);
+        put('s_blade', -a * 0.25, b * 0.92, b * 0.30, -0.2, 1, 0.35, 0.75, true);
+        // four stumps under a body that overhangs them front and back
+        limb('l_thick',  a * 0.44, -b * 0.30,  b * 0.70,  a * 0.62, -st, b * 1.06, 0.30, 0.10, 0.10, 't_pad', 1.02);
+        limb('l_thick', -a * 0.36, -b * 0.30,  b * 0.66, -a * 0.52, -st, b * 1.00, -0.26, 0.10, 0.10, 't_pad', 0.86);
+        break;
+      case 39: // KITE. The wing is the animal.
+        eyeAt('e_pit', 0.8, 0.55, 0.30, 0.42); mouthAt('m_hook', 0.9);
+        put('w_ragged', a * 0.20, b * 0.70, b * 0.46, 0, 0.62, 0.78, 2.9, true);
+        put('w_ragged', -a * 0.30, b * 0.52, b * 0.44, -0.2, 0.5, 0.84, 1.5, true);
+        // two hooks, not legs: they hang, they do not walk well
+        limb('l_thin', -a * 0.05, -b * 0.42, b * 0.40, a * 0.06, -st, b * 0.52, 0.26, 0.04, 0.05, 't_talon', 0.55);
+        tailPut('s_knob', 0.7);
+        break;
+      case 40: // GIBBET. A shoulder yoke, no hips, and the head inside the chest.
+        eyeAt('e_pit', 1.15, 0.10, 0.20, 0.40);
+        mouthAt('m_maw', 0.85);
+        put('s_blade', a * 0.10, b * 1.25, b * 0.40, 0, 1, 0.4, 1.35, true);
+        put('h_curved', -a * 0.30, b * 1.05, b * 0.22, -0.4, 1, 0.3, 0.8, true);
+        // the two long front limbs it stands on
+        limb('l_thin',  a * 0.24, -b * 0.10,  b * 0.56,  a * 0.30, -st, b * 0.70, 0.34, 0.16, 0.06, 't_claw', 0.80);
+        // and the starved pair behind, kept clear of the ground so they stay arms
+        limb('l_thin', -a * 0.34,  b * 0.30,  b * 0.48, -a * 0.60, -st * 0.36, b * 0.66, -0.26, -0.30, 0.10, 't_claw', 0.46);
+        break;
+      case 41: // CRADLE. A belly that hangs, on legs that visibly cannot hold it.
+        eyeAt('e_cluster', 0.7, 0.45, 0.42, 0.44); mouthAt('m_hook', 0.8);
+        put('s_knob', -a * 0.10, -b * 0.95, b * 0.30, 0, -1, 0.3, 1.2, true);
+        legRow('l_thin', [0.58, 0.04, -0.52], { out: 0.78, up: 0.25, rake: 1.25, reach: 2.25, knee: 1.15, th: 0.52, tip: 't_talon' });
+        break;
+      case 42: // THRESHER. Thorax, hard pinch, abdomen, and the sting over the back.
+        eyeAt('e_bug', 0.8, 0.40, 0.44, 0.52); mouthAt('m_hook', 0.9);
+        put('s_blade', a * 0.36, b * 1.00, b * 0.26, 0.2, 1, 0.3, 0.95, true);
+        // raptorial pair: thick grooved upper arm, thin blade below, hook on the end
+        limb('l_thick', a * 0.58, b * 0.18, b * 0.50, a * 1.25, -st * 0.50, b * 0.80, 0.22, -0.34, 0.14, 't_claw', 1.00);
+        // one heavy digitigrade hind pair, planted under the mass
+        limb('l_leg', -a * 0.30, -b * 0.28, b * 0.54, -a * 0.10, -st, b * 0.70, 0.34, 0.20, 0.05, 't_talon', 1.15);
+        tailPut('s_sting', 1.5);
+        break;
+      case 43: // PALL. A lid on eight crooked legs. Nothing above the rim.
+        eyeAt('e_pit', 0.8, -0.35, 0.22, 0.55);
+        mouthAt('m_hook', 0.75);
+        put('s_shell', 0, b * 1.02, 0, 0, 1, 0, 1.55, false);
+        put('s_blade', a * 0.30, b * 0.70, b * 1.00, 0.2, 0.45, 1, 0.8, true);
+        put('s_blade', -a * 0.30, b * 0.68, b * 1.00, -0.2, 0.45, 1, 0.8, true);
+        legRow('l_thin', [0.74, 0.26, -0.24, -0.72], { out: 0.98, up: 0.05, rake: 1.05, reach: 2.15, knee: 0.95, th: 0.66, tip: 't_talon' });
+        break;
+      case 44: // HUSK. Two thirds on the floor, the front third standing up.
+        eyeAt('e_pit', 0.9, 0.30, 0.38, 0.50); mouthAt('m_bloom', 0.95);
+        put('s_blade', a * 0.55, b * 1.05, b * 0.22, 0.3, 1, 0.3, 0.7, true);
+        legRow('l_thin', [0.62, 0.36, 0.10, -0.16, -0.42, -0.68], { out: 0.82, rake: 0.7, reach: 1.05, knee: 0.5, th: 0.62, tip: 't_talon' });
+        tailPut('s_spike', 0.9);
+        break;
+      case 45: // WRACK. Short broad wings on a pinched body. Not the kite.
+        eyeAt('e_bug', 0.9, 0.42, 0.40, 0.55); mouthAt('m_jaws', 0.85);
+        put('w_insect', a * 0.18, b * 0.66, b * 0.50, 0.1, 0.62, 0.78, 1.55, true);
+        put('w_insect', -a * 0.22, b * 0.58, b * 0.50, -0.15, 0.55, 0.82, 1.20, true);
+        put('d_antenna', head.x + hr * 0.2, head.y + hr, hr * 0.3, 0.3, 1, 0.35, 1.2, true);
+        legRow('l_thin', [0.30, -0.22], { out: 0.80, rake: 1.0, reach: 1.45, knee: 0.7, th: 0.68, tip: 't_talon' });
+        tailPut('s_sting', 1.2);
+        break;
+      case 46: // SIRE. Short body, long neck, long tail, and a real wing on it.
+        eyeAt('e_slit', 0.95, 0.52, 0.30, 0.58);
+        mouthAt('m_rex', 1.10);
+        put('h_curved', head.x - hr * 0.30, head.y + hr * 0.9, hr * 0.38, -0.35, 1, 0.4, 1.15, true);
+        put('h_straight', head.x - hr * 0.60, head.y + hr * 0.7, hr * 0.30, -0.6, 0.9, 0.4, 0.75, true);
+        put('w_bat', a * 0.10, b * 0.86, b * 0.80, 0, 0.94, 0.34, 3.6, true);
+        put('s_blade', -a * 0.40, b * 0.96, b * 0.22, -0.3, 1, 0.3, 0.9, true);
+        limb('l_leg',  a * 0.48, -b * 0.28,  b * 0.58,  a * 0.56, -st, b * 0.76, 0.16, 0, 0.05, 't_talon', 1.05);
+        limb('l_leg', -a * 0.46, -b * 0.28,  b * 0.58, -a * 0.56, -st, b * 0.76, -0.16, 0, 0.05, 't_talon', 1.20);
+        tailPut('s_sting', 1.1);
+        break;
+      case 47: // NULL. Two crooked legs and a head below the shoulder line.
+        eyeAt('e_pit', 0.85, 0.40, 0.34, 0.44); mouthAt('m_maw', 0.95);
+        put('s_blade', a * 0.05, b * 1.20, b * 0.20, 0, 1, 0.25, 1.15, true);
+        put('s_blade', -a * 0.45, b * 1.00, b * 0.18, -0.4, 1, 0.25, 0.8, true);
+        limb('l_thin', -a * 0.10, -b * 0.24, b * 0.46, a * 0.02, -st, b * 0.58, 0.40, 0.22, 0.06, 't_talon', 0.74);
+        tailPut('s_spike', 1.0);
         break;
       // ---- the offered set -----------------------------------------------
       case 30: // lurker: the horned ape, with a beard of tendrils under the jaw
@@ -5077,6 +5286,7 @@ const SLOPE_BASE = 9;      // seconds after the last hit during which nothing ca
         tailPut('f_fluke', 0.8);
         break;
     }
+    crookLegs();
     return d;
   }
   // ---------------------------------------------------------- random designs
@@ -6062,34 +6272,47 @@ fn shingle(u: f32, v: f32, rad: f32) -> vec3<f32> {
   // ---- skin covering: a height field in rest space, turned into a normal
   // perturbation with screen-space derivatives (so it follows the posed skin)
   var h = 0.0; var tone = 1.0; var amp = 0.0; var gloss = 1.0; var fuzz = 0.0;
+  // flow: the direction the covering runs, in rest space. Scales, plates and
+  // feathers all run head-to-tail around the body axis, so the flow is the
+  // body's own axis -- which is exactly what stops them being stretched across
+  // it. aniso stretches each row's highlight ALONG the row.
+  var aniso = 0.0;
+  var wet = 1.0;            // how much fluid this covering carries, 0..1
+  var shed = 1.0;           // how much of the WORLD's wetness this covering keeps
+  var cavity = 1.0;         // 1 on a ridge, 0 deep in a crease
   let belly = clamp(-n.y, 0.0, 1.0);
   let arc = atan2(p.z, p.y) * max(0.15, length(p.yz));
   if (skin > 0.5 && skin < 1.5) {          // scales: small overlapping reptile scales, finer on the belly
-    let sf = mix(10.0, 15.0, belly);
-    let sh = shingle(p.x * sf, arc * sf, 0.74);
+    let sf = mix(6.5, 10.0, belly);
+    let sh = shingle(p.x * sf, arc * sf, 0.80);
     h = sh.x;
-    tone = mix(0.78, 1.0, smoothstep(0.0, 0.25, sh.y)) * (0.95 + 0.1 * sh.z);
-    amp = 0.12 / sf; gloss = 1.1;
+    // dark in the seam, bright on the free rim, and each scale a slightly
+    // different shade so the rows do not read as a printed pattern
+    tone = mix(0.62, 1.06, smoothstep(0.0, 0.30, sh.y)) * (0.90 + 0.20 * sh.z);
+    amp = 0.46 / sf; gloss = 1.45;
+    // each scale is a hard little lens: anisotropic along the row, and the
+    // seam between two scales is a cavity that holds fluid
+    aniso = 0.62; wet = 1.0; shed = 1.0; cavity = smoothstep(0.0, 0.22, sh.y);
   } else if (skin > 1.5 && skin < 2.5) {   // feathers: long shingles lying toward the tail
     let sh = shingle(p.x * 4.2 + fbm(p * 2.0) * 0.4, arc * 6.5, 0.78);
     h = sh.x;
     let barbs = 0.5 + 0.5 * sin(arc * 60.0 + p.x * 8.0);
     tone = mix(0.72, 1.08, sh.x) * (0.9 + 0.2 * sh.z) * (0.95 + 0.06 * barbs);
-    amp = 0.035; gloss = 0.55; fuzz = 0.25;
+    amp = 0.035; gloss = 0.55; fuzz = 0.25; aniso = 0.35; wet = 0.30; shed = 0.55; cavity = smoothstep(0.0, 0.3, sh.y);
   } else if (skin > 2.5 && skin < 3.5) {   // fur: fine strands combed back, fuzzy silhouette
     let q = vec3<f32>(p.x * 10.0 + fbm(p * 4.0) * 1.5, p.y * 55.0, p.z * 55.0);
     h = vnoise(q) * 0.7 + vnoise(q * 2.3 + 7.0) * 0.3;
     tone = 0.9 + 0.16 * h;
-    amp = 0.012; gloss = 0.25; fuzz = 0.55;
+    amp = 0.012; gloss = 0.25; fuzz = 0.55; aniso = 0.0; wet = 0.12; shed = 0.30; cavity = 1.0;
   } else if (skin > 3.5) {                 // armour plates: big flat plates with deep seams
     let w = worleyV(p * mix(5.5, 9.0, belly));
     let e = w.d2 - w.d1;
     h = smoothstep(0.0, 0.1, e) * (1.0 - 0.15 * w.d1);
     tone = mix(0.6, 1.0, smoothstep(0.0, 0.07, e)) * (0.9 + 0.2 * w.id);
-    amp = 0.1; gloss = 2.2;
+    amp = 0.1; gloss = 2.2; aniso = 0.18; wet = 0.85; shed = 0.90; cavity = smoothstep(0.0, 0.055, e);
   } else {                                 // smooth, leathery micro relief
     h = fbm(p * 26.0) * 0.5;
-    amp = 0.012; gloss = 1.0;
+    amp = 0.012; gloss = 1.0; aniso = 0.0; wet = 1.0; shed = 1.0; cavity = 0.5 + h;
   }
   col *= tone;
   var N = normalize(i.nrm);
@@ -6103,16 +6326,94 @@ fn shingle(u: f32, v: f32, rad: f32) -> vec3<f32> {
     N = normalize(abs(det) * N - grad);
   }
   let ao = pow(clamp(i.misc.y, 0.0, 1.0), 1.15) * mix(0.8, 1.0, h);
-  col = col * i.misc.w;
-  var lit = shade(col * (0.35 + 0.65 * ao), N, i.wpos);
   let L = normalize(g.lightDir.xyz);
   let V = normalize(g.camPos.xyz - i.wpos);
-  let H = normalize(L + V);
-  lit += vec3<f32>(1.0, 0.97, 0.9) * pow(max(dot(N, H), 0.0), 20.0 + 30.0 * gloss) * 0.1 * gloss * g.params.z * ao;
-  let wrap = clamp(1.0 - abs(dot(N, L)), 0.0, 1.0);
-  lit += col * vec3<f32>(0.22, 0.08, 0.05) * wrap * wrap * 0.3 * g.params.z;
+  let Ngeo = normalize(i.nrm);
+
+  // ---- how wet is this patch --------------------------------------------
+  // Fluid runs down and collects in the creases, so accumulation is driven by
+  // cavity and by how far the surface faces down. Fur sheds it; chitin holds a
+  // film; exposed dermis soaks.
+  let downface = clamp(0.5 - 0.5 * Ngeo.y, 0.0, 1.0);
+  let pool = clamp((1.0 - cavity) * 0.75 + downface * 0.45, 0.0, 1.0);
+  // The world's own wetness -- dew, night, standing water, and the builder's
+  // display film -- weighted by what this covering does with fluid. Fur sheds
+  // it, plate holds a film, bare dermis soaks. It can only ever ADD, so a
+  // covering that is already wet by nature is unchanged.
+  let wetW = clamp(g.fogCol.w, 0.0, 1.0) * shed;
+  let wetC = max(wet, wetW);
+  let wetLevel = clamp(wetC * (0.55 + 0.45 * pool), 0.0, 1.0);
+  // porosity straight off gloss: no extra map, no extra vertex data. Plate and
+  // bone come out near zero and so do not darken; dermis comes out near one.
+  let porosity = clamp(-2.5 * (gloss * 0.45) + 1.25, 0.0, 1.0);
+  let darken = mix(1.0, mix(1.0, 0.24, porosity), wetLevel);
+  col = col * darken * i.misc.w;
+
+  // ---- the two normals ---------------------------------------------------
+  // BASE: the covering. Pores, scales, plate seams. Static, high frequency,
+  // and flattened back toward the geometric normal wherever fluid has pooled,
+  // because a pool fills the relief in rather than covering it.
+  let Nbase = normalize(mix(N, Ngeo, pool * wetLevel * 0.80));
+  // COAT: the fluid sheet itself. Large, smooth, and MOVING. Two samples half
+  // a period apart, cross-faded on a triangle wave, so the sheet advects
+  // forever without ever stretching without bound.
+  let t = g.params.x * 0.07;
+  let ph0 = fract(t); let ph1 = fract(t + 0.5);
+  let fl = vec3<f32>(0.0, -1.0, 0.0) * 0.9;       // fluid runs down the body
+  let q0 = p * 3.1 + fl * ph0; let q1 = p * 3.1 + fl * ph1;
+  let tw = abs(1.0 - 2.0 * fract(t));
+  let sheetH = mix(fbm(q0), fbm(q1), tw);
+  let sx = mix(fbm(q0 + vec3<f32>(0.14, 0.0, 0.0)), fbm(q1 + vec3<f32>(0.14, 0.0, 0.0)), tw) - sheetH;
+  let sz = mix(fbm(q0 + vec3<f32>(0.0, 0.0, 0.14)), fbm(q1 + vec3<f32>(0.0, 0.0, 0.14)), tw) - sheetH;
+  // the sheet perturbs the coat only, in the surface tangent frame
+  var tang = normalize(cross(Ngeo, select(vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(1.0, 0.0, 0.0), abs(Ngeo.y) > 0.9)));
+  let bitan = cross(Ngeo, tang);
+  let Ncoat = normalize(Ngeo + (tang * sx + bitan * sz) * 7.0 * wetLevel);
+
+  var lit = shade(col * (0.35 + 0.65 * ao), Nbase, i.wpos);
+
+  // ---- base specular: TWO lobes, stretched along the covering's flow ------
+  // One lobe is what makes skin read as plastic. A broad soft lobe carries the
+  // sheen and a tight one carries the glint, and the tight one is stretched
+  // along the body axis so a row of scales catches the light AS a row.
+  let Hb = normalize(L + V);
+  let nh = max(dot(Nbase, Hb), 0.0);
+  // the covering runs head to tail: flow is the body x axis, pushed into world
+  let flowW = normalize(cross(Ngeo, cross(vec3<f32>(1.0, 0.0, 0.0), Ngeo)) + Ngeo * 1e-4);
+  let th2 = dot(flowW, Hb);
+  let stretch = 1.0 - aniso * 0.72 * th2 * th2;     // wider along the row
+  let baseRough = mix(0.55, 0.14, wetLevel * clamp(gloss, 0.0, 2.0) * 0.5);
+  let pw = 2.0 / max(baseRough * baseRough * baseRough, 1e-3);
+  let specOcc = mix(cavity, 1.0, 0.35 + 0.45 * pow(1.0 - clamp(dot(Ngeo, V), 0.0, 1.0), 2.0));
+  let broad = pow(nh, max(pw * 0.10, 4.0)) * 0.055;
+  let tight = pow(nh, max(pw * stretch, 8.0)) * 0.22 * (0.4 + 0.6 * wetLevel);
+  lit += vec3<f32>(1.0, 0.97, 0.90) * (broad + tight) * gloss * g.params.z * ao * specOcc;
+
+  // ---- the clear coat ----------------------------------------------------
+  // Air/coat IOR 1.5 gives a fixed normal-incidence reflectance of 0.04. The
+  // coat takes its cut of the light first and the layer underneath keeps the
+  // rest, which is why wet flesh goes dark AND shiny at the same time instead
+  // of just brighter.
+  let Hc = normalize(L + V);
+  let vh = clamp(dot(V, Hc), 0.0, 1.0);
+  let Fc = (0.04 + 0.96 * pow(1.0 - vh, 5.0)) * wetLevel;
+  let cr = mix(0.32, 0.055, wetLevel);
+  let cpw = 2.0 / max(cr * cr * cr, 1e-3);
+  let coatSpec = pow(max(dot(Ncoat, Hc), 0.0), cpw) * Fc * 1.35;
+  // and the sky the film reflects, which is what sells a film over a sunlit
+  // one: a wet back is bright even with the sun behind it
+  let sky = pow(1.0 - clamp(dot(Ncoat, V), 0.0, 1.0), 4.0) * Fc * 0.55;
+  lit = lit * (1.0 - Fc * 0.55) + (vec3<f32>(1.0, 0.99, 0.96) * coatSpec + vec3<f32>(0.55, 0.66, 0.80) * sky) * g.params.z * specOcc;
+
+  // ---- transmission ------------------------------------------------------
+  // Red travels roughly ten times further through flesh than blue, so thin
+  // parts glow red at the edge. Weighted to the published six-Gaussian tail.
+  let wrap = clamp(1.0 - abs(dot(Nbase, L)), 0.0, 1.0);
+  let back = pow(clamp(dot(V, -L), 0.0, 1.0), 3.0);
+  lit += col * vec3<f32>(0.62, 0.17, 0.11) * (wrap * wrap * 0.34 + back * 0.30) * g.params.z;
+
   // fur and down catch light on the silhouette
-  let rim = pow(1.0 - clamp(dot(normalize(i.nrm), V), 0.0, 1.0), 2.5);
+  let rim = pow(1.0 - clamp(dot(Ngeo, V), 0.0, 1.0), 2.5);
   lit += col * rim * fuzz * (0.4 + 0.6 * g.params.z);
   return vec4<f32>(lit, 1.0);
 }`;
@@ -9149,6 +9450,79 @@ function drawFan(g, A, B, angs, lens, skin, ray, thin, ripple, t) {
 }
 // Spread direction for a wing: the skin normal flattened toward horizontal
 // (plus a little dihedral), so wings spread sideways instead of straight up.
+// A membrane wing is a HAND, and it has four panels, not one. Build only the
+// inter-digit panel and the result is an umbrella.
+//   propatagium   shoulder -> wrist, the leading edge. Never torn: it is the
+//                 load path and the muscle sits in it.
+//   dactylopatagia between the finger spars. Thinnest, most translucent, and
+//                 where the tears cluster.
+//   plagiopatagium last finger back to the hip. The panel that makes it read
+//                 as an animal rather than a kite.
+function membraneWing(g0, c, e, o2) {
+  const { o: O, B } = wingAxes(g0);
+  const g = g0.rotated(B[0], B[1], B[2], e.flap);
+  const NF = o2.fingers, SPAN = o2.span, CH = o2.chord, TEAR = o2.tear, TH = o2.thick;
+  const bone = colMul(c, 0.62), skin = c, thin = colMul(c, 1.14);
+  const P = (y, b) => v3.add(v3.mul(O, y), v3.mul(B, b));
+  const sh = P(0.04, 0), el = P(0.48 * SPAN, -0.06), wr = P(1.0 * SPAN, 0.03);
+  // arm: elbow thicker than wrist, and the wrist is where the hook goes
+  g.tube(sh, el, 0.085 * TH, 0.062 * TH, bone, 4);
+  g.tube(el, wr, 0.062 * TH, 0.042 * TH, bone, 4);
+  // ---- the claw hook at the WRIST, not the elbow -----------------------
+  // Two bones so it curves: out along the leading edge, then hooked back.
+  {
+    const fwd = v3.norm(v3.sub(wr, el));
+    const lead = v3.norm(v3.add(v3.mul(fwd, 0.55), v3.mul(B, -0.85)));
+    const k1 = v3.add(wr, v3.mul(lead, 0.30 * SPAN));
+    const back = v3.norm(v3.add(v3.mul(lead, 0.25), v3.mul(fwd, -0.75)));
+    const k2 = v3.add(k1, v3.mul(back, 0.26 * SPAN));
+    g.tube(wr, k1, 0.055, 0.036, IVORY, 4);
+    g.cn(k1[0], k1[1], k1[2], back[0], back[1], back[2], 0.036, 0.30 * SPAN, IVORY);
+    g.ball(k2[0], k2[1], k2[2], 0.018, IVORY);
+  }
+  // ---- finger spars ----------------------------------------------------
+  const tips = [];
+  for (let i = 0; i < NF; i++) {
+    const u = NF > 1 ? i / (NF - 1) : 0;
+    const a2 = 0.10 + u * (o2.fan || 1.35);
+    const L = (1.05 - u * 0.18) * SPAN;
+    const tip = v3.add(wr, P(Math.cos(a2) * L, Math.sin(a2) * L * CH));
+    g.tube(wr, tip, 0.036 * TH, 0.013 * TH, bone, 4);
+    tips.push(tip);
+  }
+  const hip = P(-0.05, 0.95 * CH);        // where the plagiopatagium lands
+  // ---- panels ----------------------------------------------------------
+  // Each panel is one flat sheet in the wing plane. `bite` pulls the trailing
+  // corner in, which is the tear: it runs parallel to the two spars bounding
+  // the panel and never across them, and it is capped so a continuous strip
+  // of membrane always survives along each spar.
+  const sheet = (A, B2, C2, k, bite, col) => {
+    const b2 = v3.lerp(B2, A, bite), c2 = v3.lerp(C2, A, bite);
+    const mid = v3.mul(v3.add(b2, c2), 0.5);
+    const ax = v3.sub(mid, A), span = v3.sub(c2, b2);
+    const L = v3.len(ax), W = v3.len(span);
+    const q = v3.lerp(A, mid, 0.56);
+    g.sp(q[0], q[1], q[2], ax[0], ax[1], ax[2], W * 0.52 * k, L * 0.56, 0.014, col,
+         span[0], span[1], span[2]);
+  };
+  for (let i = 0; i < tips.length - 1; i++) {
+    // tears cluster in the distal panels, which take the most flutter
+    const dist = tips.length > 1 ? i / (tips.length - 1) : 0;
+    sheet(wr, tips[i], tips[i + 1], 1, Math.min(0.40, TEAR * (0.35 + dist)), thin);
+  }
+  sheet(wr, tips[tips.length - 1], hip, 1.02, Math.min(0.40, TEAR * 0.5), skin);  // plagiopatagium
+  sheet(el, wr, hip, 0.92, 0, skin);
+  sheet(sh, el, hip, 0.9, 0, colMul(skin, 0.9));
+  // propatagium: the leading edge, one unbroken curve, never torn
+  { const m = v3.lerp(sh, wr, 0.5), ax = v3.sub(wr, sh);
+    const across = v3.norm(v3.add(v3.mul(B, -1), v3.mul(O, 0.1)));
+    const w2 = 0.16 * CH * SPAN;
+    const q = v3.add(m, v3.mul(across, w2 * 0.6));
+    g.sp(q[0], q[1], q[2], ax[0], ax[1], ax[2], w2, v3.len(ax) * 0.5, 0.02, colMul(skin, 0.88),
+         across[0], across[1], across[2]); }
+}
+function w_batDraw(g0, c, e) { membraneWing(g0, c, e, { fingers: 4, span: 1.0, chord: 1.0, tear: 0.30, thick: 1.0, fan: 1.35 }); }
+
 function wingAxes(g) {
   const u = g.up;
   let o = v3.sub([0, 1, 0], v3.mul(u, u[1]));
@@ -9206,8 +9580,8 @@ const VIS = {
       const z = (i - 1.5) * 0.28, y = 0.52 + (1.5 - Math.abs(i - 1.5)) * 0.06;
       g.cn(-0.28 - o * 0.5, y, z, 1, 0.1, 0, 0.07, 0.26, IVORY);
     }
-    drool(g, e, 0.22, 0.26, 0.34, 2, 0.26 + o * 0.28, (e.seed || 0) + 0.9);
-    lipTendrils(g, e, 0.14, 0.28, 0.30, 2, 0.14, 0.30);
+    drool(g, e, 0.26, 0.22, 0.34, 2, 0.26 + o * 0.28, (e.seed || 0) + 0.9, JAW_F_UP);
+    lipTendrils(g, e, 0.28, 0.14, 0.23, 2, 0.11, 0.24, JAW_F_UP);
   } },
   m_maw: { name: 'fanged maw', cat: 'mouth', size: 0.56, col: 'base', draw(g, c, e) {
     const o = 0.18 + e.chomp * 0.3;
@@ -9220,13 +9594,68 @@ const VIS = {
     for (const s of [1, -1]) g.cn(-0.34 - o * 0.5, 0.62, s * 0.62, 1, 0.2, 0, 0.1, 0.5, IVORY);
     lollTongue(g, e, -0.28, 0.28, 0.56, 0.17, o);
     innerJaw(g, e, -0.34, 0.32, 1.0, o);
-    drool(g, e, 0.30, 0.24, 0.46, 2, 0.30 + o * 0.34, (e.seed || 0) + 1.7);
-    lipTendrils(g, e, 0.20, 0.30, 0.60, 2, 0.28, 0.45);
+    drool(g, e, 0.24, 0.30, 0.46, 2, 0.30 + o * 0.34, (e.seed || 0) + 1.7, JAW_F_UP);
+    lipTendrils(g, e, 0.30, 0.20, 0.60, 2, 0.28, 0.36, JAW_F_UP);
   } },
   m_rex: { name: 'crushing jaw', cat: 'mouth', size: 0.66, col: 'base', use: 'a deep bone-cracking bite: the heaviest damage of any mouth, and the most genome space', draw(g, c, e) { dinoJawHard(g, c, e, jawShape('m_rex')); } },
   m_spino: { name: 'fishing jaw', cat: 'mouth', size: 0.5, col: 'base', use: 'long crocodile jaws full of conical teeth: extra reach, good in water', draw(g, c, e) { dinoJawHard(g, c, e, jawShape('m_spino')); } },
   m_short: { name: 'short muzzle', cat: 'mouth', size: 0.6, col: 'base', use: 'a short deep bulldog muzzle: fast, strong bites at close range', draw(g, c, e) { dinoJawHard(g, c, e, jawShape('m_short')); } },
   m_duck: { name: 'duck bill', cat: 'mouth', size: 0.64, col: 'base', use: 'a broad beak with grinding rows behind it: strips plants fast and reaches further', draw(g, c, e) { dinoJawHard(g, c, e, jawShape('m_duck')); } },
+  // ---- the split mandible snout ----------------------------------------
+  // Four mandibles: two upper, two lower. Closed they CROSS, so the tips of
+  // the uppers sit outside the tips of the lowers and opening is an unlatching
+  // rather than a hinge. Open, they splay to four quadrants and what is
+  // revealed is a short soft pink throat with two small teeth in it -- small
+  // and wet against the hard outer segments, because filling the middle with a
+  // second set of fangs is what kills the contrast.
+  m_bloom: { name: 'split mandible', cat: 'mouth', size: 1.05, col: 'base',
+    use: 'four mandibles that unlatch and splay like a flower: the longest reach of any mouth',
+    draw(g, c, e) {
+      const o = 0.42 + e.chomp * 0.58;         // rests half open; 1 is fully splayed
+      const hard = colMul(c, 0.82), lip = [0.52, 0.22, 0.26], gum = [0.62, 0.30, 0.33];
+      // The collar. Sunk BACK from the part origin so it overlaps the snout it
+      // is mounted on: without it the four blades hang in free air in front of
+      // a head, which is what "the mandible looks detached" means.
+      for (let i = 0; i < 6; i++) {
+        const an = (i / 6) * Math.PI * 2;
+        const cy = 0.30 + Math.sin(an) * 0.26, cz = Math.cos(an) * 0.26;
+        g.sp(-0.26, cy, cz, 1, 0, 0, 0.15, 0.24, 0.15, colMul(hard, 0.88));
+      }
+      g.ball(-0.34, 0.30, 0, 0.26, colMul(hard, 0.80));
+      // the throat behind them: soft, short, and it does not grow when they open
+      g.sp(-0.02, 0.30, 0, 0, 1, 0, 0.19, 0.26, 0.19, lip);
+      g.ball(0.18, 0.32, 0, 0.17, gum);
+      for (const s2 of [1, -1]) g.cn(0.30, 0.44, s2 * 0.10, 1, -0.1, 0, 0.045, 0.22, IVORY);
+      // four petals. Shut, each tip is pulled ACROSS the midline by 0.16.
+      const petal = (up, side) => {
+        const cross = (1 - o) * 0.16 * -side;           // the interlock
+        const splay = o * 0.62;
+        const dy = up * (0.30 + splay);
+        const dz = side * (0.26 + splay) + cross;
+        const d = v3.norm([1.0, dy, dz]);
+        // grooved base plate, then the blade, then the terminal hook
+        const b0 = [0.10, 0.34 + up * 0.10, side * 0.14];
+        const b1 = v3.add(b0, v3.mul(d, 0.86));
+        const b2 = v3.add(b0, v3.mul(d, 1.44));
+        const across = v3.norm(v3.cross(d, [0, up, 0]));
+        g.sp(b0[0] + d[0] * 0.20, b0[1] + d[1] * 0.20, b0[2] + d[2] * 0.20,
+             d[0], d[1], d[2], 0.22, 0.44, 0.11, hard, across[0], across[1], across[2]);
+        g.sp((b0[0] + b1[0]) / 2 + d[0] * 0.22, (b0[1] + b1[1]) / 2 + d[1] * 0.22,
+             (b0[2] + b1[2]) / 2 + d[2] * 0.22, d[0], d[1], d[2], 0.135, 0.56, 0.055, c,
+             across[0], across[1], across[2]);
+        // the hook, bent back toward the midline whichever way the petal points
+        const hk = v3.norm([d[0] * 0.6, d[1] - up * 0.55, d[2] - side * 0.45]);
+        g.cn(b1[0], b1[1], b1[2], hk[0], hk[1], hk[2], 0.085, 0.62, IVORY);
+        g.cn(b2[0], b2[1], b2[2], d[0], d[1], d[2], 0.05, 0.10, IVORY);
+        // inner tooth row along the blade, pointing into the throat
+        for (let i = 0; i < 4; i++) {
+          const q = v3.lerp(b0, b1, 0.3 + i * 0.22);
+          const t = v3.norm([-0.3, -up * 0.8, -side * 0.5]);
+          g.cn(q[0], q[1], q[2], t[0], t[1], t[2], 0.028, 0.15, IVORY);
+        }
+      };
+      petal(1, 1); petal(1, -1); petal(-1, 1); petal(-1, -1);
+    } },
   m_hook: { name: 'hooked beak', cat: 'mouth', size: 0.36, col: [0.36, 0.30, 0.26], draw(g, c) {
     g.sp(0, 0.1, 0, 0, 1, 0, 0.6, 0.4, 0.62, colMul(c, 1.2));
     let p = [0.2, 0.1, 0], d = [0, 1, 0];
@@ -9243,6 +9672,22 @@ const VIS = {
   e_round: { name: 'round eye', cat: 'eyes', size: 0.17, col: [0.30, 0.55, 0.25], draw(g, c, e) { drawEye(g, c, e, 1, 'round'); } },
   e_big: { name: 'goggle eye', cat: 'eyes', size: 0.21, col: [0.85, 0.45, 0.15], draw(g, c, e) { drawEye(g, c, e, 1.25, 'goggle'); } },
   e_slit: { name: 'slit eye', cat: 'eyes', size: 0.17, col: [0.95, 0.80, 0.18], draw(g, c, e) { drawEye(g, c, e, 1, 'slit'); } },
+  // ---- no eye at all ----------------------------------------------------
+  // A sunken field of pits in a shallow dish. There is nothing to meet, so the
+  // player cannot tell whether they have been noticed -- which is the point.
+  e_pit: { name: 'pit field', cat: 'eyes', size: 0.34, col: [0.14, 0.12, 0.13],
+    use: 'senses further than any eye and gives nothing back: a head wearing this has no face',
+    draw(g, c, e) {
+      g.sp(0, -0.04, 0, 0, 1, 0, 0.62, 0.10, 0.52, colMul(e.base, 0.82));
+      const pits = [[0, 0.26], [0.34, 0.12], [-0.34, 0.14], [0.2, -0.28], [-0.22, -0.3],
+                    [0.46, -0.1], [-0.48, -0.06]];
+      for (let i = 0; i < pits.length; i++) {
+        const [u, v] = pits[i];
+        const r = 0.11 + (i % 3) * 0.035;
+        g.ball(u * 0.6, 0.03, v * 0.6, r, c);
+        g.ball(u * 0.6, -0.02, v * 0.6, r * 1.5, colMul(e.base, 0.62));
+      }
+    } },
   e_stalk: { name: 'eye stalk', cat: 'eyes', size: 0.18, col: [0.25, 0.45, 0.85], draw(g, c, e) {
     const sway = Math.sin(e.t * 1.7 + e.seed) * 0.18;
     const top = [0.25 + sway, 2.5, 0.1];
@@ -9321,6 +9766,62 @@ const VIS = {
     g.sp(0, 0.05, 0, 0, 1, 0, 0.34, 0.14, 0.34, e.base);
     g.cn(0, 0, 0, -0.18, 1, 0, 0.3, 1.5, c);
   } },
+  // ---- the metasoma -----------------------------------------------------
+  // Five hard segments, each 0.88 of the one before, then a telson that BREAKS
+  // the taper by swelling back out to roughly segment-two width before the
+  // needle. A monotonic taper to a point reads as an antenna.
+  s_sting: { name: 'stinger tail', cat: 'armor', size: 0.95, col: [0.72, 0.66, 0.54],
+    use: 'five armoured segments and a venom bulb: the hardest-hitting tail weapon in the game',
+    draw(g, c, e) {
+      const curl = 0.34 + Math.sin(e.t * 1.6 + e.seed) * 0.06;
+      let pnt = [0, 0.1, 0], d = v3.norm([0.55, 1, 0]);
+      let r = 0.30;
+      const seg = [];
+      for (let i = 0; i < 5; i++) {
+        const L = 0.62 * Math.pow(0.9, i);
+        d = v3.norm(v3.add(d, [-curl * 0.55, -curl * 0.10, 0]));
+        const q = v3.add(pnt, v3.mul(d, L));
+        const across = v3.norm(v3.cross(d, [0, 0, 1]));
+        // each segment is a flat-sided barrel, not a bead: wide across, short along
+        g.sp((pnt[0] + q[0]) / 2, (pnt[1] + q[1]) / 2, (pnt[2] + q[2]) / 2,
+             d[0], d[1], d[2], r * 1.02, L * 0.46, r * 0.74, i % 2 ? c : colMul(c, 0.92),
+             across[0], across[1], across[2]);
+        // the ring between two segments, so the taper reads as segmented
+        g.ball(q[0], q[1], q[2], r * 0.72, colMul(c, 0.78));
+        seg.push(q); pnt = q; r *= 0.88;
+      }
+      // telson: back out to segment-two width, then the needle
+      const tb = v3.add(pnt, v3.mul(d, 0.22));
+      g.sp(tb[0], tb[1], tb[2], d[0], d[1], d[2], 0.30, 0.34, 0.27, colMul(c, 1.10));
+      const nd = v3.norm(v3.add(d, [-0.9, -0.7, 0]));
+      const nb = v3.add(tb, v3.mul(d, 0.16));
+      g.cn(nb[0], nb[1], nb[2], nd[0], nd[1], nd[2], 0.085, 0.86, IVORY);
+    } },
+  // ---- chiselled plates -------------------------------------------------
+  // Flat faces on edge instead of a cone. Each plate is a slab with one hard
+  // edge facing out and a shorter counter-plate behind it, and the row leans so
+  // no two catch the light at the same angle.
+  s_blade: { name: 'bone blades', cat: 'armor', size: 0.52, col: [0.86, 0.82, 0.72],
+    use: 'angular plates of bone through the skin: cuts what hits you and turns what does not',
+    draw(g, c, e) {
+      const base = e.base;
+      for (let i = 0; i < 3; i++) {
+        const lean = (i - 1) * 0.40, h = 2.1 - Math.abs(i - 1) * 0.62;
+        const d = v3.norm([lean * 0.8, 1, lean * 0.35]);
+        const across = v3.norm(v3.cross(d, [0, 0, 1]));
+        const m = v3.mul(d, h * 0.5);
+        // the slab: wide across the row, thin through it, tapering is done by
+        // the second shorter slab stacked on it rather than by a cone
+        g.sp(m[0], m[1], m[2], d[0], d[1], d[2], 0.26, h * 0.5, 0.045,
+             i % 2 ? c : colMul(c, 0.93), across[0], across[1], across[2]);
+        const m2 = v3.mul(d, h * 0.82);
+        g.sp(m2[0], m2[1], m2[2], d[0], d[1], d[2], 0.10, h * 0.26, 0.032, colMul(c, 1.05),
+             across[0], across[1], across[2]);
+        // the origin wound: skin retracted where it came through
+        const r0 = v3.mul(d, 0.04);
+        g.sp(r0[0], r0[1], r0[2], 0, 1, 0, 0.17, 0.05, 0.13, base);
+      }
+    } },
   s_quills: { name: 'quills', cat: 'armor', size: 0.3, col: [0.92, 0.90, 0.84], draw(g, c, e) {
     const dirs = [[-0.2, 1, 0], [-0.5, 1, 0.3], [-0.5, 1, -0.3], [0.1, 1, 0.45], [0.1, 1, -0.45], [-0.8, 1, 0]];
     dirs.forEach((d, i) => { g.cn(d[0] * 0.2, 0, d[2] * 0.2, d[0], d[1], d[2], 0.07, 1.5 + (i % 3) * 0.25, i % 2 ? c : e.detail); });
@@ -9441,38 +9942,10 @@ const VIS = {
     drawFan(g, [0, 1, 0], [1, 0, 0], [-0.95, -0.7, -0.4, -0.1], [1.4, 1.1, 0.8, 0.6], c, colHi(c), 0.06, 0.1, t);
     drawFan(g, [0, 1, 0], [1, 0, 0], [0.1, 0.4, 0.7, 0.95], [0.6, 0.8, 1.1, 1.4], c, colHi(c), 0.06, 0.1, t + 1);
   } },
-  w_bat: { name: 'membrane wing', cat: 'wings', size: 1.0, col: [0.55, 0.36, 0.40], draw(g0, c, e) {
-    const { o: O, B } = wingAxes(g0);
-    const g = g0.rotated(B[0], B[1], B[2], e.flap);
-    const bone = colMul(c, 0.72), skin = c;
-    const P = (y, b) => v3.add(v3.mul(O, y), v3.mul(B, b));
-    const sh = P(0.05, 0), el = P(0.55, -0.05), wr = P(1.05, 0.02);
-    g.tube(sh, el, 0.075, 0.06, bone, 4); g.tube(el, wr, 0.06, 0.045, bone, 4);
-    const tips = [];
-    for (let i = 0; i < 4; i++) {
-      const a = 0.12 + i * 0.45;
-      const tip = v3.add(wr, P(Math.cos(a) * (0.95 - i * 0.1), Math.sin(a) * (0.95 - i * 0.1)));
-      g.tube(wr, tip, 0.04, 0.018, bone, 4);
-      tips.push(tip);
-    }
-    { const tc = v3.add(O, v3.mul(B, -0.6)); g.cn(wr[0], wr[1], wr[2], tc[0], tc[1] + 0.3, tc[2], 0.05, 0.22, IVORY); }   // thumb claw
-    const bodyEdge = P(0.0, 0.85);
-    // one flat panel per triangle, lying exactly in the wing plane
-    const panel = (A, B2, C2, k) => {
-      const m = v3.mul(v3.add(v3.add(A, B2), C2), 1 / 3);
-      const mid = v3.mul(v3.add(B2, C2), 0.5);
-      const ax = v3.sub(mid, A), span = v3.sub(C2, B2);
-      const L = v3.len(ax), W = v3.len(span);
-      const q = v3.lerp(A, mid, 0.56);
-      g.sp(q[0], q[1], q[2], ax[0], ax[1], ax[2], W * 0.52 * k, L * 0.56, 0.018, skin, span[0], span[1], span[2]);
-      const q2 = v3.lerp(A, m, 0.5);
-      g.sp(q2[0], q2[1], q2[2], ax[0], ax[1], ax[2], W * 0.3, L * 0.4, 0.02, colMul(skin, 0.94), span[0], span[1], span[2]);
-    };
-    for (let i = 0; i < tips.length - 1; i++) panel(wr, tips[i], tips[i + 1], 1);
-    panel(wr, tips[tips.length - 1], bodyEdge, 1.05);
-    panel(el, wr, bodyEdge, 0.9);
-    panel(sh, el, bodyEdge, 0.9);
-  } },
+  w_bat: { name: 'membrane wing', cat: 'wings', size: 1.0, col: [0.55, 0.36, 0.40], use: 'four panels of skin on a hand, with a claw at the wrist: heavy lift, and it tears', draw: w_batDraw },
+  w_ragged: { name: 'torn membrane', cat: 'wings', size: 1.0, col: [0.42, 0.34, 0.36],
+    use: 'an enormous thin span with most of the trailing half gone: it barely holds air, and it holds a lot of it',
+    draw(g0, c, e) { membraneWing(g0, c, e, { fingers: 3, span: 2.05, chord: 0.62, tear: 0.34, thick: 0.62, fan: 1.05 }); } },
   w_feather: { name: 'feathered wing', cat: 'wings', size: 1.0, col: [0.92, 0.88, 0.82], draw(g0, c, e) {
     const { o: O, B } = wingAxes(g0);
     const g = g0.rotated(B[0], B[1], B[2], e.flap);
@@ -9502,16 +9975,36 @@ const VIS = {
       g.sp(m[0], m[1], m[2], d[0], d[1], d[2], 0.15, 0.32, 0.035, colMul(c, 1.06), across[0], across[1], across[2]);
     }
   } },
-  w_insect: { name: 'gossamer wings', cat: 'wings', size: 0.9, col: [0.80, 0.90, 0.96], draw(g0, c, e) {
-    const { o: O, B } = wingAxes(g0);
-    const g = g0.rotated(B[0], B[1], B[2], e.flap * 1.4);
-    for (const [ang, L, w] of [[0.35, 1.5, 0.36], [0.85, 1.2, 0.3]]) {
-      const d = v3.norm(v3.add(v3.mul(O, Math.cos(ang)), v3.mul(B, Math.sin(ang))));
-      const m = v3.mul(d, L * 0.5);
-      g.sp(m[0], m[1], m[2], d[0], d[1], d[2], w, L * 0.52, 0.02, c, B[0], B[1], B[2]);
-      g.tube([0, 0, 0], v3.mul(d, L * 0.95), 0.03, 0.015, colMul(c, 0.55), 4);
-    }
-  } },
+  w_insect: { name: 'shell wings', cat: 'wings', size: 0.9, col: [0.62, 0.66, 0.44],
+    use: 'a hard case over a folded sheet: short, broad and beaten fast, so a heavy body still leaves the ground',
+    draw(g0, c, e) {
+      const { o: O, B } = wingAxes(g0);
+      const g = g0.rotated(B[0], B[1], B[2], e.flap * 1.5);
+      const P = (y, b) => v3.add(v3.mul(O, y), v3.mul(B, b));
+      const hard = colMul(c, 0.82), sheet = [0.80, 0.84, 0.88];
+      // forewing: a hard case, wide and short, held out nearly level
+      const fd = v3.norm(P(0.92, 0.36));
+      const fa = v3.norm(v3.cross(fd, v3.cross(O, B)));
+      const fm = v3.mul(fd, 0.52);
+      g.sp(fm[0], fm[1], fm[2], fd[0], fd[1], fd[2], 0.40, 0.58, 0.085, hard, fa[0], fa[1], fa[2]);
+      // the seam down the case, and three ribs across it
+      g.tube([0, 0, 0], v3.mul(fd, 1.02), 0.055, 0.03, colMul(c, 0.6), 4);
+      for (let i = 0; i < 3; i++) {
+        const q = v3.mul(fd, 0.26 + i * 0.26);
+        g.sp(q[0], q[1], q[2], fa[0], fa[1], fa[2], 0.055, 0.34, 0.06, colMul(c, 0.68),
+             fd[0], fd[1], fd[2]);
+      }
+      // hindwing folded out beneath it: thin, translucent, cross-veined
+      const hd = v3.norm(P(0.74, 0.76));
+      const ha = v3.norm(v3.cross(hd, v3.cross(O, B)));
+      const hm = v3.mul(hd, 0.46);
+      g.sp(hm[0], hm[1], hm[2], hd[0], hd[1], hd[2], 0.33, 0.50, 0.012, sheet, ha[0], ha[1], ha[2]);
+      for (let i = 0; i < 4; i++) {
+        const t = 0.15 + i * 0.22;
+        g.tube(v3.mul(hd, t * 0.35), v3.add(v3.mul(hd, t * 0.9), v3.mul(ha, 0.30 - i * 0.05)),
+               0.016, 0.008, colMul(sheet, 0.72), 3);
+      }
+    } },
   // ---------------------------------------------------------------- details
   d_antenna: { name: 'antenna', cat: 'details', size: 0.2, col: [0.22, 0.18, 0.16], draw(g, c, e) {
     let p = [0, 0, 0], d = [0, 1, 0];
@@ -9660,15 +10153,17 @@ const GORE = [0.42, 0.06, 0.05];        // the inside of things
 // is thin, so it reads as one continuous line; the bead at the end is smaller
 // than the thread is thick at the top, which is what makes it read as a drip
 // about to fall rather than as a ball on a stick.
-function droolStrand(g, x, y, z, len, ph, t, r0) {
-  let p = [x, y, z];
+function droolStrand(g, x, y, z, len, ph, t, r0, F0) {
+  const F = F0 || JAW_F_DEFAULT;
+  let p = jawPt(F, x, y, z);
   const N = 6, R = r0 || 0.020;
   for (let i = 0; i < N; i++) {
     const u = (i + 1) / N;
     // the swing grows toward the free end, which is what makes it hang
     const sx = Math.sin(t * 1.6 + ph + u * 2.4) * 0.05 * u;
     const sz = Math.cos(t * 1.27 + ph * 1.7 + u * 2.0) * 0.04 * u;
-    const q = [p[0] + sx * 0.35, p[1] - len / N, p[2] + sz * 0.35];
+    const st = jawPt(F, sx * 0.35, -len / N, sz * 0.35);
+    const q = [p[0] + st[0], p[1] + st[1], p[2] + st[2]];
     const d = v3.sub(q, p), L = v3.len(d) || 1e-4, dn = v3.mul(d, 1 / L);
     g.cn(p[0], p[1], p[2], dn[0], dn[1], dn[2], R * (1 - 0.42 * (u - 1 / N)), L * 1.12,
          u > 0.65 ? SPIT_D : SPIT);
@@ -9679,8 +10174,18 @@ function droolStrand(g, x, y, z, len, ph, t, r0) {
 // Saliva across a mouth: a few strands on their own phases, plus one bead
 // that has already broken off and is falling. Saliva that never parts is a
 // rubber band, and the eye notices.
-function drool(g, e, x, y, halfW, n, len, seed) {
+// The frame a mouth is drawn in: f along the muzzle, u up, s across. Omitted,
+// it is the dinosaur-jaw frame these helpers were originally written in.
+const JAW_F_DEFAULT = { f: [1, 0, 0], u: [0, 1, 0], s: [0, 0, 1] };
+// m_jaws and m_maw open along x and run along y: x is UP for them.
+const JAW_F_UP = { f: [0, 1, 0], u: [1, 0, 0], s: [0, 0, 1] };
+const jawPt = (F, af, au, as2) => [
+  F.f[0] * af + F.u[0] * au + F.s[0] * as2,
+  F.f[1] * af + F.u[1] * au + F.s[1] * as2,
+  F.f[2] * af + F.u[2] * au + F.s[2] * as2];
+function drool(g, e, x, y, halfW, n, len, seed, F0) {
   if (!gore(e)) return;
+  const F = F0 || JAW_F_DEFAULT;
   const t = e.t;
   for (let i = 0; i < n; i++) {
     const f = n === 1 ? 0 : (i / (n - 1)) * 2 - 1;
@@ -9689,13 +10194,14 @@ function drool(g, e, x, y, halfW, n, len, seed) {
     const cyc = (t * 0.33 + i * 0.41 + seed * 0.11) % 1;
     const grow = cyc < 0.82 ? 0.30 + cyc * 0.85 : 0.12;        // snaps back short
     // hung off the lip line itself, not out of the middle of the muzzle
-    droolStrand(g, x, y, f * halfW, len * grow, ph, t, 0.020);
+    droolStrand(g, x, y, f * halfW, len * grow, ph, t, 0.020, F);
   }
   // The bead that let go. It falls a SHORT way and is small: the first cut
   // sent it a length and a half clear of the jaw, where it read as an
   // unrelated object floating beside the head.
   const d = (t * 0.55 + seed * 0.37) % 1;
-  g.ball(x + 0.03, y - len * (0.10 + d * 0.55), (seed % 1 - 0.5) * halfW * 0.8, 0.026 * (1 - d * 0.4), SPIT);
+  const bp = jawPt(F, x + 0.03, y - len * (0.10 + d * 0.55), (seed % 1 - 0.5) * halfW * 0.8);
+  g.ball(bp[0], bp[1], bp[2], 0.026 * (1 - d * 0.4), SPIT);
 }
 // A tongue that lolls: segments, drooping further and dragging sideways the
 // wider the mouth is open.
@@ -9751,20 +10257,22 @@ function innerJaw(g, e, x0, y0, scale, open) {
   }
 }
 // Cilia round the lips, each on its own phase so they never move as a block.
-function lipTendrils(g, e, x0, y0, halfW, n, len, back) {
+function lipTendrils(g, e, x0, y0, halfW, n, len, back, F0) {
   if (!gore(e)) return;
+  const F = F0 || JAW_F_DEFAULT;
   for (let i = 0; i < n; i++) {
     for (const sg of [1, -1]) {
       const u = n === 1 ? 0.5 : i / (n - 1);
       const ph = e.seed * 2.1 + i * 1.7 + (sg > 0 ? 0 : 0.9);
-      let p = [x0 - u * back, y0, sg * halfW * (0.7 + u * 0.35)];
+      let p = jawPt(F, x0 - u * back, y0, sg * halfW * (0.7 + u * 0.35));
       let d = [-0.25, -0.75, sg * 0.4];
       const N = 3, L = len * (0.7 + 0.5 * (1 - u));
       for (let k = 0; k < N; k++) {
         const w = Math.sin(e.t * 1.9 + ph + k * 0.8) * 0.20;
         d = v3.norm([d[0] - 0.12 + w * 0.3, d[1] - 0.10, d[2] + w * sg * 0.5]);
-        const q = v3.add(p, v3.mul(d, L / N));
-        g.cn(p[0], p[1], p[2], d[0], d[1], d[2], 0.032 * (1 - k * 0.22), (L / N) * 1.08, colMul(GORE, 1.5 + k * 0.2));
+        const dw = jawPt(F, d[0], d[1], d[2]);
+        const q = v3.add(p, v3.mul(dw, L / N));
+        g.cn(p[0], p[1], p[2], dw[0], dw[1], dw[2], 0.032 * (1 - k * 0.22), (L / N) * 1.08, colMul(GORE, 1.5 + k * 0.2));
         p = q;
       }
     }
@@ -9910,15 +10418,16 @@ const PLAN_NAMES = ['blob', 'quadruped', 'biped', 'serpent', 'crawler', 'glider'
                     'theropod', 'raptor', 'sauropod', 'horned', 'armoured', 'plated', 'duckbill', 'sail-back',
                     'pterosaur', 'shark', 'whale', 'plesiosaur',
                     'scorpion', 'stilt-walker', 'stalker', 'mantis', 'crab', 'brute', 'drifter', 'wyrm',
-                    'lurker', 'maw', 'hollow', 'centipede', 'flit', 'mothwing', 'drake', 'skimmer'];
+                    'lurker', 'maw', 'hollow', 'centipede', 'flit', 'mothwing', 'drake', 'skimmer',
+                    'bloom', 'kite', 'gibbet', 'cradle', 'thresher', 'pall', 'husk', 'wrack', 'sire', 'null'];
 const PLAN_GROUPS = [
   // Ten that walk and four that fly. The other sixteen plans are still in the
   // table -- renumbering would turn every saved design into a different
   // animal -- they are just not offered.
-  { label: 'land', note: 'ten shapes. every one of them walks.',
-    plans: [30, 31, 32, 33, 22, 23, 26, 27, 25, 24] },
-  { label: 'air', note: 'wings. the moth has no legs at all and cannot enter a match.',
-    plans: [34, 35, 37, 36] },
+  { label: 'land', note: 'seven shapes. every one of them walks.',
+    plans: [38, 40, 41, 42, 43, 44, 47] },
+  { label: 'air', note: 'three wings, and no two of them are the same wing.',
+    plans: [39, 45, 46] },
 ];
 // Three. What you have, what you do not, and what you are.
 const VIS_CATS = [
@@ -10155,6 +10664,29 @@ function drawDesignOld(des, X) {
 // starved rather than moulded.
 const LIMB_SHAFT = 0.78;     // how much of the old thickness the bone keeps
 const LIMB_HIP = 1.26, LIMB_KNEE = 1.34, LIMB_ANKLE = 1.10;   // joint swell
+// One bone, built as three slabs with the flat face rotating along its length.
+// The half-axis across the flat is the full shaft radius and the one through it
+// is 0.58 of that, so the limb is chiselled without ever drawing wider than the
+// round cone it replaces.
+function chiselShaft(p0, p1, ra, rb, col) {
+  const d = v3.sub(p1, p0), L = v3.len(d);
+  if (L < 1e-6) { return; }
+  const ax = v3.mul(d, 1 / L);
+  // a stable perpendicular: whichever world axis the bone is least aligned to
+  const up = Math.abs(ax[1]) > 0.9 ? [1, 0, 0] : [0, 1, 0];
+  const e0 = v3.norm(v3.cross(ax, up)), e1 = v3.cross(ax, e0);
+  const N = 3;
+  for (let k = 0; k < N; k++) {
+    const u0 = k / N, u1 = (k + 1) / N, um = (u0 + u1) / 2;
+    const r = ra + (rb - ra) * um;
+    const m = v3.lerp(p0, p1, um);
+    const ang = um * 1.9;                       // ~109 deg of twist end to end
+    const ca = Math.cos(ang), sa = Math.sin(ang);
+    const across = [e0[0] * ca + e1[0] * sa, e0[1] * ca + e1[1] * sa, e0[2] * ca + e1[2] * sa];
+    pushSX(m[0], m[1], m[2], ax[0], ax[1], ax[2], across[0], across[1], across[2],
+           r, L / N * 0.62, r * 0.58, k % 2 ? colMul(col, 0.95) : col);
+  }
+}
 function drawLimbTube(a, b, c, th, R, col, fine) {
   const t0 = 0.17 * th * R, t1 = 0.122 * th * R, t2 = 0.092 * th * R;
   const r0 = t0 * LIMB_SHAFT, r1 = t1 * LIMB_SHAFT, r2 = t2 * LIMB_SHAFT;
@@ -10164,7 +10696,7 @@ function drawLimbTube(a, b, c, th, R, col, fine) {
   const bc = v3.sub(c, b), bcL = v3.len(bc) || 1, bcd = v3.mul(bc, 1 / bcL);
   pushSX(a[0], a[1], a[2], abd[0], abd[1], abd[2], 0, 0, 0,
          t0 * LIMB_HIP, t0 * LIMB_HIP * 0.78, t0 * LIMB_HIP, jc);
-  pushT(a[0], a[1], a[2], b[0], b[1], b[2], r0, col, r1);
+  chiselShaft(a, b, r0, r1, col);
   // knee: a cap, squashed along the bone so it reads as a knee and not a ball
   pushSX(b[0], b[1], b[2], abd[0], abd[1], abd[2], 0, 0, 0,
          t1 * LIMB_KNEE, t1 * LIMB_KNEE * 0.66, t1 * LIMB_KNEE, jc);
@@ -10174,7 +10706,7 @@ function drawLimbTube(a, b, c, th, R, col, fine) {
     pushC(b[0] + sp[0] * t1 * 0.6, b[1] + sp[1] * t1 * 0.6, b[2] + sp[2] * t1 * 0.6,
           sp[0], sp[1], sp[2], t1 * 0.5, t1 * 1.5, colMul(col, 1.12));
   }
-  pushT(b[0], b[1], b[2], c[0], c[1], c[2], r1, col, r2);
+  chiselShaft(b, c, r1, r2, col);
   pushSX(c[0], c[1], c[2], bcd[0], bcd[1], bcd[2], 0, 0, 0,
          t2 * LIMB_ANKLE, t2 * LIMB_ANKLE * 0.8, t2 * LIMB_ANKLE, jc);
   if (fine) {
@@ -10260,7 +10792,7 @@ function primBounds(q) {
 function primMinR(q) { return q.t === 's' ? q.ra : q.t === 'c' ? Math.min(q.ra, q.rb) : Math.min(q.rx, q.ry, q.rz); }
 
 // Mesh a list of primitives. quality: 1 = editor / your own body, 0 = distant AI.
-function meshPrims(prims, quality) {
+function meshPrims(prims, quality, fine) {
   if (!prims.length) return null;
   const bb = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
   let minR = Infinity;
@@ -10274,8 +10806,12 @@ function meshPrims(prims, quality) {
   const span = Math.max(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]);
   // a grid fine enough for the thinnest limb, bounded both ways
   // quality 2: editor and your own body, 1: animals near you, 0: distant animals
-  const maxCells = [64, 96, 124][clamp(quality | 0, 0, 2)], minCells = [36, 48, 56][clamp(quality | 0, 0, 2)];
-  let step = minR * (quality >= 2 ? 0.5 : quality ? 0.6 : 0.8);
+  // `fine` (1 = unchanged) shrinks the cell for designs whose surface carries
+  // relief the limb radius knows nothing about. The cell caps move with it, or
+  // the clamp below immediately undoes the refinement.
+  const F2 = Math.min(Math.max(+fine || 1, 1), 1.7);
+  const maxCells = [64, 96, 124][clamp(quality | 0, 0, 2)] * F2, minCells = [36, 48, 56][clamp(quality | 0, 0, 2)] * F2;
+  let step = minR * (quality >= 2 ? 0.5 : quality ? 0.6 : 0.8) / F2;
   step = Math.min(Math.max(step, span / maxCells), span / minCells);
   const pad = step * 2;
   const ox = bb[0] - pad, oy = bb[1] - pad, oz = bb[2] - pad;
@@ -11084,6 +11620,10 @@ function creaturePrims(des, G) {
       FLESH[lb.tip.id](F, tc, { base: cols.base });
     }
   });
+  // How much relief this body carries that the grid would otherwise miss. A
+  // rib notch is a fraction of the torso radius, and the step is sized off the
+  // thinnest limb, so the two are unrelated and ribs has to ask for its own.
+  out.fine = 1 + 1.6 * Math.min(0.42, (sk.plan && sk.plan.ribs) || 0) + 0.28 * ((sk.plan && sk.plan.keel) ? 1 : 0);
   // part flesh
   const mouth = mouthPart(des);
   for (const pt of des.parts || []) {
@@ -11117,7 +11657,7 @@ function meshWorkerSource() {
     packPrims, sdPacked, primBounds, primMinR, meshPrims].map(String).join('\n') + `
 onmessage = (e) => {
   const d = e.data; let m = null, err = null;
-  try { m = meshPrims(d.prims, d.q); } catch (x) { err = String((x && x.stack) || x); }
+  try { m = meshPrims(d.prims, d.q, d.fine); } catch (x) { err = String((x && x.stack) || x); }
   if (m) postMessage({ id: d.id, vertData: m.vertData, idx: m.idx, tris: m.tris }, [m.vertData.buffer, m.idx.buffer]);
   else postMessage({ id: d.id, err: err || 'empty' });
 };`;
@@ -11173,7 +11713,9 @@ function installDesignMesh(des, key, q, nl, m) {
 function buildDesignMeshNow(des, quality) {
   const G = designGeo(des);
   let m = null;
-  try { m = meshPrims(creaturePrims(des, G), quality); } catch (e) { console.error(e); m = null; }
+  let pr0 = null;
+  try { pr0 = creaturePrims(des, G); } catch (e) { console.error(e); }
+  try { m = pr0 ? meshPrims(pr0, quality, pr0.fine) : null; } catch (e) { console.error(e); m = null; }
   return installDesignMesh(des, designMeshKey(des), quality, G.cls.limbs.length, m);
 }
 function meshRequest(des, q) {
@@ -11204,7 +11746,7 @@ function meshDispatch() {
     const job = { des, key: designMeshKey(des), q: des._jq, nl: G.cls.limbs.length };
     des._job = job; meshJobs.set(id, job);
     slot.busy = id;
-    slot.w.postMessage({ id, prims, q: job.q });
+    slot.w.postMessage({ id, prims, q: job.q, fine: prims.fine || 1 });
   }
 }
 function meshJobDone(r) {
@@ -16604,7 +17146,16 @@ function renderFrame(t) {
   gArr.set(vpM, 0);
   gArr[16] = player.camX; gArr[17] = player.camY; gArr[18] = player.camZ; gArr[19] = 0;
   r2SunMoon();
-  gArr[24] = fog[0]; gArr[25] = fog[1]; gArr[26] = fog[2]; gArr[27] = 1;
+  gArr[24] = fog[0]; gArr[25] = fog[1]; gArr[26] = fog[2];
+  // Global surface wetness. Dew condenses once the light goes and burns off as
+  // it returns, the canopy holds what falls through it, and anything standing
+  // near open water is in the damp. world.wet, when a weather system sets it,
+  // overrides upward and never downward.
+  {
+    const dew = Math.pow(1 - clamp(lt2, 0, 1), 1.3) * 0.62 + can * 0.14;
+    const nearWater = clamp((terrain.LV.water * HEIGHT_SCALE + 2.5 - player.camY) * 0.22, 0, 0.30);
+    gArr[27] = clamp(Math.max(dew + nearWater, +world.wet || 0), 0, 1);
+  }
   r2FrameGlobals();
   gArr[28] = t; gArr[29] = FOG_DENSITY * GFX.fog * (1 + 2.4 * can) * (1 + 3.2 * (1 - lt2)); gArr[30] = (0.1 + 0.9 * lt2) * (1 - 0.22 * can); gArr[31] = terrain.LV.water * HEIGHT_SCALE;
   // the match fog: thick enough at the centre of the band that you cannot see
@@ -17507,7 +18058,7 @@ function edSetGlobals(eye, target, aspect, fov, fogDen, t) {
   gArr.set(vpM, 0);
   gArr[16] = eye[0]; gArr[17] = eye[1]; gArr[18] = eye[2]; gArr[19] = 1;   // w=1: editor, no near-camera foliage fade
   gArr[20] = 0.42; gArr[21] = 0.82; gArr[22] = 0.38; gArr[23] = 0;
-  gArr[24] = 0.52; gArr[25] = 0.60; gArr[26] = 0.52; gArr[27] = 1;
+  gArr[24] = 0.52; gArr[25] = 0.60; gArr[26] = 0.52; gArr[27] = 0.55;
   gArr[28] = t; gArr[29] = fogDen; gArr[30] = 1; gArr[31] = -1000; gArr[65] = 0;
   dev.queue.writeBuffer(gBuf, 0, gArr);
 }
@@ -17684,10 +18235,12 @@ const ITEM_TIER = {
   m_maw: 'super', m_trunk: 'super', m_short: 'super', e_stalk: 'super', e_cluster: 'super',
   h_ram: 'super', h_rhino: 'super', s_club: 'super', l_thick: 'super', l_spring: 'super',
   t_hand: 'super', t_pincer: 'super', f_fluke: 'super', w_insect: 'super', d_gland: 'super',
+  s_blade: 'super',
   // ---- ultra: flight, armour and the long killing jaws.
   m_spino: 'ultra', h_antler: 'ultra', s_shell: 'ultra', w_bat: 'ultra', w_feather: 'ultra',
+  s_sting: 'ultra', w_ragged: 'ultra', e_pit: 'ultra',
   // ---- alpha: the apex bite. Almost never born wild.
-  m_rex: 'alpha',
+  m_rex: 'alpha', m_bloom: 'alpha',
 };
 function boneTier(id) { return ITEM_TIER[id] || 'solid'; }
 function bonePrice(id) { return BONE_PRICE[boneTier(id)]; }
@@ -18359,11 +18912,13 @@ async function edMakeThumbs() {
       const { X } = edDesignX(d, 0.6, null, { toW: (l) => [l[0], l[1], l[2]], toL: (w) => [w[0], w[1], w[2]], blink: () => 0, sync: 'now', quality: 0 });
       drawDesign(d, X);
       const winged = (d.parts || []).some((q) => { const sim = C.ITEM_SIM[q.id]; return sim && sim.t === 'WING'; });
-      view = winged ? [0.30, 0.74, 0.60] : [0.60, 0.26, 0.80];
+      const pv = C.PLANS[j.plan] && C.PLANS[j.plan].view;
+      view = pv ? pv.slice() : winged ? [0.30, 0.74, 0.60] : [0.60, 0.26, 0.80];
     } else {
       thumbItem(j.id, neutral);
       const v = VIS[j.id];
       if (v.cat === 'mouth') view = [0.58, 0.26, 0.95];
+      else if (v.cat === 'wings') view = [0.26, 0.78, 0.56];
       else if (v.kind === 'tip') view = [0.55, 0.45, 0.8];
     }
     GREY_THUMB = null;
@@ -21629,6 +22184,17 @@ window.__G3D = {
       for (const l of ED.des.limbs || []) { out.push(l.id); if (l.tip) out.push(l.tip.id); }
       return [...new Set(out)]; },
     refresh: () => edRefreshUI(),
+    // ---- thumbnail dump -------------------------------------------------
+    // ED.thumbs is keyed 'plan<N>' for body plans and by part id otherwise.
+    // Kept out of the game loop: these are only read by tools/thumbs.js.
+    // The offered set, as the picker actually builds it. test_nomerge_steps had
+    // that list PASTED INTO IT, which is how a guard quietly stops guarding:
+    // the picker changes and the test carries on proving something about a set
+    // nobody can pick any more.
+    offeredPlans: () => PLAN_GROUPS.reduce((a, g) => a.concat(g.plans), []),
+    thumbsReady: () => !!ED.thumbsReady,
+    thumbKeys: () => Object.keys(ED.thumbs || {}),
+    thumb: (k) => (ED.thumbs || {})[k] || null,
   },
   openEditor: (m) => openEditor(m || 'game'),
   carc: {

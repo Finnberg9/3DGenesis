@@ -1,5 +1,304 @@
 # 3DGenesis dev log
 
+## 2026-09-26: The sire finally reads, the flower-face is attached, and saliva falls down
+
+Working the owed list in `dev/NEXT_SESSION.md` in its own order. Everything below was
+judged on `tools/closeup.js` renders, not on plan numbers.
+
+### 1. The sire (plan 46). Third session, and this time the cause was visible
+The full-viewport render says it plainly: the neck was a **straight ray** of eight balls
+from shoulder to skull. Length was never the problem. A single unbroken curve from body to
+head is what the eye calls a bird, and making it longer only makes a longer bird. A
+dragon's neck reverses curvature -- up and back out of the shoulder, then forward and down
+into the skull. Two arcs, not one, and the count of arcs is the cue.
+
+- **`narc`** bows the neck chain one way over its first half and back over its second. Both
+  ENDS are untouched, so the head lands exactly where every part anchor, the bite reach and
+  the look-at code already expect it. `narc` 0 is the old straight neck to the byte.
+- **`neckR` / `neckTap`** thicken the chain and set how fast it narrows into the skull. A
+  constant-width neck reads as a hose; the sire's is 1.45x and tapers 0.54.
+- **`tailBase` / `tailTap`** put mass at the tail root and slow the taper. A tail that has
+  thinned to a thread by half its length has no mass to read as mass however long it is.
+  This is also what lets a long tail survive foreshortening: the near third stays legible
+  when the far two thirds have collapsed to a line.
+- The plan itself: neck 1.95 -> 1.30 (shorter AND thicker, which is the whole point), body
+  girth 0.86 -> 0.94, tail 2.2 -> 3.0 with tailBase 1.35 and tailTap 0.52, and the tile
+  camera moved off the side to a real three-quarter, [0.58, 0.26, 0.77].
+- **The mouth was fighting the word.** `m_bloom` -- the four unlatching mandibles -- is the
+  right mouth for the bloom and an ALIEN cue everywhere else. The one thing every reading
+  of a dragon has in common is a long hinged jaw with teeth down it. The sire carries
+  `m_rex` now. `m_bloom` stays in the game and stays on the bloom and the husk.
+- **The wing was a plank.** A membrane wing is drawn in the plane spanned by the mount's
+  projected up and the body's backward axis, so a mount normal pointing sideways lays the
+  whole span flat against the ribs, edge-on, and only the leading spar comes out of the
+  torso. Normal moved to (0, 0.94, 0.34) and the root further out: the four panels clear
+  the shoulder and spread.
+
+Honest state: it now reads as a horned, scaled, toothed, long-tailed beast with a spread
+membrane wing, from a three-quarter view. It is not yet unmistakably a dragon at a glance
+-- the wing is still in a flat rest pose rather than folded or held -- but the neck, the
+jaw and the tail no longer say "bird".
+
+### 2. Bloom (plan 38). Both failures were placement, as the note said
+- The mandible was **2.60 scale on a base size of 1.05 against a skull of 0.64** -- petals
+  three times the head. There was nothing for them to be part of, which is what "reads as
+  detached" means. Skull 0.64 -> 0.86, snout blunter and wider (snx 1.05 -> 0.72, snr 0.62
+  -> 0.74), mouth 2.60 -> 1.15.
+- And nothing joined them: the petals began in free air at the part origin. `m_bloom` has a
+  **collar** now -- six plates and a ball, sunk BACK from the origin so they overlap
+  whatever snout the mouth is mounted on. Every user of the part gets it.
+- The legs were 0.95 long and 1.55 thick under a body of radius 0.88: buried. Stand 1.32 ->
+  2.05, thickness 1.55/1.35 -> 1.02/0.86, reach and rake out. They are legs now.
+
+### 3. `ribs` survives the mesh grid
+The marching cell is sized off the thinnest LIMB, which has nothing to do with the torso's
+relief, so a ribbed body got about two cells per rib and two cells cannot carry a notch.
+`meshPrims` takes a **`fine`** multiplier now (1 = unchanged), carried on the prim list and
+through the worker message, and `creaturePrims` sets it from the plan's own `ribs` and
+`keel`. Only a plan that asks for relief pays the triangles for it. The cell caps move with
+the multiplier, or the clamp immediately undoes the refinement. Bloom's body sectioning is
+visible in the render for the first time.
+
+### 4. Global wetness, and the channel it rides on
+Wetness was purely per-covering: a scaled animal was exactly as wet at midnight as at noon.
+`fogCol.w` was dead in every shader (all six uses read `.rgb`), so it is the global surface
+wetness channel now.
+
+- Per-covering **`shed`**: fur sheds it (0.30), feather mostly (0.55), plate holds a film
+  (0.90), scale and bare dermis soak (1.00). The global term can only ever ADD, so a
+  covering wet by nature is unchanged.
+- In the world: dew that builds as the light goes and burns off as it returns, a lift under
+  the canopy, and a lift near standing water. `world.wet` overrides upward, which is the
+  hook a rain system will drive when there is one.
+- In the builder: a standing 0.55 film, because the skin cannot be judged dry and this pass
+  is about wet skin.
+
+### 5. A real bug found chasing a red guard
+`test_horror_steps` had been failing on "the wet detail stays inside the mouth on m_jaws"
+since before today, by 0.055 units. Small enough to look like a tolerance problem. It was
+not.
+
+There are **two jaw frames** in the game. The dinosaur jaws from `dinoJawHard` use +x along
+the muzzle and +y up. The hand-built mouths -- `m_jaws`, `m_maw` -- use +x UP and +y along
+the muzzle: their chomp opens the halves apart along x and their teeth point along -x and
++x. `drool`, `droolStrand` and `lipTendrils` were written in the first frame and hang along
+-y. Called from the second, that is not down, it is **backward, into the skull**. The other
+three mouths pass the guard only because their envelopes are big enough to swallow it.
+
+The three helpers take a frame now (f along the muzzle, u up, s across), defaulting to the
+exact old vectors so every dinosaur jaw is byte-identical, and the two hand-built mouths
+pass the frame they actually use. Saliva falls down. The guard is green.
+
+### Guards
+`test_plans`, `test_bodies`, `test_silho_steps`, `test_horror_steps` (now green),
+`test_nomerge_steps` (tightest pair anywhere 0.321 shaft radii), `test_core`, and
+`tools/shapecheck.js` on all ten -- plan 38's head clearance went negative on the first
+attempt at a bigger skull and was caught there before anything was rendered.
+
+**Ball counts were held fixed.** The first cut of both plans changed `ns` and `ts`, which
+moves `headIdx` and every anchor after it and would have silently rewritten every saved
+design. Reverted: `ns` 2 for the bloom and 8 for the sire, `ts` 11.
+
+## 2026-09-25 (late): Ten new creatures, and the mesh that was stopping them
+
+Finn's brief: research how horror games actually build creature bodies, then design ten
+genuinely new creatures from that research. Not variations on the current ten.
+
+His note partway through, which was the important one: **"dont COPY ANYONE"**, and later
+**"those look so similar to the ones before. What was the point of all your research?"**
+
+Both were right. What follows includes the part where I got it wrong.
+
+### The research is a rules file, not a mood board
+`dev/CREATURE_RULES.md`, 43 rules across silhouette, proportion, joints and limbs, heads,
+mandibles/wings/tails, layering, and wet shading. Every rule is stated in a form that can
+become a plan parameter, and every one is tagged with where it came from and how much
+weight it carries: `[DEV]` a developer on the record, `[CRAFT]` a working artist's general
+rule, `[ANALYSIS]` a critic's reading of a shipped asset rather than design intent,
+`[ANAT]` comparative anatomy, and the numbers that are mine are marked derived.
+
+Nothing below is a copy of a creature from another game. What was taken is structure --
+where mass goes, how many joints, what replaces a face, how a membrane tears -- and all ten
+are invented animals. The honest gap is written into the file too: no studio publishes
+numeric proportion specs, so several of the ratios are my parameterisation of a qualitative
+claim and are starting values to tune, not findings.
+
+### The mistake, again, one level up
+First pass: I wrote ten new plans in the PLANS table, rendered the contact sheet, and got
+ten potatoes. Finn said so before I did.
+
+The cause was not the numbers. The skin is a smooth union of round cones along one spine
+with a **fixed** blend radius, `kb = 0.26 * b`. A smooth minimum at that radius melts every
+joint in the chain, so whatever `a`, `b`, `hump` and `waist` say, the output is one lozenge
+with a blob on the front. None of the layering rules can even be *said* in that mesh --
+hard shell over soft core, plates over exposed muscle, starved concavity, sectioned body
+segments -- so the best a plan could do was bolt small parts onto a smooth blob.
+
+That is the 2026-09-25 morning mistake in a new form: I found a level I could measure and
+worked there instead of at the level that was broken.
+
+### Three things the mesh could not say
+All three default to exactly the old behaviour, so no plan written before today moves by a
+byte and no saved design changes shape.
+
+- **`blend`** -- a multiplier on the smooth-minimum radius. At 1.0 nothing changes. At 0.08
+  the chain stops melting and the body is visibly sectioned, with a hard crease at every
+  joint. That is what an arthropod is, and what a starved thing is.
+- **`ribs`** -- modulates girth per SEGMENT rather than along one smooth curve, so the
+  ridges land on the joints instead of drifting between them. Concave where the eye
+  predicts convex is a per-region error signal; one global "it is thin" is not (rule P4).
+- **`keel`** -- a real row of five balls above the spine. A back can be a blade or a plated
+  ridge instead of the top of a curve, and because it is geometry rather than a decal it
+  survives the silhouette test. Emitted hidden at zero radius when `keel` is 0, so every
+  existing part anchor keeps its ball index.
+
+### A limb is not a pipe
+Every shaft in the game was a round cone, so every leg was a pipe with two knuckles on it.
+Each bone is three stacked slabs now and the flat face turns about 110 degrees from one end
+to the other, so rotating the creature reveals a different profile (rule J7). The widest
+half-axis of every slab is exactly the round radius it replaces, so the drawn envelope does
+not grow and `test_nomerge_steps` measures the same clearance it did before.
+
+### The ten
+One structural idea each, and no two share a mass distribution, a limb architecture or a
+head solution.
+
+| | idea |
+|---|---|
+| **bloom** | all mass forward over the shoulders, nothing behind, and the whole face is a four-part mandible that unlatches and splays |
+| **kite** | wing-dominant: a starved body hanging under a torn span, and a whip for a tail |
+| **gibbet** | an enormous shoulder yoke with the hips gone, head slung forward and below the chest |
+| **cradle** | a hanging belly sac on six long thin legs that visibly cannot carry it (P3) |
+| **thresher** | thorax and abdomen with a hard pinch, blade forelimbs, a five-segment metasoma over the back |
+| **pall** | a lid. Far wider than long, a flat shell over a starved core, eight crooked legs, nothing above the rim |
+| **husk** | two thirds on the floor, the front third standing vertical, every segment separate |
+| **wrack** | short broad wings on a pinched body: the deliberate opposite of the kite, so the fliers stop being one bird |
+| **sire** | the dragon. The body is SHORT so the neck and the tail are long **on screen** rather than long in the numbers, which is exactly why the drake kept failing |
+| **null** | two crooked hyper-extended legs, a head below the shoulder line, a blade for a spine, and nothing else |
+
+The previous fourteen stay in the table -- renumbering turns every saved design into a
+different animal -- they are simply no longer offered.
+
+### Crooked legs, and the guard that caught me twice
+`crook` breaks the mirror: fore-and-aft reach, lateral reach, knee bend and thickness all
+jitter per limb from a deterministic hash. **Foot height is deliberately untouched**, so
+every foot still reaches the floor -- a foot in the air reads as broken, not as crooked,
+and the walk code plants on the shortest leg.
+
+Two things it got wrong, both caught by `test_nomerge_steps` rather than by my eye:
+
+- Jittering lateral reach in both directions let a leg wander in toward its mirror partner.
+  The tightest pair in the offered set fell from 0.43 shaft radii to **0.04**. Lateral reach
+  only ever widens now.
+- A fore-and-aft jitter bigger than the gap between two rows walks adjacent legs into each
+  other. Forcing the sign by row parity made it worse -- plan 43 went to **-0.16**, i.e.
+  interpenetrating. The jitter is capped at a quarter of the distance to the nearest leg on
+  the same side, measured before anything moves: legs far apart get the full crookedness,
+  legs already close barely move.
+
+Tightest pair in the offered set now: **0.32 shaft radii of clear air.**
+
+### Parts, rebuilt and new
+Finn: *"feel free to change the existing genome parts to better suit the creepy new
+creatures."*
+
+- **split mandible** (`m_bloom`) -- four mandibles, two upper and two lower, that CROSS when
+  shut so opening is an unlatching rather than a hinge. It rests half open, because a mouth
+  that only splays mid-attack shows a closed fist the rest of the time and the splay is the
+  whole idea. What is revealed is a short soft throat with two small teeth in it: small and
+  wet against the hard outer segments, because filling the middle with a second set of fangs
+  is what kills the contrast (rule M1).
+- **stinger tail** (`s_sting`) -- five hard flat-sided segments, each 0.88 of the one before,
+  then a telson that BREAKS the taper by swelling back out before the needle. A monotonic
+  taper to a point reads as an antenna; the re-widening reads as a delivery device (T1).
+- **bone blades** (`s_blade`) -- flat plates on edge instead of cones, leaning so no two catch
+  the light at the same angle, each with a visible origin wound at its base where it came
+  through the skin (L2).
+- **pit field** (`e_pit`) -- no eye at all. A sunken field of pits in a shallow dish. Senses
+  further than any eye and gives nothing back, so you cannot tell whether it has seen you.
+- **membrane wing** (`w_bat`), rebuilt -- a wing is a HAND with FOUR panels, not one: the
+  propatagium leading edge (never torn, it is the load path), the inter-digit panels (thinnest,
+  most translucent, where the tears cluster), and the plagiopatagium running back to the hip,
+  which is the panel that makes it read as an animal rather than a kite. The claw hook is at
+  the **wrist** -- the outermost forward bend -- and not at the elbow, which is where it kept
+  being put. Tears start at the trailing margin and run *parallel* to the spars, never across
+  them, capped so a continuous strip always survives (W1-W4).
+- **torn membrane** (`w_ragged`) -- the same architecture starved: high aspect ratio, one
+  unbroken leading edge, most of the trailing half gone.
+- **shell wings** (`w_insect`), rebuilt -- a hard cross-ribbed case over a folded gossamer
+  hindwing. Short, broad, and there is no hand in it at all.
+
+**The four fliers read as one bird because every wing in the game was the same leaf with
+veins in it.** Three architectures, not three sets of numbers, is the actual fix.
+
+### Wet
+Finn's explicit priority. The skin shader had one Blinn lobe at a fixed power, which is why
+everything was either painted plastic or matte hide with nothing between.
+
+- Wet is **darker diffuse and smoother specular**, driven by porosity taken straight off
+  gloss (`porosity = saturate(-2.5*gloss + 1.25)`), so chitin and bone stay bright while
+  exposed dermis goes dark. Without that split, wet armour just goes muddy.
+- Fluid **pools in cavities**, and pooling is a normal-flattening operation rather than a
+  texture: the surface normal blends back toward the geometric normal as fluid accumulates,
+  so mucus in the creases between plates goes mirror-flat while the ridges keep their relief.
+- The slime is a **clear coat** at the fixed f0 of 0.04 that an air/coat IOR of 1.5 gives,
+  taking its cut of the light first, which is why wet flesh goes dark AND shiny at once
+  instead of just brighter. Plus the sky the film reflects, so a wet back is bright even with
+  the sun behind it.
+- **Dual normals.** The coat normal is the fluid sheet: large, smooth, and moving. The base
+  normal is scales and pores: small, static, high frequency. This is the single biggest
+  "it looks wet" win, because lit together they read flat.
+- **The specular moves** -- a flow-mapped normal on the coat only, two samples half a period
+  apart cross-faded on a triangle wave so the sheet advects forever without stretching. The
+  flesh normal stays still, so the body stays solid while the highlight crawls over it. That
+  is the whole trick.
+- **Two specular lobes**, broad and tight, with the tight one stretched along the body's flow
+  so a row of scales catches the light AS a row (anisotropy aligned to the covering, X10).
+- **Cavity drives specular occlusion**, reduced at grazing angles, or the wet highlight glows
+  inside creases that should be dark.
+- Transmission weighted to the published six-Gaussian profile's red tail: red travels about
+  ten times further through flesh than blue, which is why thin parts glow red at the rim.
+
+Scales were also invisible: ten to fifteen shingle rows over a whole body at a relief of
+`0.12/sf` is under a pixel at any sane distance, so a "scaled" animal stayed matte hide.
+Coarser rows, four times the relief, a dark seam and a bright free rim on every scale.
+
+And the hides were poster paint -- saturated yellow on black is a wasp, not something in a
+wet forest. All ten pulled toward dirty desaturated flesh and chitin with one small accent.
+
+### Tooling
+- `tools/thumbs.js` + `tools/sheet.py` -- the thumbnail dump and contact sheet, **in the repo
+  now instead of in /tmp**, where it did not survive the session that wrote it.
+- `tools/closeup.js` -- full-viewport render of one plan. The 192 px palette tile is the right
+  instrument for a silhouette and the wrong one for surface: a rib 0.2 units deep on a 6 unit
+  animal is under a pixel there. Every judgement about skin in this entry was made on these.
+- `tools/shapecheck.js` -- head clearance, head height above the floor, bounding aspect, leg
+  lengths and mirror asymmetry, straight off the real skeleton. It does not replace looking at
+  the sheet; it stops me spending three minutes rendering a plan whose head is buried inside
+  its own chest. It caught exactly that on five of the ten, and two heads hanging below their
+  own feet.
+- `window.__G3D.bones.offeredPlans()`. **`test_nomerge_steps` had the offered plan list pasted
+  into it.** That is how a guard quietly stops guarding: the picker changes and the test
+  carries on proving something about a set nobody can pick. It asks the page now -- and the
+  moment it did, it started testing the new ten and immediately found the two crook bugs above.
+
+### Still wrong, and named rather than hidden
+- **The sire still does not read as a dragon at thumbnail size.** Side-on it has the neck and
+  the tail; from any angle that shows the wing, both foreshorten to nothing. A per-plan tile
+  camera helps and does not solve it. This is the same complaint, third session running, and
+  it is now the one thing I would not claim is fixed.
+- `ribs` is real in the mesh (radii alternate 0.35 / 0.12 on the husk) but at the palette's
+  grid step it is barely two cells of relief, so the sectioning reads in game and not in the
+  tile. The tile is not lying about the silhouette, only about the surface.
+- Bloom's mandible at 2.6x is arguably past "oversized feature" into "detached from the head".
+- The legs under bloom are still stumps you can barely see.
+
+### Tests
+`test_plans.js`, `test_bodies.js` and `test_fight_core.js` pass unchanged. `test_silho_steps`
+updated for ten offered shapes instead of fourteen. `test_nomerge_steps` now reads the real
+offered list and passes at 0.32 shaft radii minimum clearance.
+
+
 ## 2026-09-24: Caps not balls, and a hard rule against limbs welding together
 
 Finn, on yesterday's creepy pass: "way too much of knuckles, it looks like a bunch of round balls", "some creatures the arms are embedded into their bodies", "some limbs are too skinny to create", and then, with a picture of a creature standing on one fused trunk with a single foot pad on it: "you also need to add a hard definition which doesn't allow limbs to merge to one limb".
