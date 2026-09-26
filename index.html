@@ -13355,7 +13355,7 @@ function wxTick(dt) {
 // the streaks NEAR the eye; spreading the same budget over a bigger volume
 // buys distance nobody can see and costs the density that sells it.
 const RAIN_BOX = 80;             // world units on a side
-const RAIN_MAX = 20000;
+const RAIN_MAX = 6000;
 let rainPipe = null, rainBuf = null, rainBind = null, rainN = 0;
 const rainArr = new Float32Array(8);
 
@@ -13385,9 +13385,13 @@ fn rh(n: f32) -> f32 { return fract(sin(n * 127.1 + 311.7) * 43758.5453); }
   var wdir = cross(vel, toEye / max(d, 1e-4));
   let wl = length(wdir);
   wdir = select(vec3<f32>(1.0, 0.0, 0.0), wdir / max(wl, 1e-4), wl > 1e-4);
-  // near drops are drawn longer and thicker, so the rain has depth to it
-  let len = r.q.y * (0.55 + 0.9 * h4);
-  let wid = r.q.z * (0.6 + 0.8 * h1) * (1.0 + 0.55 * smoothstep(60.0, 8.0, d));
+  // A drop is the same size ON THE SCREEN wherever it is. Sizing a streak in
+  // world units means the nearest ones subtend an enormous angle, which is
+  // exactly what turned heavy rain into a picket fence of white bars across
+  // the whole view. What reads as heavy rain is the NUMBER of streaks, never
+  // the size of them: angular length and width, clamped at both ends.
+  let len = clamp(d * r.q.y, 0.22, 4.0) * (0.70 + 0.60 * h4);
+  let wid = clamp(d * r.q.z, 0.010, 0.30) * (0.75 + 0.50 * h1);
   let corner = array<vec2<f32>, 6>(vec2<f32>(-1.0, 0.0), vec2<f32>(1.0, 0.0), vec2<f32>(1.0, 1.0),
                                    vec2<f32>(-1.0, 0.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0));
   let c = corner[vi];
@@ -13396,15 +13400,18 @@ fn rh(n: f32) -> f32 { return fract(sin(n * 127.1 + 311.7) * 43758.5453); }
   o.pos = g.viewProj * vec4<f32>(w, 1.0);
   o.uv = c; o.wpos = w;
   // fade the far half of the box out so the volume has no wall, and fade the
-  // nearest drops too so nothing flickers a metre off the lens
-  o.a = r.p.x * smoothstep(BOX * 0.52, BOX * 0.30, d) * smoothstep(0.6, 3.5, d);
+  // nearest drops right out: a drop passing a hand's width from your eye is
+  // travelling too fast and is too far out of focus to be anything but a smear
+  o.a = r.p.x * smoothstep(BOX * 0.52, BOX * 0.28, d) * smoothstep(1.5, 7.0, d);
   return o;
 }
 @fragment fn fs(i : VO) -> @location(0) vec4<f32> {
   // soft along the width, tapered at the head and tail of the streak
   let across = 1.0 - i.uv.x * i.uv.x;
   let along = sin(i.uv.y * 3.14159);
-  var a = i.a * across * pow(along, 0.45) * 0.85;
+  // Rain you cannot see past is not weather, it is a wall. A single drop is
+  // nearly transparent; a downpour is thousands of nearly transparent drops.
+  var a = i.a * across * pow(along, 0.45) * 0.38;
   if (a < 0.004) { discard; }
   // a drop is mostly the sky it carries: bright against dark ground, dim
   // against a bright sky, which is what makes rain read as water and not chalk
@@ -13432,7 +13439,7 @@ function rainInit() {
   rainBind = dev.createBindGroup({ layout: rainPipe.getBindGroupLayout(0), entries: [
     { binding: 0, resource: { buffer: gBuf } }, { binding: 1, resource: { buffer: rainBuf } }] });
 }
-const RAIN_BUDGET = { low: 1600, medium: 4500, high: 9000, ultra: 14000 };
+const RAIN_BUDGET = { low: 700, medium: 1600, high: 3000, ultra: 5000 };
 function rainBuild() {
   WX.builds = (WX.builds || 0) + 1; WX.sawRain = WX.rain;
   rainN = 0;
@@ -13450,8 +13457,10 @@ function rainBuild() {
   rainArr[2] = WX.wind[1] * (6 + 46 * WX.gust);      // wind drift z
   rainArr[3] = spd;                                   // fall speed
   rainArr[4] = RAIN_BOX;
-  rainArr[5] = 1.6 + 3.4 * WX.rain;                   // streak length
-  rainArr[6] = 0.045 + 0.035 * WX.rain;               // streak half-width
+  // both angular, in radians of screen: about 25-40 px long and 2 px wide at
+  // 1080p, whatever distance the drop happens to be at
+  rainArr[5] = 0.030 + 0.022 * WX.rain;               // streak angular length
+  rainArr[6] = 0.0016 + 0.0007 * WX.rain;             // streak angular half-width
   rainArr[7] = 0;
   dev.queue.writeBuffer(rainBuf, 0, rainArr);
   return rainN;
@@ -15559,7 +15568,7 @@ const GFX_PRESETS = {
   low:    { res: 0.65, cover: 380,  plant: 2600,  lod0: 420,  lod1: 1600, crit: 0.6, fog: 1.00, folMax: 50000,  shadow: 0, ao: 0, bloom: 0, rays: 0, gore: 0 },
   medium: { res: 0.80, cover: 620,  plant: 4200,  lod0: 700,  lod1: 2600, crit: 0.9, fog: 0.80, folMax: 90000,  shadow: 1, ao: 0, bloom: 1, rays: 1, gore: 0 },
   high:   { res: 0.90, cover: 1000, plant: 8000,  lod0: 1200, lod1: 4800, crit: 1.5, fog: 0.50, folMax: 140000, shadow: 2, ao: 1, bloom: 1, rays: 1, gore: 1 },
-  ultra:  { res: 1.15, cover: 1700, plant: 18000, lod0: 2300, lod1: 9500, crit: 2.8, fog: 0.26, folMax: 200000, shadow: 3, ao: 1, bloom: 1, rays: 1, gore: 1 },
+  ultra:  { res: 1.00, cover: 1700, plant: 18000, lod0: 2300, lod1: 9500, crit: 2.8, fog: 0.26, folMax: 200000, shadow: 3, ao: 1, bloom: 1, rays: 1, gore: 1 },
 };
 const GFX_ORDER = ['low', 'medium', 'high', 'ultra'];
 const GFX = Object.assign({ name: 'high' }, GFX_PRESETS.high);
@@ -17014,6 +17023,36 @@ function gfxStep(d, why) {
   }
   return true;
 }
+// How many frames have been handed to the GPU that it has not finished yet,
+// and when it last finished one. onSubmittedWorkDone resolves when the queue
+// has actually drained, which is the only moment in the whole pipeline that
+// corresponds to something a person can see.
+const GPUQ = { inFlight: 0, lastDone: 0, ftGpu: 16.7, peak: 0, skipped: 0, subs: 0, dones: 0, api: 0 };
+function gpuFrameSubmitted() {
+  GPUQ.inFlight++;
+  GPUQ.subs++;
+  try {
+    if (!dev.queue.onSubmittedWorkDone) { GPUQ.api = -1; GPUQ.inFlight = 0; return; }
+    GPUQ.api = 1;
+    dev.queue.onSubmittedWorkDone().then(() => {
+      const now = performance.now();
+      GPUQ.dones++;
+      GPUQ.inFlight = Math.max(0, GPUQ.inFlight - 1);
+      if (GPUQ.lastDone) {
+        // the interval between two finished frames IS the frame rate
+        const d = Math.min(2000, now - GPUQ.lastDone);
+        GPUQ.ftGpu += (d - GPUQ.ftGpu) * 0.12;
+        GPUQ.peak = Math.max(GPUQ.peak * 0.97, d);
+      }
+      GPUQ.lastDone = now;
+    }, () => { GPUQ.inFlight = Math.max(0, GPUQ.inFlight - 1); });
+  } catch (e) { GPUQ.inFlight = Math.max(0, GPUQ.inFlight - 1); }
+}
+// Running more than a couple of frames ahead of the GPU buys nothing: the
+// frames sit in a queue getting staler, and every one of them is input lag.
+// The simulation still steps on a skipped frame, so the world does not slow
+// down with the picture.
+function gpuBackedUp() { return GPUQ.inFlight >= 2; }
 function r2AutoRes() {
   const now = performance.now();
   let ft = 0;
@@ -17021,8 +17060,19 @@ function r2AutoRes() {
     ft = Math.min(500, now - R2.lastT);
     // A long average is what stops one stalled frame from changing anything,
     // and a short one is what makes a genuinely bad machine felt quickly.
-    R2.ftAvg += (ft - R2.ftAvg) * 0.05;
-    R2.ftSlow += (ft - R2.ftSlow) * 0.012;
+    R2.ftCpu = (R2.ftCpu || ft) + (ft - (R2.ftCpu || ft)) * 0.05;
+    // The frame time everything acts on is whichever is WORSE: the CPU pacing
+    // or the GPU's actual delivery. Taking the CPU number alone is what let a
+    // 2 fps machine report 32 and never get helped.
+    const real = Math.max(ft, GPUQ.ftGpu);
+    // ASYMMETRIC: quick to believe bad news, slow to believe good. A safety
+    // system that takes ten seconds to notice a machine is drowning is not a
+    // safety system, and one that climbs back the moment a single frame is
+    // fast oscillates forever. Frames are also being SKIPPED while the GPU is
+    // behind, so there are fewer samples to converge with exactly when it
+    // matters most.
+    R2.ftAvg += (real - R2.ftAvg) * (real > R2.ftAvg ? 0.34 : 0.05);
+    R2.ftSlow += (real - R2.ftSlow) * (real > R2.ftSlow ? 0.16 : 0.012);
     R2.fps = 1000 / Math.max(1, R2.ftAvg);
   }
   R2.lastT = now;
@@ -17052,9 +17102,27 @@ function r2AutoRes() {
   if (R2.ftAvg > 21 && R2.dyn > 0.6) { R2.dyn = Math.max(0.6, R2.dyn - 0.08); R2.lastChange = now; }
   else if (R2.ftAvg < 15.5 && R2.dyn < 1) { R2.dyn = Math.min(1, R2.dyn + 0.05); R2.lastChange = now; }
 }
+// Said once, quietly, when a hand-picked level is being delivered at a rate
+// nobody would call playable. Not a nag: it names the number and the way out.
+let AQ_SAID_SLOW = 0;
+function r2WarnIfDrowning() {
+  if (!GFX.userSet || !R2.ftSlow) return;
+  const now = performance.now() / 1000;
+  if (R2.ftSlow < 90 || now - AQ_SAID_SLOW < 45) return;      // under ~11 fps
+  AQ_SAID_SLOW = now;
+  toast(GFX.name + ' is arriving at ' + Math.round(1000 / R2.ftSlow) +
+        ' fps on this machine. Press the auto button to let it pick for you.', 5000);
+}
 function r2Hud() {
+  try { r2WarnIfDrowning(); } catch (e) {}
   const el = document.getElementById('gfxfps');
-  if (el) el.textContent = Math.round(R2.fps) + ' fps · ' + GFX.name + ' · ' + Math.round(r2SceneScale() * 100) + '%';
+  if (!el) return;
+  const gpu = Math.round(1000 / Math.max(1, GPUQ.ftGpu));
+  const cpu = Math.round(1000 / Math.max(1, R2.ftCpu || R2.ftAvg));
+  // When the two disagree the GPU is the one you are looking at, and seeing
+  // both is how you tell a heavy scene from a heavy simulation.
+  el.textContent = Math.round(R2.fps) + ' fps · ' + GFX.name + ' · ' +
+    Math.round(r2SceneScale() * 100) + '%' + (cpu - gpu > 8 ? ' · gpu bound' : '');
 }
 
 // ---------------------------------------------------------------- sun, moon, sky
@@ -17871,6 +17939,7 @@ function renderFrame(t) {
   pass.end();
   if (R2on) r2PostPass(enc, fog);
   dev.queue.submit([enc.finish()]);
+  gpuFrameSubmitted();
   try { brDrawNames(); } catch (e) { if (!renderFrame._nameWarn) { renderFrame._nameWarn = 1; console.warn('br names', e); } }
   return { inst: nInst, plants: nPlant };
 }
@@ -22539,6 +22608,10 @@ function tick(dt, skipRender) {
   trackBirths();
   updateCamera(dt);
   if (skipRender) return null;
+  // The GPU is two frames behind: building a third would only add latency.
+  // The world has already been stepped above, so nothing slows down but the
+  // picture, and the picture was not arriving anyway.
+  if (gpuBackedUp()) { GPUQ.skipped++; drawMinimap(); return null; }
   const r = renderFrame(simT);
   drawMinimap();
   hudAcc += dt;
@@ -22743,6 +22816,15 @@ window.__G3D = {
     kill: (slot, by, cause) => brOnPlayerKilled(slot, by, cause),
     get slot() { return BR.slot; },
     resetFall: () => fallResetGround(),
+    perf: () => ({ fps: +R2.fps.toFixed(1), ftAvg: +R2.ftAvg.toFixed(1),
+                   ftCpu: +(R2.ftCpu || 0).toFixed(1), ftGpu: +GPUQ.ftGpu.toFixed(1),
+                   inFlight: GPUQ.inFlight, skipped: GPUQ.skipped, dyn: +R2.dyn.toFixed(3),
+                   scale: +r2SceneScale().toFixed(3), gfx: GFX.name,
+                   drops: (typeof rainN === 'number' ? rainN : 0), plants: plantCount | 0,
+                   subs: GPUQ.subs, dones: GPUQ.dones, api: GPUQ.api }),
+    // start a clean measurement window: the averages carry the last scene
+    perfReset: () => { GPUQ.ftGpu = 16.7; GPUQ.lastDone = 0; GPUQ.skipped = 0; GPUQ.subs = 0; GPUQ.dones = 0;
+                       R2.ftAvg = 16.7; R2.ftSlow = 16.7; R2.ftCpu = 16.7; },
     fallRule: () => ({ safeH: FALL_SAFE_H, fatalH: FALL_FATAL_H, slopeTan: FALL_SLOPE_TAN,
                        stepFrac: FALL_STEP_FRAC,
                        safe: player.c ? Math.round(fallSafeFor(player.c.ph)) : null,
@@ -23164,6 +23246,11 @@ window.__G3D = {
   gfx: {
     name: () => GFX.name, gore: () => !!GFX.gore, userSet: () => !!GFX.userSet,
     order: () => GFX_ORDER.slice(),
+    setRes: (v) => { GFX.res = clamp(+v || 1, 0.45, 1.5); R2.sceneRes = null; return GFX.res; },
+    setPlants: (k) => { GFX.plant = Math.round((GFX_PRESETS[GFX.name].plant || 8000) * (+k || 1));
+                        GFX.folMax = Math.round((GFX_PRESETS[GFX.name].folMax || 140000) * (+k || 1)); return GFX.plant; },
+    setShadow: (n) => { GFX.shadow = Math.max(0, n | 0); return GFX.shadow; },
+    setCrit: (k) => { GFX.crit = (GFX_PRESETS[GFX.name].crit || 1.5) * (+k || 1); return GFX.crit; },
     // drive the automatic stepper with a pretend frame time, so the rule can
     // be checked without needing a slow machine
     feed: (ms, secs) => {

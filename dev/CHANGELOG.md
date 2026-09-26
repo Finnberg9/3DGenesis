@@ -1,5 +1,103 @@
 # 3DGenesis dev log
 
+## 2026-09-26: The frame counter was lying, and that is why ultra was unplayable
+
+Finn, on the build shipped a few hours earlier: *"art ultra ghraphics, it only
+loads at 2 frames/sec but it says 30fps"*, *"its basically unplayable at ultra
+graphics"*, and *"the rain is completely unplayable outside of the storm"*.
+
+Two bugs. The first one is mine from years of convention; the second is mine
+from this morning.
+
+### The clock measured the wrong thing, and everything believed it
+
+```js
+ft = now - R2.lastT;          // gap between the STARTS of two renderFrame calls
+```
+
+That is the rate **JavaScript is pacing at**, not the rate the screen is being
+painted at. `queue.submit` is asynchronous: the CPU can build and hand over frame
+after frame at very nearly vsync while the GPU falls arbitrarily far behind, and
+every queued frame is pure latency between the mouse and the picture. The HUD
+read 32, the GPU was delivering 2, and **every system that exists to rescue a
+slow machine reads that number**:
+
+- the automatic quality stepper never stepped down — by its numbers the machine
+  was coping,
+- the resolution trim sat at 97% for the same reason,
+- so the one thing whose entire job is to notice this was blind exactly when it
+  was needed. The lie was not a cosmetic bug. It was the cause.
+
+Now timed off `queue.onSubmittedWorkDone()`, which resolves when the queue has
+actually drained — the only moment in the pipeline that corresponds to something
+a person can see. The frame time everything acts on is `max(cpu, gpu)`.
+
+**The averages are asymmetric now**: 0.34 toward bad news, 0.05 toward good.
+A safety system that takes ten seconds to notice a machine is drowning is not a
+safety system, and one that climbs back on a single fast frame oscillates. This
+matters more than it sounds, because frames are *skipped* while the GPU is
+behind, so there are fewer samples to converge with exactly when it counts.
+
+**And it no longer runs more than two frames ahead of the GPU.** A third frame
+buys nothing but staleness. The simulation still steps on a skipped frame, so
+the world does not slow down with the picture — only the picture does, and the
+picture was not arriving anyway.
+
+Measured on the software renderer at ultra, in forest, before and after:
+
+| | reported | actual |
+|---|---|---|
+| before | 32 fps, trim at 97% | ~2 fps |
+| after | 1.7 fps, trim driven to its 0.6 floor | ~2 fps |
+
+The HUD also says `· gpu bound` when the two clocks disagree by more than 8 ms,
+which is how you tell a heavy scene from a heavy simulation at a glance.
+
+**Ultra renders at native now** (`res` 1.15 → 1.00). It was rendering at 1.15x
+the display size and scaling down: supersampling on top of the MSAA that was
+already running. That is 32% of every pixel in the frame for very nearly nothing
+you can see. Ultra keeps its draw distance, shadow cascades, foliage density and
+effects — the things you actually look at.
+
+A hand-picked level is still never overruled; that rule is tested and it stays.
+But if you picked one and it is arriving under about 11 fps, the game now says
+so once every 45 seconds with the number and the way out, instead of leaving you
+to wonder whether it is broken.
+
+### The rain was sized in world units
+
+A streak was 1.6–5.0 world units long and 0.045–0.08 wide, in a box 80 units
+across with the camera inside it. A drop two units from your eye therefore
+subtended an enormous angle, and 14,000 of them at ultra made the white picket
+fence in Finn's screenshot: you could not see the ground.
+
+**A drop is the same size on the screen wherever it is.** Angular length and
+width now, clamped at both ends: about 25–40 px long and 2–3 px wide at 1080p,
+whatever distance the drop happens to be at. What reads as heavy rain is the
+NUMBER of streaks, never the size of them.
+
+- alpha per streak 0.85 → 0.38. A single drop is nearly transparent; a downpour
+  is thousands of nearly transparent drops.
+- the nearest drops fade right out (1.5 → 7 units). A drop passing a hand's
+  width from your eye is too fast and too far out of focus to be anything but a
+  smear.
+- budgets cut about two thirds: ultra 14000 → 5000, high 9000 → 3000, medium
+  4500 → 1600, low 1600 → 700. With screen-constant streaks the count is what
+  carries the weather, and it no longer has to fight its own overdraw.
+- no more near-drop widening, which was making the worst offenders worse.
+
+### Also
+
+`__G3D.br.perf()` now reports `fps, ftAvg, ftCpu, ftGpu, inFlight, skipped,
+dyn, scale, drops, plants`, and `gfx.setRes / setPlants / setShadow / setCrit`
+turn one cost knob at a time, so where a frame goes can be measured rather than
+guessed at. It could not be used on this software renderer at ultra — one frame
+every eight seconds, so a sixteen second window collects one sample — but on real
+hardware it is a profiler.
+
+Guards: `test_perf_steps`, `test_move_steps`, `test_fall_steps`,
+`test_veil_steps`, `test_plans`, `test_core` all pass.
+
 ## 2026-09-25 (evening): Weather, and four things Finn asked for while it was being built
 
 The sky was the last big system the renderer had a hole for. `fogCol.w` has been
